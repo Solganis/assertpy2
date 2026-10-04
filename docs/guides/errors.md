@@ -615,8 +615,12 @@ values above the link.
 
 What is handed over is the pair the assertion compared. For `is_equal_to()` that is the value and the
 operand. Under `ignore=` or `include=` it is the two copies without the keys left out, so a key the
-assertion passed over is in neither pane. A failed `has_<name>()` hands over the value it read and the
-operand.
+assertion passed over is in neither pane. A record in such a copy, a dataclass, an attrs class or a
+model, is handed over as the dict of its fields, which is what was compared: a pane then lays a record
+out line by line, and a dict beside a record reads in the same shape. That holds for a mapping whose
+keys are each exactly a `str`, an `int`, a `bool`, a `float`, a `bytes` or `None`. A mapping with any
+other key, one of a subclass of those among them, is handed over as it was. A failed `has_<name>()`
+hands over the value it read and the operand.
 
 The window compares two texts, as it does for a plain `assert`. Two values `==` holds equal that print
 differently, `1` and `True`, show there as a difference, and two that differ and print the same, two

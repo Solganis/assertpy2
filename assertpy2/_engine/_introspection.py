@@ -165,6 +165,57 @@ class TakenApart(dict):
         return self.keys() == other.keys() and all(left is right or bool(left == right) for left, right in pairs)
 
 
+def laid_out(value: object) -> object:
+    """*value* with every record taken apart turned into a plain dict of its fields, for a reader that lays
+    containers out and prints anything else on one line.
+
+    Followed through the values of a ``dict`` and the items of a ``list`` or a ``tuple``, each of exactly that
+    class, told by identity so that no class is asked.  A mapping is turned only where every key in it is one
+    the interpreter hashes and compares by code of its own: exactly a ``str``, an ``int``, a ``bool``, a
+    ``float``, a ``bytes`` or ``None``.  Putting a value back looks its key up, and beside a key of any other
+    class that runs the class's ``__hash__`` or ``__eq__``, so such a mapping stays as it is, a record among
+    them.  A dict with nothing to turn comes back as the same object.  A part two places share is turned once,
+    and a value that holds itself is left where the walk meets it again.
+    """
+    return _laid_out(value, {}, set())
+
+
+def _plainly_hashed(key: object) -> bool:
+    kind = type(key)
+    return kind is str or kind is int or kind is bool or kind is float or kind is bytes or key is None
+
+
+def _laid_out(value: object, done: dict[int, object], above: set[int]) -> object:
+    kind = type(value)
+    if not (kind is TakenApart or kind is dict or kind is list or kind is tuple):
+        return value
+    mark = id(value)
+    if mark in above:
+        return value
+    if mark in done:
+        return done[mark]
+    above.add(mark)
+    made: object = value
+    if kind is list or kind is tuple:
+        items = cast("list[object] | tuple[object, ...]", value)
+        parts = [_laid_out(part, done, above) for part in items]
+        if any(new is not old for new, old in zip(parts, items, strict=True)):
+            made = kind(parts)
+    else:
+        held = list(dict.items(cast("dict[object, object]", value)))
+        if all(_plainly_hashed(key) for key, _ in held):
+            # a copy keeps the hashes it was made with, and putting a value back compares plain keys alone
+            fields = dict.copy(cast("dict[object, object]", value))
+            for key, old in held:
+                if (new := _laid_out(old, done, above)) is not old:
+                    fields[key] = new
+            if kind is TakenApart or any(fields[key] is not old for key, old in held):
+                made = fields
+    above.discard(mark)
+    done[mark] = made
+    return made
+
+
 _PART_READERS = tuple(
     type.__getattribute__(kind, "__dict__")["__eq__"]
     for kind in (

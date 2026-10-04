@@ -11,6 +11,7 @@ import pytest
 from . import _clustering, _dangling, _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
+from ._engine._introspection import laid_out
 from ._engine._path import _ROOT
 from .errors import _diff_side, _diff_sides, _json_safe, _render_diff, _safe_repr, _told_apart
 from .exception import _leaves
@@ -910,9 +911,8 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
         with contextlib.suppress(Exception):
             compared = _compared_pair(leaves[0])
             if compared is not None:
-                item.config.hook.pytest_assertrepr_compare(
-                    config=item.config, op="==", left=compared[0], right=compared[1]
-                )
+                left, right = _for_a_listener(compared)
+                item.config.hook.pytest_assertrepr_compare(config=item.config, op="==", left=left, right=right)
 
 
 def _compared_pair(exc: BaseException) -> tuple[object, object] | None:
@@ -940,6 +940,20 @@ def _compared_pair(exc: BaseException) -> tuple[object, object] | None:
     except Exception:  # a subclass may answer the name with code of its own, which must not cost the report
         return None
     return pair if type(pair) is tuple and len(pair) == 2 else None
+
+
+def _for_a_listener(pair: tuple[object, object]) -> tuple[object, object]:
+    """The pair as a listener can lay it out: a record taken apart under ``ignore=`` or ``include=`` is handed as
+    the dict of its fields.
+
+    A listener prints each side with `pprint`, which breaks a dict into lines and prints a class it does not know
+    on one, whatever its length, so a record read `Row(...)` on a single line beside a dict sorted by key.  Under
+    those options the two were compared by their fields.  A pair too deep to walk is handed as it is.
+    """
+    try:
+        return laid_out(pair[0]), laid_out(pair[1])
+    except Exception:
+        return pair
 
 
 def _named(exc) -> tuple[bool, bool]:

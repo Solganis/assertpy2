@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import pickle
+import pprint
 import subprocess
 import sys
 import types
@@ -36,6 +37,7 @@ from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
 from assertpy2._clustering import Observation, Signature
 from assertpy2._engine._diff import _sub_diff_entries
+from assertpy2._engine._introspection import TakenApart, laid_out
 from assertpy2._engine._path import _ROOT
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
@@ -2997,6 +2999,35 @@ class TestTheNearTimeoutReportIsPerSession:
         assert_that(pytest_plugin._retried).is_empty()
 
 
+@dataclasses.dataclass
+class _Buyer:
+    city: str
+    zip: str = "0150"
+
+
+@dataclasses.dataclass
+class _Purchase:
+    id: int
+    buyer: _Buyer
+    tags: list
+    seen: int = 0
+
+
+class _CountedKey:
+    """A key in the slot of the number one, which counts each time its hash or its equality is asked."""
+
+    hashed = 0
+    compared = 0
+
+    def __hash__(self) -> int:
+        _CountedKey.hashed += 1
+        return hash(1)
+
+    def __eq__(self, other: object) -> bool:
+        _CountedKey.compared += 1
+        return self is other
+
+
 def _failure_of(call):
     with pytest.raises(AssertionError) as caught:
         call()
@@ -3286,6 +3317,174 @@ class TestAFailedEqualityIsHandedToComparisonListeners:
     )
     def test_a_failure_that_kept_no_pair_hands_nothing(self, ask):
         assert_that(_handed(_failure_of(ask))).is_empty()
+
+    def test_a_record_compared_by_its_fields_is_handed_as_the_dict_of_them(self):
+        failure = _failure_of(
+            lambda: assert_that(_Purchase(1, _Buyer("Oslo"), ["a"], seen=5)).is_equal_to(
+                _Purchase(1, _Buyer("Paris"), ["a"], seen=9), ignore="seen"
+            )
+        )
+        handed = _handed(failure)[0].kwargs
+
+        assert_that(handed["left"]).is_equal_to({"id": 1, "buyer": {"city": "Oslo", "zip": "0150"}, "tags": ["a"]})
+        assert_that(handed["right"]).is_equal_to({"id": 1, "buyer": {"city": "Paris", "zip": "0150"}, "tags": ["a"]})
+        for side in (handed["left"], handed["right"]):
+            assert_that(type(side)).is_same_as(dict)
+            assert_that(type(side["buyer"])).is_same_as(dict)
+
+    def test_a_dict_beside_a_record_is_handed_in_one_shape_and_laid_out_alike(self):
+        payload = types.MappingProxyType({"id": 1, "buyer": {"city": "Oslo", "zip": "0150"}, "tags": ["a"], "seen": 5})
+        handed = _handed(
+            _failure_of(
+                lambda: assert_that(payload).is_equal_to(_Purchase(1, _Buyer("Paris"), ["a"], seen=9), ignore="seen")
+            )
+        )[0].kwargs
+        laid = [pprint.pformat(handed[side], width=30).splitlines() for side in ("left", "right")]
+
+        assert_that(laid[0]).is_equal_to(
+            ["{'buyer': {'city': 'Oslo',", "           'zip': '0150'},", " 'id': 1,", " 'tags': ['a']}"]
+        )
+        assert_that(laid[1]).is_equal_to([line.replace("Oslo", "Paris") for line in laid[0]])
+
+    def test_records_inside_a_list_are_handed_as_dicts_in_a_list(self):
+        handed = _handed(
+            _failure_of(lambda: assert_that([_Buyer("Oslo")]).is_equal_to([_Buyer("Paris")], ignore="zip"))
+        )[0].kwargs
+
+        assert_that(handed["left"]).is_equal_to([{"city": "Oslo"}])
+        assert_that(handed["right"]).is_equal_to([{"city": "Paris"}])
+        assert_that(type(handed["left"][0])).is_same_as(dict)
+
+    def test_the_failure_itself_keeps_the_record_it_compared(self):
+        failure = _failure_of(lambda: assert_that(_Buyer("Oslo")).is_equal_to(_Buyer("Paris"), ignore="zip"))
+        _handed(failure)
+
+        assert_that(repr(failure._compared[0])).is_equal_to("_Buyer(city='Oslo')")
+        assert_that(str(failure)).contains("_Buyer(city='Oslo')")
+
+    def test_a_pair_too_deep_to_walk_is_handed_as_it_is(self, monkeypatch):
+        def too_deep(value):
+            raise RecursionError
+
+        monkeypatch.setattr(pytest_plugin, "laid_out", too_deep)
+        failure = _failure_of(lambda: assert_that(_Buyer("Oslo")).is_equal_to(_Buyer("Paris"), ignore="zip"))
+        handed = _handed(failure)[0].kwargs
+
+        assert_that(handed["left"]).is_same_as(failure._compared[0])
+        assert_that(handed["right"]).is_same_as(failure._compared[1])
+
+
+class TestARecordTakenApartIsLaidOut:
+    """`laid_out` turns what a key option took apart into plain dicts, where a reader's `pprint` can break lines."""
+
+    def test_a_value_with_nothing_to_turn_comes_back_as_itself(self):
+        for value in ({"a": [1, (2, {"b": 3})]}, [1], (1,), "text", 7, None):
+            assert_that(laid_out(value)).is_same_as(value)
+
+    def test_a_record_at_any_depth_becomes_a_dict_and_its_container_is_built_anew(self):
+        inner = TakenApart(_Buyer, {"city": "Oslo"})
+        outer = TakenApart(_Purchase, {"id": 1, "buyer": inner, "tags": ["a"]})
+        held = {"rows": [outer, (inner,)], "kept": [1]}
+
+        made = laid_out(held)
+
+        assert_that(made).is_equal_to(
+            {"rows": [{"id": 1, "buyer": {"city": "Oslo"}, "tags": ["a"]}, ({"city": "Oslo"},)], "kept": [1]}
+        )
+        assert_that(type(made["rows"][0])).is_same_as(dict)
+        assert_that(type(made["rows"][0]["buyer"])).is_same_as(dict)
+        assert_that(type(made["rows"][1])).is_same_as(tuple)
+        assert_that(made["kept"]).is_same_as(held["kept"])
+        assert_that(type(held["rows"][0])).is_same_as(TakenApart)
+
+    def test_a_container_of_a_class_of_its_own_is_left_as_it_is(self):
+        class Rows(list):
+            pass
+
+        held = Rows([TakenApart(_Buyer, {"city": "Oslo"})])
+
+        assert_that(laid_out(held)).is_same_as(held)
+
+    def test_a_key_stays_what_it_is(self):
+        key = (1, 2)
+        made = laid_out({key: TakenApart(_Buyer, {"city": "Oslo"})})
+
+        assert_that(next(iter(made))).is_same_as(key)
+
+    def test_no_class_is_asked_what_it_is(self):
+        class Loud(type):
+            def __eq__(cls, other):
+                raise RuntimeError("asked")
+
+            __hash__ = type.__hash__
+
+        class Held(metaclass=Loud):
+            pass
+
+        held = Held()
+
+        assert_that(laid_out(held)).is_same_as(held)
+        assert_that(laid_out([held])[0]).is_same_as(held)
+
+    def test_a_mapping_holding_a_key_of_a_class_of_its_own_is_left_as_it_is(self):
+        key = _CountedKey()
+        record = TakenApart(_Buyer, {"city": "Oslo"})
+        plain, keyed = {key: [1, {"a": 2}]}, {key: record, 1: record}
+        taken = TakenApart(_Buyer, {key: record, "city": "Oslo"})
+        hashed, compared = _CountedKey.hashed, _CountedKey.compared
+
+        for held in (plain, keyed, taken):
+            assert_that(laid_out(held)).is_same_as(held)
+
+        assert_that((_CountedKey.hashed, _CountedKey.compared)).is_equal_to((hashed, compared))
+
+    def test_a_plain_key_that_shares_a_slot_with_another_key_runs_none_of_its_code(self):
+        key = _CountedKey()
+        held = {key: 0, 1: TakenApart(_Buyer, {"city": "Oslo"})}
+        hashed, compared = _CountedKey.hashed, _CountedKey.compared
+
+        assert_that(laid_out(held)).is_same_as(held)
+        assert_that((_CountedKey.hashed, _CountedKey.compared)).is_equal_to((hashed, compared))
+
+    @pytest.mark.parametrize("key", ["a", 1, True, 1.5, b"a", None], ids=repr)
+    def test_a_value_under_a_text_or_a_number_is_turned(self, key):
+        made = laid_out({key: TakenApart(_Buyer, {"city": "Oslo"})})
+
+        assert_that(type(made[key])).is_same_as(dict)
+
+    def test_a_value_under_a_key_of_a_subclass_of_text_is_left(self):
+        class Name(str):
+            __slots__ = ()
+
+        held = {Name("a"): TakenApart(_Buyer, {"city": "Oslo"})}
+
+        assert_that(laid_out(held)).is_same_as(held)
+
+    def test_a_part_two_places_share_is_turned_once(self):
+        node: list = [TakenApart(_Buyer, {"city": "Oslo"})]
+        for _ in range(18):
+            node = [node, node]
+
+        made = laid_out(node)
+
+        for _ in range(18):
+            assert_that(made[0]).is_same_as(made[1])
+            made = made[0]
+        assert_that(made).is_equal_to([{"city": "Oslo"}])
+
+    def test_a_value_that_holds_itself_is_left_where_the_walk_meets_it_again(self):
+        ring = TakenApart(_Buyer, {"city": "Oslo"})
+        ring["again"] = ring
+        rows: list = [TakenApart(_Buyer, {"city": "Oslo"})]
+        rows.append(rows)
+
+        made = laid_out(ring)
+        listed = laid_out(rows)
+
+        assert_that(type(made)).is_same_as(dict)
+        assert_that(made["again"]).is_same_as(ring)
+        assert_that(listed[0]).is_equal_to({"city": "Oslo"})
+        assert_that(listed[1]).is_same_as(rows)
 
     @pytest.mark.parametrize(
         "exc",
