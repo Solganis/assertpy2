@@ -127,9 +127,9 @@ def pure_decimal_code() -> frozenset[types.CodeType]:
     return frozenset(found)
 
 
-def refuse(value: object, expectation: str, *, subject: str = "val") -> NoReturn:
-    """Raise the refusal for *value*, for a check the caller has already made."""
-    raise TypeError(f"{subject} must be {expectation}, but was {_shown(value)}")
+def refuse(value: object, expectation: str, *, subject: str = "val", note: str = "") -> NoReturn:
+    """Raise the refusal for *value*, for a check the caller has already made, with *note* after it."""
+    raise TypeError(f"{subject} must be {expectation}, but was {_shown(value)}{note}")
 
 
 def require_type(

@@ -37,6 +37,11 @@ assert_that(["a", "bb", "ccc"]).each(match.is_instance_of(str))
 assert_that([2, 4, 6]).each(lambda x: x % 2 == 0)
 ```
 
+A class is callable, so it is taken as a predicate too, and the predicate is the class called on the
+item. `each(int)` asks whether `int(item)` is truthy: `"2"` and `3.5` pass, and `0` fails. The check
+of the type is `each(match.is_instance_of(int))`. The same holds for `satisfies()` and the other
+assertions that take a predicate.
+
 ### Inside contains()
 
 A matcher passed to `contains()` is tested against each element:
@@ -194,6 +199,12 @@ assert_that(response).matches_structure({
     "active": match.equal_to(True),
 })
 ```
+
+A value in a spec that is neither a matcher nor a nested dict is compared with `==`, so
+`"name": "Alice"` reads the same as `match.equal_to("Alice")`. A class is such a value too:
+`{"id": int}` asks whether the value is equal to the class `int`, which `7` is not. The matcher for
+an instance is `match.is_instance_of(int)`, and a failed `matches_structure()` names it where the
+value is an instance of the class the spec holds.
 
 The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
 attrs instance - a model or attrs instance is normalized to its dict first, so the same spec works

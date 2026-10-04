@@ -90,6 +90,7 @@ from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
+from ._hints import matcher_for_a_class
 from .errors import _capped, _capped_format, _capped_repr, _safe_repr, _told_apart, _type_expression_name
 
 if TYPE_CHECKING:
@@ -202,13 +203,15 @@ def _require_matcher(operand: object, operator: str) -> None:
     attribute 'matches'`` at assertion time, far from the line that built it.
     """
     if not _is_matcher(operand):
-        raise TypeError(f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'")
+        raise TypeError(
+            f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'{matcher_for_a_class(operand)}"
+        )
 
 
 def _require_matcher_argument(value: object) -> Matcher[Any]:
     """The matcher a factory was handed, refused where the factory is called, for the reason above."""
     if not _is_matcher(value):
-        refuse(value, "a Matcher", subject=argument("matcher"))
+        refuse(value, "a Matcher", subject=argument("matcher"), note=matcher_for_a_class(value))
     return value
 
 
@@ -1482,6 +1485,8 @@ class _SpecMismatch(NamedTuple):
     actual: object
     expected_desc: str
     detail: str | None
+    literal: object = _MISSING
+    """The raw value the spec holds there, where the mismatch is one of `==` against it."""
 
 
 class StructureMatcher(BaseMatcher):
@@ -1636,5 +1641,5 @@ class StructureMatcher(BaseMatcher):
             elif not _guarded_equal(actual, expected, method="matches_structure"):
                 # told apart by class where the two print the same: an id held as text read "expected <7>, but was <7>"
                 wanted, was = _told_apart(_capped_format(expected), _capped_format(actual), expected, actual)
-                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{wanted}>", f"was <{was}>"))
+                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{wanted}>", f"was <{was}>", expected))
         return mismatches

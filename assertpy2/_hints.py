@@ -436,6 +436,30 @@ def under(line: str | None) -> str:
     return "" if line is None else f"\n{line}"
 
 
+_INSTANCE_MATCHER: Final = "the matcher for an instance of a class is match.is_instance_of"
+
+
+def matcher_for_a_class(given: object) -> str:
+    """What follows the refusal of *given* where a matcher was wanted, where it is a class `type` itself built.
+
+    Such a class takes an instance check and cannot refuse one, which a typed dict or a plain protocol does.
+    """
+    return f": {_INSTANCE_MATCHER}" if type(given) is type else ""
+
+
+def class_in_spec(leaves: Iterable[tuple[str, object, object]]) -> str | None:
+    """One line for the first place where a spec holds a class and the value there is an instance of it.
+
+    A class in a spec is a value like any other, compared with ``==``.  Said where `match.is_instance_of` takes the
+    value on the class tree alone: the class is built by `type` itself, so its instance check is the base one, and
+    it stands in the tree of the value's class, so neither is asked anything.
+    """
+    for where, value, literal in leaves:
+        if type(literal) is type and any(base is literal for base in class_tree(type(value))):
+            return f"at <{where}> the spec holds a class itself and the value is an instance of it: {_INSTANCE_MATCHER}"
+    return None
+
+
 def not_at_an_end(value: object, piece: object, *, start: bool, cased: bool = True) -> str | None:
     """One line on why a text does not start with another, or end with it, where one fact says it.
 

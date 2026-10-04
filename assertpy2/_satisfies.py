@@ -11,6 +11,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
 from ._engine._require import VerdictError, argument, refuse, verdict
+from ._hints import class_in_spec, under
 from ._matcher_impls import _has_own_evaluate
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _capped, _capped_format
 from .matchers import (
@@ -367,7 +368,8 @@ class SatisfiesMixin(_MixinBase):
             ]
             return self.error(
                 f"Expected <{_capped(self.val)}> to match structure {matcher.describe()}, but"
-                f" {matcher.render_mismatch(mismatches)}.",
+                f" {matcher.render_mismatch(mismatches)}."
+                f"{under(class_in_spec((one.path.text, one.actual, one.literal) for one in mismatches))}",
                 actual=self.val,
                 expected=spec,
                 diff=DiffResult(kind="match", entries=entries),
