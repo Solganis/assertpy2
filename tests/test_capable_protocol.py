@@ -761,7 +761,13 @@ def _umbrella() -> dict[str, set[str]]:
         for keyword in node.keywords
         if keyword.arg == "bound"
     )
-    shapes = {name.id for name in ast.walk(bound) if isinstance(name, ast.Name)}
+    # the bound is a name of its own, which the twins restrict a rung to where it lands where it stood
+    union = next(
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign) and [ast.unparse(target) for target in node.targets] == [ast.unparse(bound)]
+    )
+    shapes = {name.id for name in ast.walk(union) if isinstance(name, ast.Name)}
     return {
         node.name: {
             item.name if isinstance(item, ast.FunctionDef) else ast.unparse(item.target)

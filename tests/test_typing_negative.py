@@ -146,8 +146,16 @@ class TestWhatTheCheckersRefuse:
             # a predicate refused through the parameter the view bound it to: mypy words it as the callable not
             # fitting, pyright as a missing name, and ty resolves the lambda less precisely and says nothing
             {checker: set(codes) for checker, codes in _PREDICATE_OVER_THE_SUBJECT.items()},
-            # refused through a twin rung's `self`; ty resolves the self-restricted rung less precisely and says nothing
+            # refused through a twin rung's `self`
             {checker: set(codes) for checker, codes in _NOT_THE_VALUES_VIEW.items()},
+            # a class outside the bound of the variable it binds, which is how a polled `raises()` refuses what is
+            # no exception
+            {
+                "ty": {"invalid-argument-type"},
+                "mypy": {"type-var"},
+                "pyright": {"reportArgumentType"},
+                "pyrefly": {"bad-specialization"},
+            },
             # a keyword the signature does not have, where the call does not even bind
             {
                 "ty": {"unknown-argument"},

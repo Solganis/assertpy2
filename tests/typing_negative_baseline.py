@@ -53,7 +53,7 @@ _MISSING: dict[str, frozenset[str]] = {
 }
 
 _NOT_THE_VALUES_VIEW: dict[str, frozenset[str]] = {
-    "ty": frozenset(),
+    "ty": frozenset({"no-matching-overload"}),
     "mypy": frozenset({"misc"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
     "pyrefly": frozenset({"no-matching-overload"}),
@@ -242,6 +242,19 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "predicate-reading-a-missing-string-method": _PREDICATE_OVER_THE_SUBJECT,
     "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
     "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
+    "key-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
+    "negated-text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
+    "numeric-verdict-on-a-pivoted-mapping": _NOT_THE_VALUES_VIEW,
+    # a value that is one of two kinds holds neither's assertions, which mypy took through the umbrella rung
+    "text-verdict-on-a-pivoted-union": _NOT_THE_VALUES_VIEW,
+    "text-verdict-on-a-pivoted-object": _NOT_THE_VALUES_VIEW,
+    "text-assertion-on-a-polled-union": _NOT_THE_CHAINS_VALUE,
+    "pivot-on-a-polled-value-no-rung-claims": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset(),
+        "pyright": frozenset({"reportAttributeAccessIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
+    },
     "text-assertion-after-a-dynamic-one": _NOT_THE_CHAINS_VALUE,
     # ty was silent on both until 0.0.82, which reads a recursive alias to every depth
     "a-tuple-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
@@ -286,6 +299,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # there is no chain for it to refuse the name on.  The other three read the declared refusal
     "called-with-on-a-chain-over-a-callable": _NO_EXPECTATION_YET,
     "called-with-on-an-async-chain": _NO_EXPECTATION_YET,
+    "called-with-on-a-closed-callable": _NOT_CALLABLE,
+    "called-with-on-an-async-closed-callable": _NOT_CALLABLE,
     # declared as a member with a type nothing can call, which is what beats `__getattr__`
     "value-on-a-sync-poll": _MISSING,
     "value-on-an-async-poll": _MISSING,
@@ -300,6 +315,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset(),
         "pyright": frozenset(),
         "pyrefly": frozenset(),
+    },
+    "expectation-of-a-class-that-is-no-exception": {
+        "ty": frozenset({"invalid-argument-type"}),
+        "mypy": frozenset({"type-var"}),
+        "pyright": frozenset({"reportArgumentType"}),
+        "pyrefly": frozenset({"bad-specialization"}),
     },
     "poll-on-an-async-poll": _NOT_THE_CHAINS_VALUE,
     # the call ladder: the expectation views carry `when_called_with()`, and each landing carries what
@@ -336,23 +357,40 @@ SPLIT: frozenset[str] = frozenset(
         "predicate-reading-a-missing-numeric-method",
         "called-with-on-a-chain-over-a-callable",
         "called-with-on-an-async-chain",
-        "text-verdict-on-a-pivoted-number",
         "element-of-another-type-on-a-polled-string",
+        "pivot-on-a-polled-value-no-rung-claims",
         "bare-type-expectation-on-a-poll",
         "group-member-by-a-union",
     }
 )
 """The cases the four do not agree on, named so a new one has to be decided about.
 
-Eight relations.  ty is silent in four.  The two predicates are a lambda over the subject reading a
-name the value has not got, where ty resolves the parameter through the overload set less precisely.
-The pivoted number is a verdict asked of a value the builder holds, refused through the ``self``
-annotation of a rung on its twin, which ty does not read.  The polled string is handed an element of
-another type, where the rung that matches carries `str` operands and only mypy and pyright say so.  In the two
-`when_called_with()` calls made before any expectation, mypy is the silent one.  In the seventh ty is the
-only one to refuse: a polled `raises()` given a bare `type`, which the others take through the rung
-carrying the class.  In the eighth pyright and pyrefly are silent: `error_of()` refuses a union at run time,
-and they read `KeyError | OSError` as a class that is one of the two, which a variable of that type is.
+Eight relations, each traced to what one checker does, and reduced to a file with nothing of this
+library in it where that could be done.
+
+The two predicates are a lambda over the subject reading a name the value has not got.  ty types the
+lambda's parameter as `Unknown` under an overloaded callee, measured for a `TypeIs` rung over a plain
+one, as here, and for two plain rungs.
+
+The polled string is handed an element of another type.  The flat chain's rung for any iterable binds
+`_E` through a covariant `Iterable[_E]`, which `str | int` satisfies as written.  ty and pyrefly solve
+it so, mypy and pyright hold `_E` to what the receiver gives, and a view per value, which would fix the
+element, is the shape `scripts/generate_poll_protocols.py` measured and refused.
+
+In the two `when_called_with()` calls made before any expectation mypy is silent.  Where an argument's
+type holds an `Any` and two overloads with different returns take it, mypy answers `Any`, and a probe
+returning `Callable[..., int]` is taken by the callable rung of `assert_that()` and by its fallback.
+Over a callable with its parameters written out mypy refuses with the rest.
+
+A pivot on a polled value no rung claims is taken by mypy alone.  The umbrella rung of a pivot binds a
+type variable through ``self``, which mypy does not hold to its bound, and written with the bound
+itself ty read every polled pivot as `Unknown`.
+
+A polled `raises()` given a bare `type` is refused by ty alone, which reads it as `type[object]`, and
+the rung that would take it takes `raises(int)` under all four.
+
+In the last pyright and pyrefly are silent: `error_of()` refuses a union at run time, and they read
+`KeyError | OSError` as a class that is one of the two, which a variable of that type is.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as the dialects agreeing.
@@ -364,6 +402,12 @@ VALID: frozenset[str] = frozenset(
         "valid-async-call-after-an-expectation",
         "valid-verdict-after-a-pivot",
         "valid-text-verdict-after-a-pivot",
+        "valid-key-verdict-after-a-pivot",
+        "valid-negated-verdict-after-a-pivot",
+        "valid-closeness-verdict-after-a-pivot",
+        "valid-bytes-verdict-after-a-pivot",
+        "valid-verdict-on-a-pivoted-capable-value",
+        "valid-moment-verdict-after-a-pivot",
         "valid-verdict-after-a-loose-pivot",
         "valid-predicate-over-the-subject",
         "valid-numeric-predicate-over-the-subject",

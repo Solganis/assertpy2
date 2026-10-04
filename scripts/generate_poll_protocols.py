@@ -300,6 +300,7 @@ _IMPORTS = """    import datetime
 
     from ._typing import (
         _ArrayT_co,
+        _Capable,
         _CapableT,
         _Exc,
         _FrameT_co,
@@ -584,9 +585,9 @@ def _rewritten(
 def _falls_back_to_a_bare_type(node: ast.FunctionDef, siblings: list[ast.FunctionDef]) -> bool:
     """Whether *node* is the overload a bare `type` falls back to, beside one taking `type[...]`.
 
-    Left off a chain.  With it the ladder's returns differ for an argument both rungs take, and ty read
-    every `raises()` on a polled callable as `Unknown`, measured; without it ty refuses only an exception
-    written as a bare `type`, which the other three accept through the rung carrying the class.
+    Left off a chain.  With it every checker takes `raises(int)` on a poll, which all four refuse without it
+    and the run time refuses too, measured.  Without it ty alone refuses an exception written as a bare
+    `type`, which it reads as `type[object]`, and the other three accept through the rung carrying the class.
     """
     written = [ast.unparse(one.annotation) if one.annotation else "" for one in node.args.args[1:]]
     if "type" not in written:
@@ -597,6 +598,17 @@ def _falls_back_to_a_bare_type(node: ast.FunctionDef, siblings: list[ast.Functio
         and any(ast.unparse(one.annotation).startswith("type[") for one in other.args.args[1:] if one.annotation)
         for other in siblings
     )
+
+
+def _lands_elsewhere(rung: ast.FunctionDef, chain: str) -> bool:
+    """Whether the umbrella rung hands back anything but a verdict or the chain it was asked on.
+
+    Such a rung keeps the type variable.  Written with the bound itself it overlapped the named rung above it,
+    and ty read a polled `first()` over a list as `Unknown`.  A rung that lands where it stood has nothing for the
+    overlap to change, and the bound is what holds mypy to it, measured: through the variable it took a value
+    that is a number or a text, or an `object`, for one the umbrella claims.
+    """
+    return ast.unparse(rung.returns or ast.Name(id="")) not in ("AssertionOutcome", f"{chain}[_P_co]")
 
 
 def _narrows_itself(node: ast.FunctionDef) -> bool:
@@ -721,7 +733,7 @@ def _rungs(
         if name in open_to_any:
             continue
         # the ordering six ask for an ordering, the restriction `_capable_typing` puts on the surface off the chain
-        claimed = _RESTRICTED.get(name, "_CapableT")
+        claimed = _RESTRICTED.get(name, "_Capable")
         if claimed == "_Callable" and any(
             ast.unparse(_own(one).annotation or ast.Name(id="")) == f"{flavour}[Callable[..., _P]]"
             and ast.unparse(one.returns or ast.Name(id="")).startswith(f"{_EXPECTING.get(flavour, flavour)}[")
@@ -733,9 +745,12 @@ def _rungs(
         for method in methods:
             if _falls_back_to_a_bare_type(method, methods):
                 continue
-            rung = _rewritten(
-                method, f"{flavour}[{claimed}]", flavour, known, holder=protocol, umbrella=True, returns_as=returns_as
-            )
+            for asked in (claimed, "_CapableT"):
+                rung = _rewritten(
+                    method, f"{flavour}[{asked}]", flavour, known, holder=protocol, umbrella=True, returns_as=returns_as
+                )
+                if asked != "_Capable" or not _lands_elsewhere(rung, returns_as or flavour):
+                    break
             # a restriction naming a type a rung above claims writes that rung twice, and pyright reports the overlap
             if ast.unparse(rung) not in seen:
                 found[name].append(rung)
@@ -907,6 +922,8 @@ def generate_verdict() -> str:
     imports = _IMPORTS.format(abc=_abc_import()).replace(
         matchers, matchers + "\n    from ..outcome import AssertionOutcome"
     )
+    # every rung of this twin hands back a verdict, so none keeps the type variable
+    imports = imports.replace("        _CapableT,\n", "")
     return _VERDICT_HEADER.format(imports=imports, body=_body(known, _VERDICT))
 
 
@@ -922,6 +939,11 @@ from a payload typed `dict[str, Any]` then read as a string.  A rung per asserti
 
 A name nobody declares stays open, because `__getattr__` answers it: a dynamic assertion is resolved
 from the value's own attributes and reaches this proxy too.
+
+`val` and `value` are declared, and not only because the proxy hands the value back under them.  They
+hand the protocol's parameter out directly, where `not_` names it only through the protocol itself.
+Measured on a protocol of two members: with `not_` alone ty takes the twin over a number for the twin
+over a text, so no restriction on ``self`` was read and a text verdict asked of a number was taken.
 """
 
 from __future__ import annotations
@@ -936,6 +958,10 @@ if TYPE_CHECKING:
 
         @property
         def not_(self) -> _CheckAnyValue[_P_co]: ...
+        @property
+        def val(self) -> _P_co: ...
+        @property
+        def value(self) -> _P_co: ...
         def __getattr__(self, name: str) -> Callable[..., AssertionOutcome]: ...
 {body}
 '''

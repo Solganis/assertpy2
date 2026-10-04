@@ -67,6 +67,7 @@ from ._engine._operations import (
     ALSO_ASSERTS,
     CONFIGURES,
     DESCRIBES,
+    HANDS_THE_SUBJECT_BACK,
     NOT_AN_OPERATION,
     POLLS,
     TRANSFORMS,
@@ -1267,7 +1268,7 @@ class NegatedBuilder(Generic[_S]):
         if name in _PROXY_ENTRIES and _is_still_ours(self._builder, name):
             raise TypeError(_PROXY_ENTRIES[name])
         attr = getattr(self._builder, name)
-        if not callable(attr):
+        if name in HANDS_THE_SUBJECT_BACK or not callable(attr):
             return attr
 
         def _negated(*args: object, **kwargs: object) -> AssertionBuilder:
@@ -1439,7 +1440,8 @@ class CheckBuilder:
     afterwards is unaffected, and an assertion that raises for a bad argument still leaves it clean.
 
     ``not_`` is proxied rather than refused, so a negated assertion can be asked for a verdict too.
-    Anything else that is not callable - ``val``, ``description`` - is handed straight back.
+    The value is handed straight back under ``val`` and ``value``, callable or not, and so is anything
+    else that is not callable, ``description`` among them.
     """
 
     if TYPE_CHECKING:
@@ -1460,6 +1462,8 @@ class CheckBuilder:
         if name == "check" and _is_still_ours(self._builder, name):
             raise TypeError("check() is already the verdict proxy; one check() is enough")
         attr = getattr(self._target, name)
+        if name in HANDS_THE_SUBJECT_BACK:
+            return attr
         if isinstance(attr, NegatedBuilder):
             # ty: ignore[invalid-return-type]  # declared above as a proxy; this is the path that cannot be described
             return CheckBuilder(attr, self._builder)

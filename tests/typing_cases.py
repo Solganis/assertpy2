@@ -302,6 +302,15 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(7).satisfies(lambda item: item.bit_lengthh())  # case: predicate-reading-a-missing-numeric-method
     # a verdict asked of a value the builder holds: an element pivot used to land on the untyped proxy
     assert_that([1, 2]).first().check().starts_with("x")  # case: text-verdict-on-a-pivoted-number
+    assert_that([1, 2]).first().check().contains_key("x")  # case: key-verdict-on-a-pivoted-number
+    assert_that([1, 2]).first().check().not_.starts_with("x")  # case: negated-text-verdict-on-a-pivoted-number
+    assert_that([{"a": 1}]).first().check().is_positive()  # case: numeric-verdict-on-a-pivoted-mapping
+    assert_that(_a_number_or_a_text()).first().check().starts_with("a")  # case: text-verdict-on-a-pivoted-union
+    assert_that([object()]).first().check().starts_with("a")  # case: text-verdict-on-a-pivoted-object
+    assert_that(_either).eventually_sync().starts_with("a")  # case: text-assertion-on-a-polled-union
+    # a pivot keeps the umbrella's type variable, which mypy does not hold to its bound: written with the bound
+    # itself, ty read every polled pivot as `Unknown`
+    assert_that(_a_thing).eventually_sync().first()  # case: pivot-on-a-polled-value-no-rung-claims
 
     # a member that is not a class, at the outer level and nested
     assert_that(object()).is_instance_of((int, "nope"))  # case: a-tuple-member-that-is-not-a-class
@@ -325,6 +334,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     # a refusal and only what `raises()` and the rest hand back carries the call
     assert_that(_a_factory).eventually_sync().when_called_with()  # case: called-with-on-a-chain-over-a-callable
     assert_that(_a_factory).eventually().when_called_with()  # case: called-with-on-an-async-chain
+    # over a callable whose parameters are written out all four refuse it: mypy reads `assert_that()` over a
+    # probe returning `Callable[..., int]` as `Any`, and the two above are silent for it from there on
+    assert_that(_a_closed_factory).eventually_sync().when_called_with()  # case: called-with-on-a-closed-callable
+    assert_that(_a_closed_factory).eventually().when_called_with()  # case: called-with-on-an-async-closed-callable
     # and the same call once an expectation is set, which is what the state exists for
     assert_that(_a_factory).eventually_sync().raises(
         ValueError
@@ -332,9 +345,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_a_factory).eventually().does_not_raise(
         ValueError
     ).when_called_with()  # case: valid-async-call-after-an-expectation
-    # a polled `raises()` carries the class it was given to the call, and a bare `type` gives none: the rung
-    # that took one made ty read every polled `raises()` as `Unknown`, so the chain leaves it off
+    # a polled `raises()` carries the class it was given to the call, and a bare `type` gives none: ty reads it as
+    # `type[object]`, and the rung that would take it takes `raises(int)` under all four, so the chain leaves it off
     assert_that(_a_factory).eventually_sync().raises(_an_exception_class())  # case: bare-type-expectation-on-a-poll
+    assert_that(_a_closed_factory).eventually_sync().raises(int)  # case: expectation-of-a-class-that-is-no-exception
     # a poll delivers its own failure, so `check()` is refused at run time and declared as not callable
     # a chain hands its value back under `val`; `value` is the builder's name and was recorded as an
     # assertion, which failed inside the replay rather than where it was written.  Read through a use,
@@ -415,6 +429,22 @@ def _adder(first: int, second: int) -> int:
 
 
 def _a_factory() -> Callable[..., int]:
+    return lambda: 1
+
+
+def _a_number_or_a_text() -> list[int | str]:
+    return [1, "a"]
+
+
+def _either() -> int | str:
+    return 1
+
+
+def _a_thing() -> object:
+    return object()
+
+
+def _a_closed_factory() -> Callable[[], int]:
     return lambda: 1
 
 
@@ -612,6 +642,15 @@ def _relations_that_must_keep_working() -> None:
     assert_that(7).satisfies(lambda item: item.bit_length() > 0)  # case: valid-numeric-predicate-over-the-subject
     assert_that([1, 2]).first().check().is_positive()  # case: valid-verdict-after-a-pivot
     assert_that(["a"]).first().check().starts_with("a")  # case: valid-text-verdict-after-a-pivot
+    # every kind of value the builder's verdict twin restricts a rung to, which has to keep its own assertions
+    assert_that([{"a": 1}]).first().check().contains_key("a")  # case: valid-key-verdict-after-a-pivot
+    assert_that([[1]]).first().check().not_.contains(2)  # case: valid-negated-verdict-after-a-pivot
+    assert_that([1.5]).first().check().is_close_to(1, 1)  # case: valid-closeness-verdict-after-a-pivot
+    assert_that([b"a"]).first().check().starts_with(b"a")  # case: valid-bytes-verdict-after-a-pivot
+    assert_that([_Walkable()]).first().check().is_empty()  # case: valid-verdict-on-a-pivoted-capable-value
+    assert_that([datetime.datetime(2026, 1, 1)]).first().check().is_before(
+        datetime.datetime(2026, 1, 2)
+    )  # case: valid-moment-verdict-after-a-pivot
     # `dict[str, Any]` is where the alternative spelling put every chain on the first rung
     assert_that(_loose_rows()).first().check().starts_with("x")  # case: valid-verdict-after-a-loose-pivot
     # even a list: a mapping whose `__getitem__` takes one answers, measured, so the selector stays `object`

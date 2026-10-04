@@ -72,6 +72,12 @@ def _shape_bound_typevars() -> dict[str, str]:
     shape-keyed ones, rather than matching on a naming convention that an edit can quietly leave.
     """
     module = ast.parse(_TYPING.read_text(encoding="utf-8"))
+    # a union of shapes may carry a name of its own, which the bound then names in its place
+    named_unions = {
+        node.targets[0].id: node.value
+        for node in ast.walk(module)
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.BinOp)
+    }
     bounds = {}
     for node in ast.walk(module):
         match node:
@@ -83,7 +89,10 @@ def _shape_bound_typevars() -> dict[str, str]:
                     if keyword.arg != "bound":
                         continue
                     # a bound is one name or a union written as a string; reading only the first form hid the umbrella
-                    named = _shape_names(keyword.value)
+                    written = keyword.value
+                    named = _shape_names(
+                        named_unions.get(written.id, written) if isinstance(written, ast.Name) else written
+                    )
                     if named:
                         bounds[name] = " | ".join(named)
     return bounds

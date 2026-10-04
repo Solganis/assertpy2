@@ -34,7 +34,7 @@ WHAT_IT_DOES: Final = {
 # the builder's own machinery, named rather than filtered, so a new one is declared before the gate takes it
 NOT_AN_OPERATION: Final = frozenset({"builder", "check", "error", "not_", "value"})
 
-# the members handing the subject back, which the dangling check must not read as an assertion left uncalled
+# the members handing the subject back: no assertion left uncalled for the dangling check, none to wrap for a proxy
 HANDS_THE_SUBJECT_BACK: Final = frozenset({"val", "value"})
 
 # the hybrids: named, since "reaches `self.error()`" does not separate a verdict from a precondition

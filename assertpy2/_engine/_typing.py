@@ -873,10 +873,8 @@ if TYPE_CHECKING:
         # positional-only, the way typeshed spells it
         def __getitem__(self, key: Any, /) -> Any: ...
 
-    _CapableT = TypeVar(
-        "_CapableT",
-        bound=_CollectionShape | _HttpResponseShape | _ModelShape | _DataclassShape | _MappingLikeShape,
-    )
+    _Capable = _CollectionShape | _HttpResponseShape | _ModelShape | _DataclassShape | _MappingLikeShape
+    _CapableT = TypeVar("_CapableT", bound=_Capable)
 
     class _FrameShape(Protocol):
         def pivot(self, *args: Any, **kwargs: Any) -> Any: ...

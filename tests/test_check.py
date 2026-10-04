@@ -325,3 +325,27 @@ class TestTheReturnedRecordIsThePublicType:
 
     def test_a_non_callable_attribute_is_handed_straight_back(self):
         assert_that(assert_that(5).check().val).is_equal_to(5)
+        assert_that(assert_that(5, "why").check().description).is_equal_to("why")
+
+    @pytest.mark.parametrize("name", ["val", "value"])
+    def test_a_callable_value_is_handed_back_as_the_value_and_is_not_called(self, name):
+        calls = []
+
+        def subject():
+            calls.append(1)
+
+        for proxy in (
+            assert_that(subject).check(),
+            assert_that(subject).check().not_,
+            assert_that(subject).not_,
+            assert_that([subject]).first().check(),
+        ):
+            assert_that(getattr(proxy, name)).is_same_as(subject)
+        assert_that(calls).is_empty()
+
+    @pytest.mark.parametrize("name", ["val", "value"])
+    def test_a_value_that_is_itself_a_negation_is_handed_back_as_the_value(self, name):
+        subject = assert_that(5).not_
+
+        assert_that(getattr(assert_that(subject).check(), name)).is_same_as(subject)
+        assert_that(getattr(assert_that(subject).check().not_, name)).is_same_as(subject)
