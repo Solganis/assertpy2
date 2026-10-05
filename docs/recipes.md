@@ -291,6 +291,15 @@ assert_that(response["meta"]["total"]).is_equal_to(2)
 `at_json_path()` navigate into a nested payload, and need the JSON extra
 (`pip install assertpy2[json]`). This keeps the failure focused on the field that broke.
 
+It also keeps the failure cheap. What a failed comparison costs follows the two values and not the
+message. The sentence stays a few hundred characters and the report prints the first fifty differences,
+yet the failure reads both values whole and holds an entry for every difference it found, in
+`failure.diff.entries`. As a sense of scale and no promise, measured on one machine with one shape of
+row: two lists of 10 000 rows that differ in every row took about 90 ms and 8 MB to fail where `==`
+answered in a microsecond, and a single differing row among the 10 000 took 5 ms. A polling assertion
+pays that at every attempt that fails, so [`eventually()`](guides/testing.md#async-assertions) over a
+value that large polls less often than its interval asks.
+
 ## Migrate an assertion from plain `assert`
 
 Replace a cluster of bare asserts with one fluent chain - fewer statements, a structured diff on failure,

@@ -133,6 +133,15 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     [:octicons-arrow-right-24: Assertions that checked nothing](guides/assertions.md#assertions-that-checked-nothing)
 
+-   :material-hammer-wrench:{ .lg .middle } __Assertions of your own__
+
+    ---
+
+    `add_extension()` puts an assertion you wrote on every chain, and a `Matcher[T]` handed to
+    `satisfies()` keeps it typed, so the checker follows your own vocabulary too.
+
+    [:octicons-arrow-right-24: Custom assertions](extending/custom-assertions.md)
+
 </div>
 
 ## Install
@@ -145,7 +154,7 @@ Optional extras:
 
 - `assertpy2[json]` - JSONPath, JSON Schema, and OpenAPI contracts
 - `assertpy2[inline]` - inline snapshots (`matches_inline()`)
-- `assertpy2[data]` - pandas, polars and numpy together, or `[pandas]`, `[polars]` or `[numpy]` alone
+- `assertpy2[data]` - pandas, polars and numpy, or each under its own name
 - `assertpy2[allure]` - Allure reporting
 - `assertpy2[behave]` - Behave step matchers
 

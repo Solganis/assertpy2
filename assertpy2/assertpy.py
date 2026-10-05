@@ -735,19 +735,34 @@ def assert_conforms(
 
     ``exact`` catches that drift in the models, dataclasses and ``TypedDict`` values the payload became inside
     lists, tuples, sets, dicts, unions and root models, and reports the exact paths.  It is alias-aware, and
-    respects a model that opts into extras (``extra="allow"``).  Raw items that no longer pair one by one with
-    what they became (a set, a filtered list, an object wrapped into a list) are validated again by their
-    model class when they all became one, which runs that class's validators once more for them, and JSON text
-    is read as the original JSON input.  Raw items a validator left no built item for (an emptied list) are
-    checked against the type their field declares: validated again as it, which runs the item model's
-    validators but not the field's own, so a field validator that would have built them otherwise is not seen.
-    What still cannot be paired (items of mixed classes in a set or a resized list, emptied items the declared
-    type does not build or declares through a union of two or more types besides ``None`` or a named type
-    alias, merged dict keys, a generator consumed during validation, a lazy ``Iterable``) fails with ``<path>
-    cannot be checked`` and the reason.  It reads the payload as it was sent: what a validator changed in
-    place in a plain dict or list is put back for the check and returned afterwards.  A validator that renames
-    keys, or reorders or rewrites the items of a container without changing its size, is not seen, and those
-    items are read by position.  A model inside a container of plain values (``list[Any]``) is not reached.
+    respects a model that opts into extras (``extra="allow"``).
+
+    Raw items that no longer pair one by one with what they became are still checked where they can be:
+
+    - A set, a filtered list, an object wrapped into a list: validated again by their model class when they
+      all became one, which runs that class's validators once more for them.  JSON text is read as the
+      original JSON input.
+    - An emptied list, whose raw items a validator left no built item for: checked against the type their
+      field declares.  They are validated again as it, which runs the item model's validators but not the
+      field's own, so a field validator that would have built them otherwise is not seen.
+
+    What still cannot be paired fails with ``<path> cannot be checked`` and the reason:
+
+    - items of mixed classes in a set or a resized list
+    - emptied items the declared type does not build, or declares through a union of two or more types
+      besides ``None`` or a named type alias
+    - merged dict keys
+    - a generator consumed during validation, or a lazy ``Iterable``
+
+    It reads the payload as it was sent: what a validator changed in place in a plain dict or list is put back
+    for the check and returned afterwards.
+
+    Two things it does not see:
+
+    - a validator that renames keys, or reorders or rewrites the items of a container without changing its
+      size: those items are read by position
+    - a model inside a container of plain values (``list[Any]``)
+
     A ``TypedDict`` is read off the schema pydantic built, so text annotations and type variables declare it
     too.  Where several are declared for one value and their ``Literal`` fields do not tell them apart, or a
     type beside them may build a dict as well, a key the built dict lost fails with ``cannot be checked``.
@@ -874,13 +889,13 @@ def assert_warn(val: object, description: str = "", logger: WarningLogger | None
 
         Even though all of the above assertions fail, ``AssertionError`` is never raised and
         test execution is never halted.  Instead, the failed assertions merely log the following
-        warning messages to ``stdout``:
+        warning messages to ``stdout``, each after the time it was logged, which is left out here:
 
-            2019-10-27 20:00:35 WARNING [test_foo.py:23]: Expected <foo> to be of length <4>, but was <3>.
-            2019-10-27 20:00:35 WARNING [test_foo.py:24]: Expected <foo> to be empty string, but was not.
-            2019-10-27 20:00:35 WARNING [test_foo.py:25]: Expected <False>, but was not.
-            2019-10-27 20:00:35 WARNING [test_foo.py:26]: Expected <foo> to contain only digits, but did not.
-            2019-10-27 20:00:35 WARNING [test_foo.py:27]: Expected <123> to contain only alphabetic chars, but did not.
+            WARNING [test.py:23]: Expected <foo> to be of length <4>, but was <3>.
+            WARNING [test.py:24]: Expected <foo> to be empty string, but was not.
+            WARNING [test.py:25]: Expected <False>, but was not.
+            WARNING [test.py:26]: Expected <foo> to contain only digits, but did not.
+            WARNING [test.py:27]: Expected <123> to contain only alphabetic chars, but did not.
 
     Tip:
         Use `assert_warn()` if and only if you have a *really* good reason to log assertion

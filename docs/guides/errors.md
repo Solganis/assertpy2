@@ -613,29 +613,43 @@ shows the operand under Expected and the value under test under Actual, both who
 PyCharm 2026.3 on a response of forty nested rows. As for a plain `assert`, PyCharm also prints the two
 values above the link.
 
-What is handed over is the pair the assertion compared. For `is_equal_to()` that is the value and the
-operand. Under `ignore=` or `include=` it is the two copies without the keys left out, so a key the
-assertion passed over is in neither pane. A record in such a copy, a dataclass, an attrs class or a
-model, is handed over as the dict of its fields, which is what was compared: a pane then lays a record
-out line by line, and a dict beside a record reads in the same shape. That holds for a mapping whose
-keys are each exactly a `str`, an `int`, a `bool`, a `float`, a `bytes` or `None`. A mapping with any
-other key, one of a subclass of those among them, is handed over as it was. A failed `has_<name>()`
-hands over the value it read and the operand.
+What is handed over is the pair the assertion compared:
 
-The window compares two texts, as it does for a plain `assert`. Two values `==` holds equal that print
-differently, `1` and `True`, show there as a difference, and two that differ and print the same, two
-NaNs, show as none. The failure's own diff is the one built from the comparison.
+| Failed assertion | The two panes show |
+|---|---|
+| `is_equal_to()` | the value and the operand |
+| `is_equal_to()` under `ignore=` or `include=` | the two copies without the keys left out, so a key the assertion passed over is in neither pane |
+| `has_<name>()` | the value it read and the operand |
 
-Nothing is handed over under `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=`: there a
-text comparison of two values would show a difference the assertion let pass, or none where it found
-one. A negation, a membership assertion and a `soft_assertions()` block are not handed over either, nor
-is a group of several failures. The failure is what it was: its message, `failure.diff` and the report
-sections do not change.
+A record in such a copy, a dataclass, an attrs class or a model, is handed over as the dict of its
+fields, which is what was compared. A pane then lays a record out line by line, and a dict beside a
+record reads in the same shape. That holds for a mapping whose keys are each exactly a `str`, an `int`,
+a `bool`, a `float`, a `bytes` or `None`. A mapping with any other key, one of a subclass of those
+among them, is handed over as it was.
 
-The hook is called while the report of the test is being made, before it is logged. A listener that
-reads the pair when the report is logged hears it, which is how PyCharm's runner reads. Under
-`pytest-xdist` the hook is called in the worker, and a runner that reports from the controller does not
-hear it. `assertpy2_comparison = "off"` turns the hand-over off.
+The window compares two texts, as it does for a plain `assert`:
+
+- two values `==` holds equal that print differently, `1` and `True`, show there as a difference
+- two that differ and print the same, two NaNs, show as none
+
+The failure's own diff is the one built from the comparison.
+
+Nothing is handed over in three cases:
+
+- under `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=`, where a text comparison of two
+  values would show a difference the assertion let pass, or none where it found one
+- for a negation, a membership assertion or a `soft_assertions()` block
+- for a group of several failures
+
+The failure is what it was there: its message, `failure.diff` and the report sections do not change.
+
+Who hears the hook:
+
+- It is called while the report of the test is being made, before it is logged. A listener that reads
+  the pair when the report is logged hears it, which is how PyCharm's runner reads.
+- Under `pytest-xdist` it is called in the worker, and a runner that reports from the controller does
+  not hear it.
+- `assertpy2_comparison = "off"` turns the hand-over off.
 
 ### Catching failures with their types intact
 
@@ -855,14 +869,26 @@ masker at all.
 
 The caps are on rendering only. The value under test, a value it is held against, a pattern and a list
 of items are printed whole up to 4000 characters in every assertion. Past that the message says how much
-it left out, and what it keeps depends on what the assertion is about: `is_equal_to` keeps the first 4000
-characters and leaves the rest to its diff, two texts held against each other (`starts_with`,
-`ends_with`, the comparisons that ignore case or whitespace) are cut around the place they part, and
-anything else keeps its first 3000 and last 1000. A name or a count you pass, a key, a class, a file, a
-length, prints as given. A row of a diff is cut at 400 characters, a row a `soft_assertions()` block
-keeps at 4000 a side, and the whole diff block at 20 KB, and matching parts of a structure collapse to
-`..`. None of that shrinks what `failure.actual` holds, and `failure.actual` is what a reporting
-integration serialises.
+it left out, and what it keeps depends on what the assertion is about:
+
+| What a message prints | What it keeps past the cap |
+|---|---|
+| the two sides of `is_equal_to` | the first 4000 characters, with the rest left to its diff |
+| two texts held against each other: `starts_with`, `ends_with`, the comparisons that ignore case or whitespace | a cut around the place they part |
+| anything else | its first 3000 and last 1000 |
+| a name or a count you pass: a key, a class, a file, a length | all of it, as given |
+
+A diff has caps of its own:
+
+| Part of a diff | Cap |
+|---|---|
+| a row | 400 characters |
+| a row a `soft_assertions()` block keeps | 4000 a side |
+| the whole block | 20 KB |
+| matching parts of a structure | collapse to `..` |
+
+None of that shrinks what `failure.actual` holds, and `failure.actual` is what a reporting integration
+serialises.
 
 Under `pytest -vv` a message and the values of the report section are printed whole, as pytest prints
 its own output there. Under `ignore=` or `include=` alone those are the two views compared, whole. The
@@ -1147,9 +1173,16 @@ made.
 ### What was asked, as data
 
 `message` says what failed in English, and `actual`, `expected` and `diff` say what the values were.
-None of them says what was *asked* of the value, and `expected` cannot: it holds the operand for
-`is_equal_to(2)`, a tuple for `contains(2)`, a rendered description for `satisfies(...)`, a type for
-`is_instance_of(str)`, and nothing at all for `is_empty()`.
+None of them says what was *asked* of the value, and `expected` cannot, since what it holds changes
+with the assertion:
+
+| Assertion | `expected` holds |
+|---|---|
+| `is_equal_to(2)` | the operand |
+| `contains(2)` | a tuple |
+| `satisfies(...)` | a rendered description |
+| `is_instance_of(str)` | a type |
+| `is_empty()` | nothing at all |
 
 `requirement` answers that in one shape, on every failure, whichever mode delivered it:
 
@@ -1168,19 +1201,23 @@ and in the Allure attachment. That is what lets a report group failures without 
 `is_close_to` failure in a run carries the same operation, and a negated one is marked rather than
 worded differently.
 
-Two details worth knowing before you build on it. Parameters are the values the assertion **ran with**,
-keyed by its own parameter names, so one left out appears with its default and `is_close_to(9, 0.1)`
-reads the same as `is_close_to(other=9, tolerance=0.1)`. And an assertion that delegates answers its
-own name: `is_positive()` asks `is_greater_than(0)` underneath, and reports `is_positive`.
+Two details worth knowing before you build on it:
+
+- Parameters are the values the assertion **ran with**, keyed by its own parameter names. One left out
+  appears with its default, and `is_close_to(9, 0.1)` reads the same as
+  `is_close_to(other=9, tolerance=0.1)`.
+- An assertion that delegates answers its own name: `is_positive()` asks `is_greater_than(0)`
+  underneath, and reports `is_positive`.
 
 `requirement` is `None` where the failure is not one assertion's, and that is a limit rather than a
-gap. `fail()`, `soft_fail()` and a bare `error()` carrying a message of your own name no operation. A
-precondition of one of the few members that assert nothing on their own is about the shape of the value
-rather than about a requirement you stated. The failure a soft block or `assert_all` raises for
-everything it collected leaves the answer to each entry in its `failures`. A polling timeout carries
-the requirement of whatever its last attempt raised: usually the assertion that kept failing, and
-`None` when the probe raised something that is not one of this library's failures, such as an
-exception it was told to ignore or a bare `AssertionError`.
+gap:
+
+| Failure | Its `requirement` |
+|---|---|
+| `fail()`, `soft_fail()`, a bare `error()` carrying a message of your own | `None`, since they name no operation |
+| a precondition of one of the few members that assert nothing on their own | `None`, since it is about the shape of the value rather than about a requirement you stated |
+| what a soft block or `assert_all` raises for everything it collected | `None`, with the answer on each entry in its `failures` |
+| a polling timeout | that of whatever its last attempt raised: usually the assertion that kept failing, and `None` when the probe raised something that is not one of this library's failures, such as an exception it was told to ignore or a bare `AssertionError` |
 
 Reading it costs a built-in assertion nothing when it passes, since nothing runs until a failure is
 composed. A registered extension is the exception: it says what it is at the call, so it pays a

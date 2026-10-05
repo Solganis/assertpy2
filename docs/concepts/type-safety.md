@@ -410,71 +410,121 @@ What the check reads, in short:
 | a dict one of several declared `TypedDict`s built | followed as whichever declares it, and a key it lost fails with `cannot be checked` |
 | a model inside a container of plain values | not reached |
 
-The details behind each row:
+The details behind each row follow.
 
-- it is **alias-aware** - an aliased payload key is not mistaken for drift - and respects a model that
-  opts into extras (`model_config = ConfigDict(extra="allow")`)
-- it reports only **structural** drift (undeclared fields), not type coercions: a `datetime` field
-  legitimately arrives as a JSON string, so flagging coercions would be noise
-- pydantic 2.12 and later forbids extras for one call too, `Model.model_validate(payload, extra="forbid")`,
-  and names each one in its validation error. Where that is all a test needs, it is the simpler tool.
-  `exact=True` differs in what it leaves alone and in what it still sees. It keeps a model's own
-  `extra="allow"`, which the per-call setting overrides. It does not change which member of a union
-  validates, where forbidding extras makes a member with an extra key fail. It finds a key a validator
-  removed from the payload in place, which validation no longer sees. It hands the validated instance on to
-  the chain, and it works on every pydantic 2 release.
-- where validation reshaped a container so that its raw items no longer pair one by one with the items
-  built from it (a set, a list a validator filtered, an object a validator wrapped into a list) and every
-  built item is one model class, each raw item is validated again on its own by that class and checked
-  beside what it becomes. That runs the class's validators once more for those items, so a validator with
-  side effects runs twice. The items are the ones the payload sent: in a filtered list, an item the
-  validator dropped is checked too. A model read from JSON text (`Json[...]`) is checked against the
-  original JSON input.
-- where a validator left no built item to tell (a list it emptied), the raw items are checked against the
-  type the field declares: validated again as that type, in its model's config, and what that builds is
-  checked. The validators of the field itself are not run again, so one that would have built the items
-  otherwise (another class, a subclass of the declared one, renamed keys) is not seen. The validators of the
-  item's model do run for them, a second time where the field emptied the list after validating it. Where
-  the field's validators could have decided what the items became, it fails with `cannot be checked`, on a
-  clean payload too: items pydantic will not build the declared type from, and a union of two or more types
-  besides `None` or a named type alias, in the declared type or in a model built from it.
-- an extra that a typed `__pydantic_extra__` built and a validator then removed from the model is checked
-  the same way: validated again as the declared type and checked beside what that builds, or refused with
-  `cannot be checked` where the declared type is a union of two or more types. Untyped extras are the
-  model's to keep or drop.
-- where neither works (items of mixed model classes in a set or a resized list, an item that validates
-  only through its parent, dict keys merged by coercion, a generator consumed during validation, an
-  `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather
-  than guess. A part in which no key can hide (a number, text that is not JSON, a model passed as is) is
-  never refused.
-- it reads the payload as it was sent. Where the model runs code of its own during validation (a
-  validator, `model_post_init`, a custom `__init__`), the payload is kept before validation, and the plain
-  dicts and lists that code changed in place are put back for the check, then returned to what validation
-  left. So a validator that pops a key from its input is read like one that returns a copy without it. A
-  dict or list subclass changed in place is not put back.
-- what a validator does to bridge the payload to the model is not seen. A key it renames is reported under
-  the name the payload sent, and items it reorders or rewrites without changing the size of their container
-  are read by position. A validator that drops built items of one member of a union is read as if every
-  raw item became the class the remaining ones became.
-- it follows the models where a field's type can hold one, and under `Any`. A model a validator puts inside
-  a container of plain values (`list[Any]`, `dict[str, int]`), and a model inside a class that is neither a
-  model nor a dataclass, are not reached.
-- a dataclass, pydantic's or a plain one, is checked like a model: a key for every field its `__init__`
-  takes is declared, an `InitVar` among them and a field with `init=False` not, and what its fields hold is
-  followed. Its keys and aliases are read off the schema pydantic built.
-- a `TypedDict` is checked for its own keys, and its values are followed, as the schema pydantic built
-  declares them. That holds where its annotation is text (`from __future__ import annotations`) and where a
-  type variable of a parametrized one stands for it.
-- a `TypedDict` builds a plain dict, which does not say what built it. Beside types that never build a dict
-  (`Point | int`, `Point | None`) it is read as that `TypedDict`. Where a field declares several
-  (`Point | Other`), one whose `Literal` fields do not hold what the dict holds is ruled out, so a tag tells
-  them apart, with a discriminator or without. That is done only in a model that runs no code of its own,
-  since a validator can rewrite the tag after the fact. If more than one is left, or a type beside them may
-  build a dict too (`dict[str, int]`, `Any`, a custom type), the check does not guess which one validation
-  took. A clean payload passes. A key the payload sent that the built dict lost fails with
-  `<path> cannot be checked`, and so does a field two of them read from different keys when the payload
-  sends both. A key read through an alias is not lost. What the dict holds is followed as whatever each of
-  the declared types says of it.
+#### What counts as drift
+
+- It is alias-aware: an aliased payload key is not mistaken for drift.
+- It respects a model that opts into extras (`model_config = ConfigDict(extra="allow")`).
+- It reports only structural drift, undeclared fields, and not type coercions. A `datetime` field
+  legitimately arrives as a JSON string, so flagging coercions would be noise.
+
+#### Beside pydantic's own `extra="forbid"`
+
+pydantic 2.12 and later forbids extras for one call too,
+`Model.model_validate(payload, extra="forbid")`, and names each one in its validation error. Where that
+is all a test needs, it is the simpler tool. `exact=True` differs in what it leaves alone and in what it
+still sees:
+
+- It keeps a model's own `extra="allow"`, which the per-call setting overrides.
+- It does not change which member of a union validates, where forbidding extras makes a member with an
+  extra key fail.
+- It finds a key a validator removed from the payload in place, which validation no longer sees.
+- It hands the validated instance on to the chain.
+- It works on every pydantic 2 release.
+
+#### A container validation reshaped
+
+Where validation reshaped a container, its raw items no longer pair one by one with the items built from
+it. Two readings still check them.
+
+Every built item is one model class, as in a set, a list a validator filtered, or an object a validator
+wrapped into a list. Each raw item is validated again on its own by that class and checked beside what it
+becomes:
+
+- That runs the class's validators once more for those items, so a validator with side effects runs
+  twice.
+- The items are the ones the payload sent. In a filtered list, an item the validator dropped is checked
+  too.
+- A model read from JSON text (`Json[...]`) is checked against the original JSON input.
+
+A validator left no built item to tell, as in a list it emptied. The raw items are checked against the
+type the field declares: validated again as that type, in its model's config, and what that builds is
+checked:
+
+- The validators of the field itself are not run again, so one that would have built the items otherwise
+  (another class, a subclass of the declared one, renamed keys) is not seen.
+- The validators of the item's model do run for them, a second time where the field emptied the list
+  after validating it.
+- Where the field's validators could have decided what the items became, it fails with
+  `cannot be checked`, on a clean payload too. That is so for items pydantic will not build the declared
+  type from, and for a union of two or more types besides `None` or a named type alias, in the declared
+  type or in a model built from it.
+
+An extra that a typed `__pydantic_extra__` built and a validator then removed from the model is checked
+the second way: validated again as the declared type and checked beside what that builds, or refused
+with `cannot be checked` where the declared type is a union of two or more types. Untyped extras are the
+model's to keep or drop.
+
+#### What cannot be checked
+
+Where neither reading works, it fails with `<path> cannot be checked:` and the reason rather than guess:
+
+- items of mixed model classes in a set or a resized list
+- an item that validates only through its parent
+- dict keys merged by coercion
+- a generator consumed during validation
+- an `Iterable[Model]` validated lazily
+
+A part in which no key can hide (a number, text that is not JSON, a model passed as is) is never refused.
+
+#### The payload as it was sent
+
+It reads the payload as it was sent. Where the model runs code of its own during validation (a
+validator, `model_post_init`, a custom `__init__`), the payload is kept before validation, and the plain
+dicts and lists that code changed in place are put back for the check, then returned to what validation
+left. So a validator that pops a key from its input is read like one that returns a copy without it. A
+dict or list subclass changed in place is not put back.
+
+#### What it does not see
+
+- What a validator does to bridge the payload to the model. A key it renames is reported under the name
+  the payload sent, and items it reorders or rewrites without changing the size of their container are
+  read by position.
+- A validator that drops built items of one member of a union. It is read as if every raw item became
+  the class the remaining ones became.
+- A model a validator puts inside a container of plain values (`list[Any]`, `dict[str, int]`), and a
+  model inside a class that is neither a model nor a dataclass. It follows the models where a field's
+  type can hold one, and under `Any`.
+
+#### Dataclasses
+
+A dataclass, pydantic's or a plain one, is checked like a model: a key for every field its `__init__`
+takes is declared, an `InitVar` among them and a field with `init=False` not, and what its fields hold
+is followed. Its keys and aliases are read off the schema pydantic built.
+
+#### `TypedDict`s
+
+A `TypedDict` is checked for its own keys, and its values are followed, as the schema pydantic built
+declares them. That holds where its annotation is text (`from __future__ import annotations`) and where
+a type variable of a parametrized one stands for it.
+
+A `TypedDict` builds a plain dict, which does not say what built it, so what the field declares decides
+how the dict is read:
+
+| The field declares | The dict is read as |
+| --- | --- |
+| a `TypedDict` beside types that never build a dict (`Point` or `int`, `Point` or `None`) | that `TypedDict` |
+| several (`Point` or `Other`) | the one left once each whose `Literal` fields do not hold what the dict holds is ruled out, so a tag tells them apart, with a discriminator or without |
+| several of which more than one is left, or one beside a type that may build a dict too (`dict[str, int]`, `Any`, a custom type) | not guessed: the check does not say which one validation took |
+
+Ruling one out by its tag is done only in a model that runs no code of its own, since a validator can
+rewrite the tag after the fact.
+
+Where the check does not guess, a clean payload passes. A key the payload sent that the built dict lost
+fails with `<path> cannot be checked`, and so does a field two of them read from different keys when the
+payload sends both. A key read through an alias is not lost. What the dict holds is followed as whatever
+each of the declared types says of it.
 
 ## Set up your type checker
 
