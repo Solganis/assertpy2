@@ -1161,8 +1161,11 @@ def test_an_ordering_overflow_off_an_exact_fraction_is_still_handed_on(value):
         pass
     else:
         pytest.skip("numpy before 2 widens the product rather than overflowing")
+    # a `numpy` integer itself is read as the int it holds, so the width is kept by a subclass of one
+    kept = type("Kept", (numpy.int64,), {})
     with pytest.raises(OverflowError):
-        assert_that(value).is_less_than(numpy.int64(5))
+        assert_that(value).is_less_than(kept(5))
+    assert_that(value).is_less_than(numpy.int64(5))
 
 
 @pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
@@ -2040,19 +2043,21 @@ def _order_outcome(asked, sequence, number) -> object:
     try:
         return asked(sequence, number)
     except TypeError as refusal:
-        said = re.sub(r"np\.int64\((\d+)\)", r"\1", str(refusal))
-        return type(refusal), re.sub(r"\((?:numpy\.)?int(?:64)?\)", "", said)
+        said = re.sub(r"np\.(?:int|float)64\(([\d.]+)\)", r"\1", str(refusal))
+        return type(refusal), re.sub(r"\((?:numpy\.)?(?:int|float)(?:64)?\)", "", said)
 
 
 @pytest.mark.parametrize("asked", list(_BROADCAST_ORDER))
 @pytest.mark.parametrize("sequence", [[5], (5,), [5, 6]], ids=["one-element", "tuple", "two-elements"])
-def test_a_list_against_a_numpy_scalar_is_unordered_as_against_the_int_it_holds(asked, sequence):
+@pytest.mark.parametrize("kind", ["int64", "float64"])
+def test_a_list_against_a_numpy_scalar_is_unordered_as_against_the_int_it_holds(asked, sequence, kind):
     """`numpy` answered an array for the pair, true for one element and raising for several; a number and a
-    list have no order, and each spelling refuses or fails the pair as it does the Python int's.
+    list have no order, and each spelling refuses or fails the pair as it does the Python number's.
     """
     numpy = pytest.importorskip("numpy")
-    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, 6)
-    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, numpy.int64(6))).is_equal_to(expected)
+    scalar = getattr(numpy, kind)(6)
+    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, scalar.item())
+    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, scalar)).is_equal_to(expected)
 
 
 @pytest.mark.parametrize("asked", list(_BROADCAST_ORDER))
@@ -2061,13 +2066,15 @@ def test_a_list_against_a_numpy_scalar_is_unordered_as_against_the_int_it_holds(
     [[[5], [5, 6]], [decimal.Decimal("NaN")], [decimal.Decimal("sNaN")]],
     ids=["ragged", "decimal-nan", "signalling-nan"],
 )
-def test_a_list_numpy_cannot_order_against_a_numpy_scalar_is_unordered_as_against_the_int(asked, sequence):
+@pytest.mark.parametrize("kind", ["int64", "float64"])
+def test_a_list_numpy_cannot_order_against_a_numpy_scalar_is_unordered_as_against_the_int(asked, sequence, kind):
     """`numpy` raised from the comparison itself: `ValueError` building a ragged list's array, and the NaN's
     signal where it ordered the element against the scalar.
     """
     numpy = pytest.importorskip("numpy")
-    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, 6)
-    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, numpy.int64(6))).is_equal_to(expected)
+    scalar = getattr(numpy, kind)(6)
+    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, scalar.item())
+    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, scalar)).is_equal_to(expected)
 
 
 class _NeverLess(list):
@@ -2077,11 +2084,12 @@ class _NeverLess(list):
         return False
 
 
-def test_the_reverse_comparison_of_a_list_against_a_numpy_scalar_is_asked_as_the_first_is():
-    """`numpy.int64(6) < _NeverLess([5])` broadcast, where the first comparison had answered a plain bool."""
+@pytest.mark.parametrize("kind", ["int64", "float64"])
+def test_the_reverse_comparison_of_a_list_against_a_numpy_scalar_is_asked_as_the_first_is(kind):
+    """`numpy.float64(6) < _NeverLess([5])` broadcast, where the first comparison had answered a plain bool."""
     numpy = pytest.importorskip("numpy")
     with pytest.raises(TypeError, match="must be comparable"):
-        assert_that(_NeverLess([5])).is_greater_than(numpy.int64(6))
+        assert_that(_NeverLess([5])).is_greater_than(getattr(numpy, kind)(6))
 
 
 class _DecliningOrder(list):

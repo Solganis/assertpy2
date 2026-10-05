@@ -18,7 +18,7 @@ act on, which is the failure the first paragraph warns about.
 from __future__ import annotations
 
 BASELINE: dict[tuple[str, str], int] = {
-    ("assertpy2/_engine/_diff.py", "reportAttributeAccessIssue"): 14,
+    ("assertpy2/_engine/_diff.py", "reportAttributeAccessIssue"): 12,
     ("assertpy2/base.py", "reportArgumentType"): 2,
     ("assertpy2/extracting.py", "reportArgumentType"): 1,
     ("assertpy2/extracting.py", "reportCallIssue"): 1,

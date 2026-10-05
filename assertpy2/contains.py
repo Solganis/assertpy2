@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from ._engine._compare import _guarded_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._equality import fields_held, mapping_shaped
-from ._engine._introspection import materialized
 from ._engine._membership import (
     _hash_safe,
     _index,
@@ -67,12 +66,22 @@ def _counted_difference(val_items, given_items):
 def _sequence_break(values, items, *, answered=False) -> int | None:
     """``None`` where *items* run contiguously in *values*, else how many lined up in the longest run.
 
+    Of the runs that start with room for all of *items*: one that starts too late to fit is `_late_run`'s.
     Asked by ``==``, and *answered* by `equals` once a signalling NaN or an overflowing `numpy` float raised.
+    The very object is itself before either is asked, as it is to `in`: a NaN the value holds is found.
     """
+    if not items:
+        return None
     best_prefix = 0
+    first, rest = items[0], range(1, len(items))
     for i in range(len(values) - len(items) + 1):
-        for j in range(len(items)):
-            if equals(values[i + j], items[j]) if answered else values[i + j] == items[j]:
+        held = values[i]
+        # the start of a run asked on its own: through the loop below, a search of 200 for 3 cost 16% more
+        if not (held is first or (equals(held, first) if answered else held == first)):
+            continue
+        for j in rest:
+            held, wanted = values[i + j], items[j]
+            if held is wanted or (equals(held, wanted) if answered else held == wanted):
                 continue
             best_prefix = max(best_prefix, j)
             break
@@ -91,7 +100,7 @@ def _late_run(values, items) -> int:
     try:
         for i in range(max(len(values) - len(items) + 1, 0), len(values)):
             j = 0
-            while i + j < len(values) and equals(values[i + j], items[j]):
+            while i + j < len(values) and (values[i + j] is items[j] or equals(values[i + j], items[j])):
                 j += 1
             best = max(best, j)
     except Exception:  # a diagnostic must never outrank the failure it is describing
@@ -400,7 +409,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         # membership is tested once per argument, so a one-shot iterator has to be drained first
-        values = searchable(self.val)
+        values = searchable(self._drained())
         if not is_searchable(values):
             # left to `in`, Python answers about the operator rather than about the value the assertion was handed
             refuse(self.val, "a container or iterable")
@@ -513,7 +522,7 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        values = materialized(self.val)
+        values = self._drained()
         if not is_searchable(values):
             refuse(self.val, "a container or iterable")
         probes = [item for item in items if not _is_matcher(item)]
@@ -579,7 +588,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         # walked twice below and rendered a third time, so a one-shot iterator has to be drained
-        values = searchable(self.val)
+        values = searchable(self._drained())
         if not is_walkable(values):
             # "only these" has to see every element, and the comprehension answered "object is not iterable"
             refuse(self.val, "iterable")
@@ -644,7 +653,7 @@ class ContainsMixin(_MixinBase):
                 search_start = found_index + len(text)
             return self
         # this walk is by index, which a one-shot iterator does not support at all
-        values = materialized(self.val)
+        values = self._drained()
         if not isinstance(values, Sequence):
             # the old guard said "not iterable" for both: true for an int, false for a set, which has no order
             require_type(values, Iterable, "iterable")
@@ -686,7 +695,7 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val does **not** contain any duplicates
         """
         try:
-            values = list(self.val)
+            values = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
         if has_duplicates(values):
@@ -710,7 +719,7 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val **does** contain duplicates
         """
         try:
-            values = list(self.val)
+            values = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
         if not has_duplicates(values):
@@ -799,7 +808,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         try:
-            val_list = list(self.val)
+            val_list = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
         expected_list = list(items)
@@ -858,7 +867,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         try:
-            val_list = list(self.val)
+            val_list = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
         entries = _multiset_diff_entries(val_list, list(items))
@@ -896,13 +905,17 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         try:
-            val_list = list(self.val)
+            val_list = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
-        item_index = 0
+        item_index, wanted = 0, items[0]
         for element in val_list:
-            if item_index < len(items) and equals(element, items[item_index]):
+            # the very object is itself before `==` is asked, as it is to `in`: a NaN the value holds follows
+            if element is wanted or equals(element, wanted):
                 item_index += 1
+                if item_index == len(items):
+                    break
+                wanted = items[item_index]
         if item_index != len(items):
             # item_index counts how many lined up before the run stopped, so the next one is the culprit
             matched = items[:item_index]
@@ -944,7 +957,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         try:
-            val_list = list(materialized(self.val))
+            val_list = list(self._walked())
         except TypeError:
             refuse(self.val, "iterable")
         counts = occurrences(val_list, items)

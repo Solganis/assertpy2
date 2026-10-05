@@ -12,10 +12,15 @@ from __future__ import annotations
 import collections
 import collections.abc
 import dataclasses
+import datetime
+import enum
 import itertools
+import numbers
+import pathlib
 import reprlib
 import sys
 import types
+import uuid
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, cast, runtime_checkable
 
 if TYPE_CHECKING:
@@ -277,6 +282,50 @@ def class_name(kind: type) -> str:
     return str.__str__(type.__dict__["__name__"].__get__(kind))
 
 
+def holds_only_its_dict(kind: type) -> bool:
+    """Whether an instance of *kind* holds nothing but its ``__dict__``, read off the layout of its class.
+
+    A slot, the items of a builtin container and the fields of a type written in C are all room in the instance
+    past the object's own header, its ``__dict__`` and its weak reference list.  A list of kinds was the first
+    answer, and each one found missing was a comparison that passed: `list`, `array.array`, an exception.
+    """
+    spare = basic_size(kind) - object.__basicsize__
+    spare -= tuple.__itemsize__ * ((_dict_offset(kind) > 0) + (weakref_offset(kind) > 0))
+    return spare == 0
+
+
+# off the slots of `type`: a metaclass may spell a size or an offset of its own
+basic_size, _dict_offset, weakref_offset = (
+    type.__dict__[name].__get__ for name in ("__basicsize__", "__dictoffset__", "__weakrefoffset__")
+)
+
+
+def own_fields(obj: object) -> dict[str, Any] | None:
+    """The ``__dict__`` of an object that holds nothing else, or ``None`` for a value that is no bag of fields.
+
+    A value of a builtin kind is none even when it carries a ``__dict__``: a subclass of `Decimal` or `str` has
+    an empty one, and reading it made every two such values compare equal.  Nor is any value that holds
+    something outside its ``__dict__`` (`holds_only_its_dict`): two lists of a class of the caller's own were
+    equal under ``ignore=`` whatever they held.
+    """
+    builtin_kinds = (
+        type,
+        numbers.Number,
+        str,
+        bytes,
+        bytearray,
+        datetime.date,
+        datetime.time,
+        datetime.timedelta,
+        enum.Enum,
+        uuid.UUID,
+        pathlib.PurePath,
+    )
+    if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds) and holds_only_its_dict(type(obj)):
+        return vars(obj)
+    return None
+
+
 def kind_of(value: object) -> type:
     """The class *value* was read from: its own, the one a `TakenApart` holds the fields of, or a keyed field's."""
     if type(value) is KeyedValue:
@@ -472,6 +521,71 @@ def is_own_iterator(value: object) -> bool:
     and a closed file answers `iter()` with `ValueError`.
     """
     return issubclass(type(value), collections.abc.Iterator)
+
+
+class Replay:
+    """What a one-shot iterator has handed out so far, with the iterator for the rest.
+
+    A builder keeps one for a value that is its own iterator, so every link of a chain reads the same items:
+    read by the first link alone, the second passed or failed over nothing.  Each walk starts at the first item
+    and takes one from the iterator only past what was handed out, so a walk that stops early leaves the rest
+    untaken and an endless generator is read no further than before.  An item is kept before it is handed on:
+    code of the caller's that raises over it does not lose it for the next link.  An error the iterator
+    itself raises is its own to repeat or not: asked again, a generator that raised is at its end, and an
+    iterator that goes on is read on.
+    """
+
+    __slots__ = ("_rest", "_seen", "given_away", "source")
+
+    def __init__(self, source: Iterator[Any]) -> None:
+        self.source = source
+        self._rest: Iterator[Any] | None = source
+        self._seen: list[Any] = []
+        self.given_away = False
+
+    def give_away(self) -> None:
+        """Note that code of the caller's is handed the iterator itself after a part of it was read here.
+
+        What that code takes of the rest then goes missing between what was read and what is left, and stays
+        missing: once noted, it is not taken back.  With nothing read yet, or all of it, there is no such gap.
+        A walk still going when it is noted is refused at its next item past what was read, as the next link is.
+        """
+        if self._rest is not None and self._seen:
+            self.given_away = True
+
+    def drained(self) -> list[Any]:
+        """Every item in a list of its own, the rest taken in one go: through `__iter__`, 200 cost 7 times more."""
+        rest = self._rest
+        if rest is not None:
+            self._seen.extend(rest)
+            self._rest = None
+        return list(self._seen)
+
+    def __iter__(self) -> Iterator[Any]:
+        seen = self._seen
+        index = 0
+        while True:
+            if index == len(seen):
+                rest = self._rest
+                if rest is None:
+                    return
+                if self.given_away:
+                    raise handed_away()
+                try:
+                    seen.append(next(rest))
+                except StopIteration:
+                    self._rest = None
+                    return
+            yield seen[index]
+            index += 1
+
+
+def handed_away() -> TypeError:
+    """The refusal of a read of a one-shot iterator past the part read before a predicate was handed it."""
+    return TypeError(
+        "val is a one-shot iterator that a predicate was handed after a part of it was read, so what"
+        " is left of it cannot be told. Assert on list(...) of it instead"
+    )
 
 
 def materialized(value: Iterable[_T]) -> Iterable[_T]:

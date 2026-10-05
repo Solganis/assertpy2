@@ -597,6 +597,98 @@ def exact_int(value: Any) -> int | None:
     return None
 
 
+def unwrapped(value: Any) -> Any:
+    """*value*, or the `int` a `numpy` integer holds: fixed in width, its arithmetic wraps where an `int`'s grows.
+
+    ``numpy.uint8(3) - 250`` is ``9`` and a warning, so a distance or a product taken through one is no measure.
+    Only a scalar class `numpy` itself made is read.  A subclass of one may have written operators of its own, so
+    it is asked through them and keeps its width, and a `numpy` duration, an integer to the ABC, has no
+    `__index__`.  The class is asked once while the records have room: asked at every call, a passing
+    `is_close_to` on two `int64` cost 90% more.
+    """
+    kind = type(value)
+    if kind is int or kind is float or type(kind) is not type or kind in _NOT_FIXED:
+        return value
+    index = _WHOLE_OF.get(kind)
+    if index is None:
+        fixed = not issubclass(kind, int) and _made_ahead(kind) and integral_kind(kind)
+        index = _known_number_method(kind, "__index__", types.WrapperDescriptorType) if fixed else None
+        if index is None:
+            if len(_NOT_FIXED) < 256:
+                _NOT_FIXED.add(kind)
+            return value
+        if len(_WHOLE_OF) < 256:
+            _WHOLE_OF[kind] = index
+    return index(value)
+
+
+def python_number(value: Any) -> Any:
+    """*value*, or the Python number a `numpy` number holds: the `int` of an integer, else the `float` of a float.
+
+    A float is read only where the `float` is the same number, which a long double past a double's precision is not.
+    """
+    whole = unwrapped(value)
+    return whole if type(whole) is int else _widened(whole)
+
+
+def _widened(value: Any) -> Any:
+    """*value*, or the `float` a `numpy` float holds where that loses nothing, as a long double past a double would."""
+    kind = type(value)
+    if kind is float or type(kind) is not type:
+        return value
+    convert = _float_of(kind)
+    if convert is None:
+        return value
+    wide = convert(value)
+    return wide if wide == value else value
+
+
+def numpy_float(value: Any) -> bool:
+    """Whether *value* is a float scalar of a class `numpy` itself made, whatever it holds, a NaN too."""
+    kind = type(value)
+    return type(kind) is type and _float_of(kind) is not None
+
+
+def _float_of(kind: type) -> Any:
+    """The `__float__` of a float scalar class `numpy` itself made, else ``None``, kept while the record has room."""
+    convert = _FLOAT_OF.get(kind, _UNANSWERED)
+    if convert is _UNANSWERED:
+        real = _made_ahead(kind) and issubclass(kind, numbers.Real) and not integral_kind(kind)
+        convert = _known_number_method(kind, "__float__", types.WrapperDescriptorType) if real else None
+        if len(_FLOAT_OF) < 256:
+            _FLOAT_OF[kind] = convert
+    return convert
+
+
+def python_numbers(first: Any, second: Any) -> tuple[Any, Any]:
+    """The pair, each `numpy` number read as the Python number it holds where one of the two is a `numpy` integer.
+
+    Beside an `int`, `numpy` rounds a Python integer to the float it meets: ``16777217 > numpy.float32(16777216)``
+    is false to it, where the `int64` the integer was read from ordered exactly.  So the float is read as well,
+    where a `float` holds the same number, and the pair is measured as Python measures an `int` against a
+    `float`.  With no `numpy` integer in it the pair keeps the arithmetic it had.  Taken apart for a pair: over
+    any number of operands an `int64` against an `int` paid 55% for its ordering.
+    """
+    one, other = unwrapped(first), unwrapped(second)
+    if one is first and other is second:
+        return first, second
+    return (one if type(one) is int else _widened(one)), (other if type(other) is int else _widened(other))
+
+
+def _made_ahead(kind: type) -> bool:
+    """Whether *kind* is no class made at run time, which bit 9 of its flags marks and a subclass in Python is."""
+    return not _flags(kind) & 512
+
+
+_WHOLE_OF: dict[type, Any] = {}
+"""The `__index__` of each `numpy` integer class `unwrapped` has met, bounded as its neighbours are."""
+_NOT_FIXED: set[type] = {int, float, decimal.Decimal, fractions.Fraction}
+"""The classes `unwrapped` found to be no `numpy` integer.  A set: asked of a dict, two close `float64` paid 9%."""
+_FLOAT_OF: dict[type, Any] = {int: None, float: None, decimal.Decimal: None, fractions.Fraction: None}
+"""What `_float_of` found for a class, a `numpy` float's `__float__` or ``None``, bounded likewise."""
+_flags = type.__dict__["__flags__"].__get__
+
+
 def whole_number(value: Any) -> int | None:
     """*value* as the int it stands for where it is an integer, which a bool is not, else ``None``."""
     if type(value) is int:
@@ -660,6 +752,13 @@ def compare(actual: Any, expected: Any) -> int:
     # deliberately dynamic: what may be ordered is decided above, and a checker reading the union sees no `<`
     left: Any = actual
     right: Any = expected
+    expected_type = type(expected)
+    # asked of the class kept, since a call for every pair cost a `Decimal` against an `int` 12%
+    if actual_type is not expected_type and (
+        (type(actual_type) is type and actual_type not in _NOT_FIXED)
+        or (type(expected_type) is type and expected_type not in _NOT_FIXED)
+    ):
+        left, right = python_numbers(actual, expected)
     try:
         less = left < right
         mixed = actual_type is not type(expected)

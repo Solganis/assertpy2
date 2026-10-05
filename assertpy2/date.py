@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
@@ -24,9 +24,38 @@ def _read_in_the_zone_of(value: datetime.datetime, reference: datetime.datetime)
 
     The guide says making both sides aware is what makes these comparisons well defined.  Compared field
     by field they were not: two instants five hours apart in different zones read equal to the second.
-    Both sides are aware or both naive by then, and a naive pair has no zone to be read in.
+    Both sides are aware or both naive by then, and a naive pair has no zone to be read in.  One wall time
+    of a zone's repeated hour is two moments an hour apart, so the caller asks whether the two are one reading
+    too (`_one_reading`) where the value was read on another clock.  Two on one zone object are left to their
+    wall clocks, as `==` is.
     """
     return value.astimezone(reference.tzinfo) if reference.tzinfo is not None else value
+
+
+def _one_reading(value: datetime.datetime, instant: datetime.datetime, other: datetime.datetime) -> bool:
+    """Whether two that read alike on one clock are the same reading of it, where a clock reads a time twice.
+
+    The offsets tell.  Equal ones are one reading.  Two readings of one time have the later moment at the
+    smaller offset, since the clock went back between them, and the later moment at the larger one is a clock
+    that went forward inside the unit, which reads it once.  Asked of the `fold` instead, a clock that goes
+    back by less than the unit read two visits to one minute as one.
+    """
+    # both are aware here: a naive pair has no zone to be read in and is never asked
+    held, read = cast("datetime.timedelta", value.utcoffset()), cast("datetime.timedelta", instant.utcoffset())
+    return held == read or (held < read) is (value < other)
+
+
+def _written_to(form: str, value: datetime.datetime, instant: datetime.datetime) -> tuple[str, str]:
+    """The two in *form*, with their offsets where they read alike: a wall time of a repeated hour is two moments."""
+    first, second = value.strftime(form), instant.strftime(form)
+    if first != second:
+        return first, second
+    return first + _offset_of(value), second + _offset_of(instant)
+
+
+def _offset_of(value: datetime.datetime) -> str:
+    written = value.strftime("%z")
+    return f"{written[:3]}:{written[3:]}"
 
 
 def _require_comparable_datetimes(first: datetime.datetime, second: datetime.datetime) -> None:
@@ -222,13 +251,11 @@ class DateMixin(_MixinBase):
             and self.val.hour == instant.hour
             and self.val.minute == instant.minute
             and self.val.second == instant.second
+            and (instant is other or _one_reading(self.val, instant, other))
         ):
             return self
-        return self.error(
-            f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
-            f" <{instant.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
-            expected=other,
-        )
+        read, wanted = _written_to("%Y-%m-%d %H:%M:%S", self.val, instant)
+        return self.error(f"Expected <{read}> to be equal to <{wanted}>, but was not.", expected=other)
 
     def is_equal_to_ignoring_seconds(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date to the minute.
@@ -256,13 +283,15 @@ class DateMixin(_MixinBase):
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         instant = _read_in_the_zone_of(other, self.val)
-        if self.val.date() == instant.date() and self.val.hour == instant.hour and self.val.minute == instant.minute:
+        if (
+            self.val.date() == instant.date()
+            and self.val.hour == instant.hour
+            and self.val.minute == instant.minute
+            and (instant is other or _one_reading(self.val, instant, other))
+        ):
             return self
-        return self.error(
-            f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
-            f" <{instant.strftime('%Y-%m-%d %H:%M')}>, but was not.",
-            expected=other,
-        )
+        read, wanted = _written_to("%Y-%m-%d %H:%M", self.val, instant)
+        return self.error(f"Expected <{read}> to be equal to <{wanted}>, but was not.", expected=other)
 
     def is_equal_to_ignoring_time(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date ignoring time.

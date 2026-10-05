@@ -100,7 +100,14 @@ each pair it measures.
 
 A pair that Python's own arithmetic refuses or overflows is measured by exact value rather than
 refused: a `Decimal` against a `float` or a `numpy` integer, or an `int` past the float range against a
-`float`. Other pairs are measured by their own arithmetic. An infinity is close only to an equal
+`float`. A `numpy` integer scalar is measured and ordered as the `int` it holds, since its own
+arithmetic wraps at its width: `numpy.uint8(3)` is 247 away from `250`, where `numpy.uint8(3) - 250` is
+`9` and a warning. A `numpy` float beside one is read as the `float` it holds wherever a `float` holds
+the same number, so the pair is measured as Python measures an `int` against a `float`. A subclass of a
+`numpy` scalar is asked through its own operators and keeps its width, and so does a `Fraction` built
+from a `numpy` integer, which holds it as a part. Two of `int` and of a `Fraction` of two `int` are
+close by their exact difference alone, since a window under a float tolerance rounds one past
+`2**53`. Other pairs are measured by their own arithmetic. An infinity is close only to an equal
 infinity, whatever the tolerance, and a NaN is close to nothing and is neither less than, greater than
 nor between anything:
 
@@ -523,15 +530,18 @@ comparators, anywhere in the graph:
 - `tolerance` - an absolute tolerance that widens `==` for every pair of real-number leaves: a pair `==`
   holds equal stays equal, and any other is measured as `is_close_to()` measures it (see
   [Numbers](#numbers)). A `bool` leaf is compared exactly. A numpy duration tolerance measures only numpy
-  duration leaves, and a numeric one measures no duration leaf.
+  duration leaves, and a numeric one measures no duration leaf. It reaches a leaf inside a mapping, a
+  sequence, a deque or a record. An [object compared by its own `==`](#what-the-walk-takes-apart) is
+  not opened for it.
 - `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
   field-name key wins over a type key). A node it matches, a value or a whole container whose type you
   name, is decided by the predicate alone, at any depth and at the root. A container whose `==` holds is
   still walked, since `==` says nothing of what your predicate says of what it holds, so a comparator
-  stricter than `==` fails a pair inside a list as inside a dict. Three things are left to `==`: mapping
-  keys, set members, which have no positions to pair them by, and whatever a container shared by both
-  sides holds. The predicate may be asked about one pair more than once while a failure is reported, so
-  keep it free of side effects. The walk reaches a few hundred levels deep, where `==` alone goes deeper.
+  stricter than `==` fails a pair inside a list as inside a dict or a deque. Four things are left to `==`:
+  mapping keys, set members, which have no positions to pair them by, whatever a container shared by both
+  sides holds, and what an [object compared by its own `==`](#what-the-walk-takes-apart) holds apart.
+  The predicate may be asked about one pair more than once while a failure is reported, so keep it free
+  of side effects. The walk reaches a few hundred levels deep, where `==` alone goes deeper.
 
 Tolerated or comparator-equal leaves are reported in neither the message nor the diff.
 
@@ -595,6 +605,46 @@ Because it is opt-in it can afford to be blunt, but the bluntness is worth knowi
 on. It also rejects pairs some callers read as equal: `IntEnum` against `int`, a `dict` subclass
 against `dict`, `float` against `int`.
 
+##### What the walk takes apart
+
+"Any depth" runs through every value the comparison takes apart:
+
+- a mapping, a list, a tuple and a `collections.deque`
+- a record: a dataclass, a named tuple, an attrs class, a Pydantic model
+- an object compared by an `==` of its own, read by its attributes
+
+`tolerance` and `comparators` reach the first two kinds in full. An object of the last kind is asked
+its own `==` first, unless a comparator owns the object itself, by its class or by the name it sits
+under, and then decides it alone. That `==` stays the judge of what the two hold, and the options can
+only add to it: two such objects it holds apart stay apart, under a tolerance and under a comparator
+for what they hold. Where it holds them equal, each attribute both sides hold equal is then checked
+as any other node is: its type, a comparator that owns it, and what it holds in turn.
+
+```python
+class User:
+    def __init__(self, active):
+        self.active = active
+
+    def __eq__(self, other):
+        return type(other) is User and self.active == other.active
+
+
+assert_that(User(1)).is_equal_to(User(True))                             # passes: 1 == True
+assert_that(User(1)).not_.is_equal_to(User(True), strict_types=True)     # an int is no bool
+```
+
+Four things stay with the object's own `==`:
+
+- an attribute the two hold apart, which that `==` leaves out or reads its own way
+- an attribute only one side has, such as a cache one instance has filled
+- an object that keeps anything outside its `__dict__`: one with `__slots__`, one written in C, or a
+  deque of a class of your own
+- a value of a number, text, date, time, enum, UUID or path class, which is one value whatever
+  attributes it carries
+
+One attribute is walked in full, with every option: a value that holds itself, which `==` cannot
+answer for, so nothing says whether the object holds it equal or apart.
+
 When several comparison options meet on one leaf, they resolve in a fixed order:
 
 **`ignore_null` &rarr; `comparators` &rarr; identity &rarr; `strict_types` &rarr; `tolerance`.**
@@ -630,6 +680,11 @@ assert_that({True: "a"}).is_equal_to({1: "a"}, strict_types=True)   # fails
 ```
 
 Sets read the same way: `{1}` against `{1.0}` fails a strict comparison for the same reason.
+
+A tuple or a frozenset used as a key or as a member is read all the way in, so `{(1, 2): "a"}` against
+`{(True, 2): "a"}` fails as well. Those two are the containers a hash reads through. A record used as
+a key is compared by its class alone, and so is a tuple or a frozenset of a class with an `==` of its
+own.
 
 The one limit is cost. Strictness turns off the fast path, because a container's own `==` says nothing
 about the types inside it, so every comparison walks the whole structure in Python.

@@ -11,6 +11,26 @@ assert_that(fred).has_first_name("Fred").has_last_name("Smith").has_shoe_size(12
 assert_that(people).is_length(2).extracting("first_name").contains("Fred", "Joe")
 ```
 
+A generator, an iterator, a `zip` or a `map` hands its items out once. A chain over one reads the same
+items at every link: the builder keeps what the value has handed out, and takes the rest only as far
+as an assertion walks.
+
+```python
+assert_that(iter([1, 2, 3])).contains(1).does_not_contain(9).is_sorted()
+```
+
+`val` and `value` stay the iterator you passed, which the chain has read by then. The chain keeps what
+its own assertions read, and nothing else:
+
+- What you take from the iterator yourself the chain does not see, whether through `val`, through
+  another name for it, or inside a function you pass to an assertion.
+- A matcher is handed the items. A predicate you pass to `satisfies()` is handed the iterator itself.
+  Where a link had read a part of the value by then, a read past that part is refused with a
+  `TypeError`, since what the predicate took can no longer be told: assert on `list(...)` of the value
+  instead.
+- A value that is not its own iterator and hands out one shared iterator each time it is asked is
+  read once, as before.
+
 ## Universal negation
 
 The `.not_` property inverts the next assertion in the chain, so there is no need for dedicated

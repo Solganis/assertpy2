@@ -264,8 +264,12 @@ def _within(value: Any, other: Any, tolerance: Any) -> bool:
     One distance measured three ways, the difference and the window around each side, in the pair's own
     arithmetic, any one holding being enough; and measured exactly where that arithmetic refuses the pair,
     which a window measured exactly would answer alike.  So a `Decimal` that rounds its distance to a bignum
-    down to the tolerance is within it.
+    down to the tolerance is within it.  Two of `int` and `Fraction` have an exact difference, and it alone
+    answers for them: a window under a float tolerance rounds one past ``2**53``.
     """
+    if type(value) in (int, fractions.Fraction) and type(other) in (int, fractions.Fraction):
+        written = _measured(lambda: abs(value - other) <= tolerance)
+        return abs(_exact(value) - _exact(other)) <= _exact(tolerance) if written is None else written
     measured = [
         _measured(lambda: abs(value - other) <= tolerance),
         _measured(lambda: other - tolerance <= value <= other + tolerance),

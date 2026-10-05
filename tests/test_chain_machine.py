@@ -311,7 +311,14 @@ class ChainMachine(RuleBasedStateMachine):
             answers["soft-poll"] = run_soft(self.soft_poll, name, args, kwargs, False)
         if not self.warn_poll_inert:
             answers["warn-poll"] = run_warn(self.warn_poll, name, args, kwargs, False)
-        answers["async"] = run_async(self.loop, self._start_async, [*self.steps, (name, args, kwargs)])
+        steps: list[Step] = [*self.steps, (name, args, kwargs)]
+        awaited = run_async(self.loop, self._start_async, steps)
+        if all(step[0] == "described_as" for step in steps):
+            # a chain that only describes asserts nothing, and awaiting it is refused as awaiting a bare one is
+            if awaited.status != "refused" or awaited.error != "TypeError":
+                _differ(f"{name}: an awaited chain of descriptions alone answered {awaited.brief()}")
+        else:
+            answers["async"] = awaited
         want = "refused" if refusal else "held"
         for surface, answer in answers.items():
             if answer.status != want or (refusal and answer.error != refusal):

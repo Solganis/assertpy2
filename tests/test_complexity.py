@@ -48,12 +48,10 @@ RECORDED: dict[str, int] = {
     "assertpy2/dynamic.py::__getattr__": 12,
     "assertpy2/_dangling.py::_survey": 11,
     "assertpy2/_dangling.py::findings": 11,
-    # 11: an unorderable window no longer refuses a measured pair. As a helper it cost a no-match close_to 8%
-    "assertpy2/_engine/_compare.py::_within_tolerance": 11,
-    # 11: a pair with no distance is left to `==`. A wrapper per leaf cost a 200-key tolerance compare 3%
-    "assertpy2/_engine/_compare.py::_node_decision": 11,
-    # 11: each `<` is read for a `numpy` broadcast in place. As a helper it cost a datetime greater-than 10%
-    "assertpy2/_engine/_ordering.py::compare": 11,
+    # 12: an unorderable window answers, the classes are asked in place. As helpers: close_to 8%, two float64 10%
+    "assertpy2/_engine/_compare.py::_within_tolerance": 12,
+    # 12: a broadcast and the class kept are read in place. As helpers: a datetime 10%, a Decimal against an int 12%
+    "assertpy2/_engine/_ordering.py::compare": 12,
     "assertpy2/assertpy.py::assert_conforms": 11,
     # one more name refused by the poll chain: check() after a poll used to skip the wait and answer nothing
     # 13: the chain refuses `value` by name, where the hook used to record it as an assertion

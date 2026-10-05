@@ -514,14 +514,19 @@ class _MatchNamespace:
                 awareness).
 
         Raises:
-            ValueError: if delta is negative
+            ValueError: if delta is negative, or a number of seconds no ``timedelta`` holds
         """
         if not isinstance(delta, timedelta):
             # asked of the number: made a span, a tenth of a microsecond below nothing is none, and 1e20 overflows
             if isinstance(delta, (int, float)) and delta < 0:
                 _assertpy2_refusal = True
                 raise ValueError("given delta arg must not be negative")
-            delta = timedelta(seconds=delta)
+            try:
+                delta = timedelta(seconds=delta)
+            except (OverflowError, ValueError):
+                message = f"given delta arg must be a number of seconds a timedelta holds, but was <{delta}>"
+                _assertpy2_refusal = True
+                raise ValueError(message) from None
         return IsNowMatcher(delta)
 
     @staticmethod

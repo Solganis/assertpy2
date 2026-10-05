@@ -11,12 +11,18 @@ from ._engine._compare import (
     _build_compare_config,
     _config_note,
     _guarded_equal,
+    _kinds_never_equal,
     _node_decision,
     _resolve_comparator,
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
-from ._engine._equality import fields_pair, filtered_to_nothing, key_specs_given, mapping_shaped
+from ._engine._equality import (
+    fields_pair,
+    filtered_to_nothing,
+    key_specs_given,
+    mapping_shaped,
+)
 from ._engine._introspection import is_namedtuple
 from ._engine._ordering import require_integer
 from ._engine._path import _ROOT
@@ -358,9 +364,10 @@ class BaseMixin(SatisfiesMixin):
 
         The first element that differs, or a length that does, ends the comparison, and the failure is one for the
         two sequences, as a dict's is.  It used to be the element's own, which said neither where it stood nor what
-        else differed, and a length or a plain element failed with no diff at all.
+        else differed, and a length or a plain element failed with no diff at all.  A list is no tuple under a
+        key option either, where the ``==`` of both declines the other (`_kinds_never_equal`).
         """
-        if len(actual) == len(expected):
+        if len(actual) == len(expected) and not _kinds_never_equal(actual, expected):
             for actual_item, expected_item in zip(actual, expected, strict=True):
                 differs = self._item_differs(actual_item, expected_item, ignore, include, config)
                 if differs is None:

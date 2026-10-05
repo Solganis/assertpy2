@@ -241,7 +241,7 @@ class ExtractingMixin(_MixinBase):
             refuse(sort, "a str, an iterable, or a callable", subject=argument("sort"))
 
         # only pay the sort when one was requested, so the extractor sees the source at the same point
-        source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
+        source = sorted(self._walked(), key=_sort) if "sort" in kwargs else self._walked()
         extracted = []
         # counted here: the walk spends a generator, and asking a spent one said an emptied source had been empty
         seen = 0

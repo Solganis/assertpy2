@@ -17,13 +17,8 @@ from __future__ import annotations
 import collections
 import collections.abc
 import dataclasses
-import datetime
-import enum
-import numbers
-import pathlib
 import re
 import types
-import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from ..errors import _capped_format
@@ -41,12 +36,15 @@ from ._compare import (
 from ._diff import _child_entries, _escaped_stop, _sub_diff_entries
 from ._introspection import (
     TakenApart,
+    basic_size,
     is_attrs_instance,
     is_model_dump_object,
     is_namedtuple,
     keyed_names,
     keyed_pair,
     model_field_values,
+    own_fields,
+    weakref_offset,
 )
 from ._ordering import REFUSALS, equals, lookup, member
 from ._path import _ROOT
@@ -68,12 +66,12 @@ def normalize_key_specs(specs: object, param: str) -> list:
     A ``list``/``set``/``frozenset`` is a collection of specs and is expanded.  A ``str``/``bytes``/
     ``tuple`` (a single key, or a nested-path key) or any non-iterable hashable key is one spec.  Any
     other iterable is refused: it is one-shot or ambiguous, and would otherwise be mishandled in silence
-    as a single opaque key.
+    as a single opaque key.  A path of no keys names nothing and is left out.
     """
     if isinstance(specs, (list, set, frozenset)):
-        return list(specs)
+        return [spec for spec in specs if type(spec) is not tuple or spec]
     if isinstance(specs, (str, bytes, tuple)) or not isinstance(specs, collections.abc.Iterable):
-        return [specs]
+        return [specs] if type(specs) is not tuple or specs else []
     refuse(specs, "a key, a nested-path tuple, or a list/set/frozenset of them", subject=param)
 
 
@@ -81,8 +79,12 @@ def key_specs_given(specs: object) -> bool:
     """Whether an ``ignore``/``include`` argument asks for anything, a falsy key such as ``0`` or ``""`` included.
 
     Truthiness answered this and dropped a single falsy key in silence.  An empty collection still asks
-    for nothing, as it always did.
+    for nothing, as it always did, and so does a path of no keys, which is an exact empty tuple: a tuple of a
+    class of its own is a key.  A collection holding nothing but such paths is an option given all the same, with
+    nothing left out of it once it is read.
     """
+    if type(specs) is tuple:
+        return bool(specs)
     return specs is not None and not (isinstance(specs, (list, set, frozenset)) and not specs)
 
 
@@ -95,11 +97,9 @@ def comparable_fields(obj: object) -> dict | None:
     one declared with a key, ``eq=str.lower``, is read through it: `attrs.asdict` read the raw value, and
     ``ignore=`` failed on two instances ``==`` holds equal.
 
-    A value of a builtin kind is not a bag of fields even when it carries a ``__dict__``: a subclass of
-    `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.  Nor is any
-    value that holds something outside its ``__dict__`` (`_holds_only_its_dict`): two lists of a class of the
-    caller's own were equal under ``ignore=`` whatever they held, and so were two exceptions, whose ``args``
-    are not in it.
+    Any other object is read by its ``__dict__`` where it holds nothing else (`own_fields`): two lists of a
+    class of the caller's own were equal under ``ignore=`` whatever they held, and so were two exceptions,
+    whose ``args`` are not in it.
 
     An exception is read as its class, its ``args`` and the attributes in its ``__dict__``, where its class
     has no room in the instance for more (`_holds_only_its_args`): an `OSError` keeps a ``filename`` in
@@ -121,22 +121,8 @@ def comparable_fields(obj: object) -> dict | None:
         slots = BaseException.__dict__
         read = {"__class__": type(obj), "args": slots["args"].__get__(obj)}
         return TakenApart(type(obj), {**read, **slots["__dict__"].__get__(obj), **read})
-    builtin_kinds = (
-        type,
-        numbers.Number,
-        str,
-        bytes,
-        bytearray,
-        datetime.date,
-        datetime.time,
-        datetime.timedelta,
-        enum.Enum,
-        uuid.UUID,
-        pathlib.PurePath,
-    )
-    if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds) and _holds_only_its_dict(type(obj)):
-        return TakenApart(type(obj), vars(obj))
-    return None
+    held = own_fields(obj)
+    return None if held is None else TakenApart(type(obj), held)
 
 
 def fields_held(obj: object) -> collections.abc.Mapping | None:
@@ -151,24 +137,6 @@ def fields_held(obj: object) -> collections.abc.Mapping | None:
     return obj._asdict() if is_namedtuple(obj) else None
 
 
-def _holds_only_its_dict(kind: type) -> bool:
-    """Whether an instance of *kind* holds nothing but its ``__dict__``, read off the layout of its class.
-
-    A slot, the items of a builtin container and the fields of a type written in C are all room in the instance
-    past the object's own header, its ``__dict__`` and its weak reference list.  A list of kinds was the first
-    answer, and each one found missing was a comparison that passed: `list`, `array.array`, an exception.
-    """
-    spare = _basic_size(kind) - object.__basicsize__
-    spare -= tuple.__itemsize__ * ((_dict_offset(kind) > 0) + (_weakref_offset(kind) > 0))
-    return spare == 0
-
-
-# off the slots of `type`: a metaclass may spell a size or an offset of its own
-_basic_size, _dict_offset, _weakref_offset = (
-    type.__dict__[name].__get__ for name in ("__basicsize__", "__dictoffset__", "__weakrefoffset__")
-)
-
-
 def _holds_only_its_args(kind: type) -> bool:
     """Whether an exception of *kind* has no room in the instance past what `BaseException` has, by its layout.
 
@@ -178,8 +146,8 @@ def _holds_only_its_args(kind: type) -> bool:
     State a class keeps outside the instance, a property over a table of its own, is not seen by this or by
     any reading of the instance.
     """
-    spare = _basic_size(kind) - BaseException.__basicsize__
-    return spare == tuple.__itemsize__ * (_weakref_offset(kind) > 0)
+    spare = basic_size(kind) - BaseException.__basicsize__
+    return spare == tuple.__itemsize__ * (weakref_offset(kind) > 0)
 
 
 class _NestedTooDeepError(Exception):
@@ -593,8 +561,11 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         return True
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
-        # a leaf the walker does not decompose, so "strict" is equal: there is nothing inside for it to look at
-        return _node_decision(value, other, config, at_root=at_root) not in ("equal", "strict")
+        decision = _node_decision(value, other, config, at_root=at_root)
+        if decision == "strict":
+            # equal by its own `==`, with what it holds still to look at: an object by its fields, a leaf by nothing
+            return bool(_child_entries(value, other, _ROOT, descended_for="strict", config=config))
+        return decision != "equal"
     return bool(entries)
 
 
@@ -757,6 +728,9 @@ def _differing_keys(
 ) -> Iterator[bool | _KeysFrame]:
     """The keys of two mappings in turn: ``True`` where one differs, which ends the walk, or a mapping's frame."""
     keyed = keyed_names(left, right)
+    # under strict types the decision has to know whether a path goes on into the pair it is asked of
+    strict = config is not None and config.strict_types and (ignoring or including)
+    paths = [entry for entry in (*ignores, *nested_paths) if type(entry) is tuple] if strict else ()
     for key in keys_in_actual:
         if key in keyed:
             nested_left, nested_right = keyed_pair(left, right, key)
@@ -766,7 +740,8 @@ def _differing_keys(
             except REFUSALS as refusal:
                 nested_left, nested_right = left[key], lookup(right, key, refusal)[1]
         if config is not None:
-            decision = _node_decision(nested_left, nested_right, config, field=key)
+            keys_left_out = bool(paths) and any(equals(entry[0], key) for entry in paths)
+            decision = _node_decision(nested_left, nested_right, config, field=key, keys_left_out=keys_left_out)
             if decision == "equal":
                 continue
             if decision == "leaf":
@@ -850,7 +825,7 @@ def filtered_differs(
     if _plain_sequence(actual) and _plain_sequence(expected):
         sequence_actual = cast("list | tuple", actual)
         sequence_expected = cast("list | tuple", expected)
-        if len(sequence_actual) != len(sequence_expected):
+        if len(sequence_actual) != len(sequence_expected) or _kinds_never_equal(actual, expected):
             return True
         return any(
             _filtered_pair_differs(item, counterpart, ignore=ignore, include=include, config=config, at_root=False)

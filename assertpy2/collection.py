@@ -4,7 +4,7 @@ import collections.abc
 import inspect
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
-from ._engine._introspection import is_mapping_like, materialized
+from ._engine._introspection import is_mapping_like
 from ._engine._membership import flattened_supersets, subset_faults
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import (
@@ -37,7 +37,7 @@ class CollectionMixin(_MixinBase):
     def _as_list(self) -> list[Any]:
         """Returns val as a list, raising TypeError if val is not iterable."""
         require_type(self.val, collections.abc.Iterable, "iterable")
-        return list(self.val)
+        return list(self._walked())
 
     def is_iterable(self) -> Self:
         """Asserts that val is iterable.
@@ -141,7 +141,7 @@ class CollectionMixin(_MixinBase):
             if not entries:
                 _warn_vacuous(self, "is_subset_of", allow_empty)
         else:
-            walked = list(materialized(self.val))
+            walked = list(self._walked())
             # flattened once: a one-shot superset is drained by the first pass and reads empty to a second
             collected = flattened_supersets(supersets)
             # the same core the matcher uses: a bare `set()` called a value whose hash disagrees with `==` missing
@@ -218,7 +218,7 @@ class CollectionMixin(_MixinBase):
                 walked = len(self.val)
                 broken = first_plainly_out_of_order(self.val, reverse=reverse)
             else:
-                broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
+                broken = first_out_of_order(_counted(self._walked()), key=key, reverse=reverse)
         except UnorderableError:
             # reported about the collection: Python's own message is about the operator and names neither side
             unorderable = True
@@ -388,7 +388,7 @@ class CollectionMixin(_MixinBase):
         # counted in the pass: a generator is spent by it, and asking after made an emptied source read as empty
         seen = 0
         filtered = []
-        for item in self.val:
+        for item in self._walked():
             seen += 1
             if verdict(matches(item)):
                 filtered.append(item)
@@ -415,7 +415,8 @@ class CollectionMixin(_MixinBase):
             AssertionBuilder: returns a new instance with the mapped list as val
         """
         require_type(self.val, collections.abc.Iterable, "iterable")
-        return self.builder([func(item) for item in self.val], self.description, self.kind, logger=self.logger)
+        mapped = [func(item) for item in self._walked()]
+        return self.builder(mapped, self.description, self.kind, logger=self.logger)
 
     def flat_mapped(self, func: Callable[[Any], Iterable[Any]]) -> Self:
         """Returns a new builder with each element expanded and flattened by func.
@@ -432,9 +433,13 @@ class CollectionMixin(_MixinBase):
             AssertionBuilder: returns a new instance with the flattened list as val
         """
         require_type(self.val, collections.abc.Iterable, "iterable")
-        return self.builder(
-            [inner for item in self.val for inner in func(item)], self.description, self.kind, logger=self.logger
-        )
+        walked, flat = self._walked(), []
+        for item in walked:
+            made = func(item)
+            # the value itself handed back is read as every link reads it: taken from under them, it left the
+            # next link the first item alone
+            flat.extend(walked if made is self.val else made)
+        return self.builder(flat, self.description, self.kind, logger=self.logger)
 
     def first(self) -> Self:
         """Returns a new builder with the first element of val.

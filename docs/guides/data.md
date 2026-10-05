@@ -91,8 +91,15 @@ Three spec dialects are read:
 A spec declaring any other `openapi` version is refused. Read as one of these it would validate against
 the wrong dialect, which passes every keyword that dialect cannot spell.
 
-Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf`, `enum` and `format` validate with full
-JSON-Schema semantics.
+Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf` and `enum` validate with full JSON-Schema
+semantics. A `format` is checked where there is a check for it:
+
+| `format` | Checked |
+| --- | --- |
+| `date`, `time`, `email`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
+| `date-time` | always, by the grammar of RFC 3339: `"yesterday"` and `"2026-02-30T10:00:00Z"` fail. A second of `60` is taken in the last minute of a UTC month, where a leap second can fall. The check is the same one whether or not the package that gives jsonschema its own is installed |
+| `int32`, `int64` | always, as the signed range: `2**40` is no `int32` |
+| `uri`, `hostname`, `duration` and the others jsonschema checks beside a package of their own | where that package is installed, and not where it is missing. `jsonschema[format-nongpl]` brings them all |
 
 Pass the parsed spec plus the operation's path and method. Loading the YAML or JSON is your job:
 

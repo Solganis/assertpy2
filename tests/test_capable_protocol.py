@@ -974,10 +974,11 @@ _NOT_HELD = frozenset(
         "matches_json_schema_from_file",
         "conforms_to_openapi",
         "is_frame_equal",
-        # a path that is absent, a directory, or named something
+        # a path that is absent, a directory, named something, or under a directory that is not itself
         "does_not_exist",
         "is_directory",
         "is_named",
+        "is_child_of",
         # a caught exception group
         "contains_error",
         "does_not_contain_error",

@@ -4,7 +4,7 @@ import functools
 import json
 import re
 from pathlib import Path, PurePath
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
@@ -21,6 +21,83 @@ _OPENAPI_VERSION: Final = re.compile(r"3\.([012])(?:\.\d+)?")
 
 _SWAGGER_2: Final = re.compile(r"2\.0(?:\.\d+)?")
 """Swagger's one version, read the same way, so "20" is not it."""
+
+_RFC_3339_MOMENT: Final = re.compile(
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?"
+    r"(?:[Zz]|([+-])([0-9]{2}):([0-9]{2}))"
+)
+"""A `date-time` as RFC 3339 writes it: a full date, a `T`, a time to the second, then `Z` or an offset."""
+
+
+_DAYS_IN: Final = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def _is_rfc_3339_moment(value: object) -> bool:
+    """Whether a text is an RFC 3339 `date-time`.  What is no text is not this format's to judge.
+
+    The grammar is the RFC's, read off its ABNF: lower-case ``t`` and ``z`` are allowed, a space for the ``T``
+    is not, the offset is required, a fraction of a second is of any length, and the year runs from ``0000``.
+    A second of ``60`` is taken where the RFC allows a leap second: in the last minute of a month, counted in
+    UTC.  Which months held one is not asked.
+    """
+    if not issubclass(type(value), str):
+        return True
+    read = _RFC_3339_MOMENT.fullmatch(cast("str", value))
+    if read is None:
+        return False
+    year, month, day, hour, minute, second = (int(part) for part in read.groups()[:6])
+    if not 1 <= month <= 12:
+        return False
+    leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+    last = _DAYS_IN[month - 1] + (month == 2 and leap)
+    offset_hour, offset_minute = int(read.group(8) or 0), int(read.group(9) or 0)
+    offset = (offset_hour * 60 + offset_minute) * (-1 if read.group(7) == "-" else 1)
+    in_utc = hour * 60 + minute - offset
+    ends_a_month = (in_utc == 1439 and day == last) or (in_utc == -1 and day == 1)
+    return (
+        1 <= day <= last
+        and hour < 24
+        and minute < 60
+        and offset_hour < 24
+        and offset_minute < 60
+        and (second < 60 or (second == 60 and ends_a_month))
+    )
+
+
+def _fits_in(bits: int) -> Any:
+    """The check of OpenAPI's ``int32`` or ``int64``: a whole number within the signed range of *bits*.
+
+    The number is read through `int` or `float` itself: a class of the caller's may answer ``<=`` or
+    ``is_integer`` with code of its own.  A bool is an `int` to Python and a truth value to JSON, where it is
+    no number.
+    """
+    low, high = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+
+    def fits(value: Any) -> bool:
+        kind = type(value)
+        if issubclass(kind, int) and not issubclass(kind, bool):
+            return low <= int.__add__(value, 0) <= high
+        if issubclass(kind, float) and float.is_integer(value):
+            return low <= float.__add__(value, 0.0) <= high
+        return True
+
+    return fits
+
+
+def _openapi_formats(jsonschema_mod: Any) -> Any:
+    """jsonschema's format checker, with the formats it leaves unchecked that a contract most often declares.
+
+    `int32` and `int64` are OpenAPI's own, and jsonschema knows neither: ``2**40`` passed for an `int32`.
+    `date-time` it checks only beside a package this library does not install, so ``"yesterday"`` passed.
+    The check here stands whether that package is there or not, so one text gets one verdict in every
+    environment.  `uri`, `hostname`, `duration` and the rest of what jsonschema checks only beside a package
+    of their own stay unchecked where that package is missing.
+    """
+    checker = jsonschema_mod.FormatChecker()
+    checker.checks("int32")(_fits_in(32))
+    checker.checks("int64")(_fits_in(64))
+    checker.checks("date-time")(_is_rfc_3339_moment)
+    return checker
 
 
 def _parsed_json_path(path: str):
@@ -354,8 +431,14 @@ class JsonMixin(_MixinBase):
 
         OpenAPI 3.0 (its ``nullable`` keyword is honoured), 3.1, and Swagger 2.0 (schema declared directly
         on the response, its ``x-nullable`` extension honoured) are all supported. ``$ref``,
-        ``oneOf``/``allOf``/``anyOf``, ``enum``, and ``format`` all validate with full JSON-Schema
-        semantics, and every violation is reported with its JSON path.
+        ``oneOf``/``allOf``/``anyOf`` and ``enum`` all validate with full JSON-Schema semantics, and every
+        violation is reported with its JSON path.
+
+        A ``format`` is checked where there is a check for it: ``date``, ``time``, ``date-time``, ``email``,
+        ``ipv4``, ``ipv6``, ``uuid``, ``regex``, and OpenAPI's ``int32`` and ``int64``.  ``uri``,
+        ``hostname``, ``duration`` and the others jsonschema checks only beside a package of their own are
+        checked where that package is installed (``jsonschema[format-nongpl]`` brings them all), and pass
+        unchecked where it is not.
 
         Args:
             spec: a parsed OpenAPI document (dict); loading YAML/JSON is the caller's job.
@@ -407,7 +490,7 @@ class JsonMixin(_MixinBase):
             uri=base, resource=referencing.Resource(contents=document, specification=specification)
         )
         validator = validator_cls(
-            {"$ref": base + pointer}, registry=registry, format_checker=jsonschema_mod.FormatChecker()
+            {"$ref": base + pointer}, registry=registry, format_checker=_openapi_formats(jsonschema_mod)
         )
         errors = sorted(validator.iter_errors(self.val), key=lambda error: (error.json_path, str(error.validator)))
         if not errors:

@@ -14,6 +14,7 @@ from typing import (
     Any,
     Final,
     NamedTuple,
+    NoReturn,
     Protocol,
     SupportsIndex,
     TypeVar,
@@ -1094,8 +1095,21 @@ class ContainsStringMatcher(BaseMatcher):
         return f"{_textlike_noun(self.substring)} containing <{_capped_format(self.substring)}>"
 
 
+def _refuse_empty(name: str) -> NoReturn:
+    """Refuse an empty text or bytes as the assertion of the same name does: every text starts and ends with it."""
+    message = f"given {name} arg must not be empty"
+    _assertpy2_refusal = True
+    raise ValueError(message)
+
+
+_TEXTS = (str, bytes, bytearray)
+
+
 class MatchesRegexMatcher(BaseMatcher):
     def __init__(self, pattern: str):
+        # asked here: through the helper a build cost 50% more
+        if (type(pattern) is str or issubclass(type(pattern), _TEXTS)) and len(pattern) == 0:
+            _refuse_empty("pattern")
         self.pattern = pattern
         # compiled eagerly so an invalid pattern raises at the call site, not inside `matches()` or a combinator
         self._compiled = re.compile(pattern)
@@ -1111,6 +1125,9 @@ class MatchesRegexMatcher(BaseMatcher):
 
 class StartsWithMatcher(BaseMatcher):
     def __init__(self, prefix: str | bytes):
+        # asked here: through the helper a build cost 50% more
+        if (type(prefix) is str or issubclass(type(prefix), _TEXTS)) and len(prefix) == 0:
+            _refuse_empty("prefix")
         self.prefix = prefix
 
     def matches(self, value: Any) -> bool:
@@ -1122,6 +1139,9 @@ class StartsWithMatcher(BaseMatcher):
 
 class EndsWithMatcher(BaseMatcher):
     def __init__(self, suffix: str | bytes):
+        # asked here: through the helper a build cost 50% more
+        if (type(suffix) is str or issubclass(type(suffix), _TEXTS)) and len(suffix) == 0:
+            _refuse_empty("suffix")
         self.suffix = suffix
 
     def matches(self, value: Any) -> bool:

@@ -199,7 +199,7 @@ class StringMixin(_MixinBase):
                     )
         elif isinstance(self.val, collections.abc.Iterable):
             lowered_values = []
-            for value in list(self.val):  # materialize once so a one-shot iterable is not exhausted
+            for value in list(self._walked()):  # read whole: the items are asked for their text, then compared
                 require_type(value, str, "a string", subject="every item of val")
                 lowered_values.append(value.lower())
             missing = []
@@ -263,7 +263,7 @@ class StringMixin(_MixinBase):
                     expected=prefix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
-            iterator = iter(self.val)
+            iterator = iter(self._walked())
             try:
                 first = next(iterator)
             except StopIteration:
@@ -329,7 +329,7 @@ class StringMixin(_MixinBase):
                     expected=suffix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
-            items = list(self.val)
+            items = list(self._walked())
             if not items:
                 raise ValueError("val must not be empty")
             try:

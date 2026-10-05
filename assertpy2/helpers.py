@@ -50,7 +50,15 @@ from ._engine._introspection import (
     keyed_snapshot,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, holds, lookup, nan_operand, numpy_duration, rational_overflow
+from ._engine._ordering import (
+    UnorderableError,
+    holds,
+    lookup,
+    nan_operand,
+    numpy_duration,
+    python_numbers,
+    rational_overflow,
+)
 from ._engine._path import _ROOT
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
@@ -449,6 +457,8 @@ class HelpersMixin(_MixinBase):
         else:
             refuse(self.val, "a number or a date, which is what an ordering is defined for")
 
+        if low_type is not high_type:
+            low, high = python_numbers(low, high)
         try:
             swapped = low > high
         except (TypeError, OverflowError, decimal.InvalidOperation) as refusal:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ._introspection import Replay, handed_away
+
 if TYPE_CHECKING:
     from ..errors import AssertionFailure, DiffResult, PollTrace
     from ..http_mixin import _Response
@@ -64,6 +66,52 @@ class _MixinBase:
 
     _run_pivots: list[Any] | None = None
     """The pivots made during the verdict run this builder holds, released by `_release_pivots()` when it ends."""
+
+    _read: Replay | None = None
+    """What a one-shot iterator held as the value has handed out, kept for the links of the chain that follow."""
+
+    def _walked(self) -> Any:
+        """The value as a walk reads it: a one-shot iterator through what it has handed out so far, else itself.
+
+        Every assertion that walks the value reads it here, or the second link of a chain over a generator
+        passed or failed over nothing.  Asked as `materialized` asks, ``iter(value) is value``.
+        """
+        value = self.val
+        kind = type(value)
+        if kind is list or kind is tuple or kind is str or kind is dict or kind is set or kind is frozenset:
+            return value
+        read = self._read
+        if read is not None and read.source is value:
+            if read.given_away:
+                raise handed_away()
+            return read
+        try:
+            one_shot = iter(value) is value
+        except TypeError:
+            return value
+        if not one_shot:
+            return value
+        read = self._read = Replay(value)
+        return read
+
+    def _handed_out(self) -> Any:
+        """The value itself, for code of the caller's, which may take from a one-shot iterator what no link sees."""
+        read = self._read
+        # what a link has read already is all that is looked at: asked for an iterator here, the value ran its
+        # `__iter__` ahead of a predicate that may never walk it
+        if read is not None and read.source is self.val:
+            read.give_away()
+        return self.val
+
+    def _drained(self) -> Any:
+        """The value, or the items of a one-shot iterator in a list of their own, the same items for every link."""
+        value = self.val
+        kind = type(value)
+        # asked here as well: through `_walked` alone, `contains` on a list of 200 cost 11% more
+        if kind is list or kind is tuple or kind is str or kind is dict or kind is set or kind is frozenset:
+            return value
+        walked = self._walked()
+        return walked.drained() if type(walked) is Replay else walked
 
     _compared: tuple[object, object] | None = None
     """The two values a failed equality held against each other, set just ahead of `error()`, which takes it.

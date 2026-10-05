@@ -30,10 +30,10 @@ import collections
 import dataclasses
 import decimal
 import difflib
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
-from ._compare import _EQ_ATOMIC, _node_decision, _walked_equal
+from ._compare import _EQ_ATOMIC, _node_decision, _walked_equal, held_equal_decision, of_one_atom, typed_apart
 from ._introspection import (
     TakenApart,
     compares_by_parts,
@@ -45,6 +45,7 @@ from ._introspection import (
     keyed_pair,
     keyed_snapshot,
     model_field_values,
+    own_fields,
 )
 from ._ordering import equals, held_key, lookup, member
 from ._path import _ROOT, _Path
@@ -511,9 +512,14 @@ class _Walk:
             raise escaped
         return self.entries
 
-    def opened(self, actual, expected, prefix: _Path) -> _Frame | None:
-        """The frame over a pair's children with the pair now on the path, or ``None`` for a pair not taken apart."""
+    def opened(self, actual, expected, prefix: _Path, *, held_equal: bool = False) -> _Frame | None:
+        """The frame over a pair's children with the pair now on the path, or ``None`` for a pair not taken apart.
+
+        A pair *held_equal* by its own ``==``, entered for what it holds, is taken apart as two objects as well.
+        """
         children = self.children(actual, expected, prefix)
+        if children is None and held_equal:
+            children = self.objects(actual, expected, prefix)
         if children is None:
             return None
         pair = (id(actual), id(expected))
@@ -542,7 +548,7 @@ class _Walk:
                 self.excuse(pair)
             return None
         found = len(self.entries)
-        frame = self.opened(actual, expected, path)
+        frame = self.opened(actual, expected, path, held_equal=descended_for == "strict")
         if frame is None:
             if descended_for != "strict":
                 self.entries.append(path.entry(actual=actual, expected=expected))
@@ -565,6 +571,10 @@ class _Walk:
 
         Mappings, dataclasses, namedtuples, model-dump objects, attrs instances and sequences are taken
         apart.  The ladder starts at mappings, where `_build_equality_diff()` starts at namedtuples.
+
+        Two deques are taken apart under a config, where the walk is the verdict: left whole, ``[1]`` against
+        ``[True]`` in one passed ``strict_types``.  With no config a failed pair of them prints as it did, and a
+        deque of a class of its own is left to the ``==`` of that class.
         """
         if is_mapping_like(actual) and is_mapping_like(expected):
             return self.mapping(actual, expected, prefix)
@@ -581,9 +591,42 @@ class _Walk:
         both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
         if both_model or both_attrs:
             return self.fields(actual, expected, prefix, both_model=both_model)
-        if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
-            return self.sequence(actual, expected, prefix)
-        return None
+        read = _sequences(actual, expected, self.config)
+        return None if read is None else self.sequence(*read, prefix)
+
+    def objects(self, actual, expected, prefix: _Path) -> Iterator[_Frame] | None:
+        """The walk over two objects of one class by their fields, or ``None`` for a pair that is no such two.
+
+        For a pair its own ``==`` holds equal and ``strict_types`` or a comparator still has to look into: a
+        container says nothing of the types it holds, and an object with fields is one.  The fields are the
+        ``__dict__`` of an object that holds nothing else (`own_fields`), the reading ``ignore=`` has.  Two that
+        differ by their ``==`` are not read this way: taken apart, two objects with no ``==`` of their own would
+        be equal.
+        """
+        if type(actual) is not type(expected):
+            return None
+        held, held_expected = own_fields(actual), own_fields(expected)
+        if held is None or held_expected is None:
+            return None
+        return self.held_equal(dict(held), dict(held_expected), prefix)
+
+    def held_equal(self, held: dict, held_expected: dict, prefix: _Path) -> Iterator[_Frame]:
+        """The fields both of two equal objects hold, each asked what the options add to ``==`` and nothing more.
+
+        A field one side lacks is outside the ``==`` that held the two equal, as one the two hold apart is
+        (`held_equal_decision`).
+        """
+        config = cast("_CompareConfig", self.config)
+        for name, value in held.items():
+            if name in held_expected:
+                counterpart = held_expected[name]
+                decision = held_equal_decision(value, counterpart, config, field=name)
+                if decision == "leaf":
+                    self.entries.append(prefix.attr(name).entry(actual=value, expected=counterpart))
+                elif decision != "equal":
+                    frame = self.descend(value, counterpart, prefix.attr(name), decision)
+                    if frame is not None:
+                        yield frame
 
     def mapping(self, actual, expected, prefix: _Path) -> Iterator[_Frame] | None:
         """The walk over two mappings, or ``None`` when either cannot be walked by key.
@@ -598,13 +641,14 @@ class _Walk:
         expected_keys = set(kept_expected)
         self.entries.extend(_order_entries(actual, expected, kept, kept_expected, prefix))
         keyed = keyed_names(kept, kept_expected)
-        if self.config is not None and self.config.strict_types:
+        if self.config is not None and self.config.strict_types and not of_one_atom(kept, kept_expected):
             # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
             stored = {key: key for key in kept_expected}
             for key in kept:
                 found, counterpart = lookup(stored, key)
                 counterpart = counterpart if found else key
-                if type(key) is not type(counterpart):
+                kind = type(key)
+                if kind is not type(counterpart) or (kind not in _EQ_ATOMIC and typed_apart(key, counterpart)):
                     self.entries.append(prefix.key(key).entry(actual=key, expected=counterpart))
         return self.keys(kept, kept_expected, actual_keys, expected_keys, keyed, prefix)
 
@@ -772,6 +816,18 @@ class _Walk:
                             yield frame
 
 
+def _sequences(actual: Any, expected: Any, config: _CompareConfig | None) -> tuple[Any, Any] | None:
+    """A pair the walk reads by position, or ``None``: two lists or tuples, and under a config two deques as lists.
+
+    A deque of a class of its own is no such pair: it may compare by more than what it holds.
+    """
+    if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
+        return actual, expected
+    if config is not None and type(actual) is collections.deque and type(expected) is collections.deque:
+        return list(actual), list(expected)
+    return None
+
+
 def _pair_itself(actual: object, expected: object) -> DiffResult:
     """The diff of two values that differ and cannot be walked: one entry, the pair, which reads nothing again."""
     return DiffResult(kind="scalar", entries=[_ROOT.leaf_entry(actual=actual, expected=expected)])
@@ -827,13 +883,15 @@ def _build_equality_diff(actual: object, expected: object, *, _prefix: _Path = _
     if both_model or both_attrs:
         fields = walk.fields(actual, expected, _prefix, both_model=both_model)
         return DiffResult(kind="model" if both_model else "attrs", entries=walk.run(fields, pair, owed))
-    if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
-        return DiffResult(kind="sequence", entries=walk.run(walk.sequence(actual, expected, _prefix), pair, owed))
+    read = _sequences(actual, expected, config)
+    if read is not None:
+        return DiffResult(kind="sequence", entries=walk.run(walk.sequence(*read, _prefix), pair, owed))
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         return _set_diff(actual, expected, _prefix, found_unequal=owed is not None)
-    # under a strict descent this means the two sides were already equal, not that they differ
+    # under a strict descent the two sides were already equal, so only what two objects hold is left to differ
     if strict_descent:
-        return DiffResult(kind="scalar", entries=[])
+        fields = walk.objects(actual, expected, _prefix) or iter(())
+        return DiffResult(kind="scalar", entries=walk.run(fields, pair, owed))
     # bytes render as `b'...'`, which difflib points into like text, and both expose `splitlines()`
     both_text = isinstance(actual, str) and isinstance(expected, str)
     both_bytes = isinstance(actual, (bytes, bytearray)) and isinstance(expected, (bytes, bytearray))

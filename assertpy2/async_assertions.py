@@ -12,6 +12,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Final
 
 from ._engine._compare import _is_infinite, _is_nan
+from ._engine._operations import DESCRIBES, WITHOUT_A_VERDICT
 from ._engine._require import argument, refuse
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
 from .exception import _InertBuilder
@@ -580,7 +581,8 @@ class AsyncAssertionBuilder:
         A closed chain needs no guard here: `close()` closes the coroutine, and awaiting a closed one
         already raises the "cannot reuse already awaited coroutine" a plain coroutine raises.
         """
-        if not self._steps:
+        if all(WITHOUT_A_VERDICT.get(name) == DESCRIBES for name, _, _ in self._steps):
+            self._awaited = True  # refused here, so not also reported as never awaited once it is collected
             raise TypeError("no assertion was called on this eventually() chain, so awaiting it would wait for nothing")
         coro = self._coroutine()
         self._awaited = True

@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from ._introspection import (
     as_held,
+    definition_of,
     eq_keyed,
     is_attrs_instance,
     is_mapping_like,
@@ -36,6 +37,7 @@ from ._introspection import (
     model_field_values,
 )
 from ._ordering import (
+    _NOT_FIXED,
     _SEQUENCES,
     REFUSALS,
     UnorderableError,
@@ -46,7 +48,11 @@ from ._ordering import (
     holds,
     integral_kind,
     numpy_duration,
+    numpy_float,
+    python_number,
+    python_numbers,
     rational_overflow,
+    unwrapped,
 )
 from ._require import raised_inside, verdict
 
@@ -307,17 +313,19 @@ def plainly_within(actual, expected, tolerance) -> bool | None:
     """`_within_tolerance` over three exact `int` or `float` operands, or ``None`` where an `int` overflows a `float`.
 
     The same rule in its fewest steps: a NaN is close to nothing, an infinity only to an equal one, and a finite
-    pair by its difference or by the window around either side.
+    pair by its difference or by the window around either side, two integers by their difference alone.
     """
     if actual != actual or expected != expected:
         return False
     try:
         if actual in (math.inf, -math.inf) or expected in (math.inf, -math.inf):
             return actual == expected
+        if actual == expected or abs(actual - expected) <= tolerance:
+            return True
+        if type(actual) is int and type(expected) is int:
+            return False
         return (
-            actual == expected
-            or abs(actual - expected) <= tolerance
-            or expected - tolerance <= actual <= expected + tolerance
+            expected - tolerance <= actual <= expected + tolerance
             or actual - tolerance <= expected <= actual + tolerance
         )
     except OverflowError:
@@ -331,8 +339,8 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     and the window around each side.  Any of them holding is enough.  Measured one way each, the three
     spellings disagreed: ``-1.1`` was close to ``-0.9`` within ``0.2`` for `is_close_to`, which windows
     around the other operand, and not for `match.close_to`, which windows around the value, nor for
-    ``is_equal_to(tolerance=)``, which takes the difference.  Taking any of the three, no spelling now
-    fails a pair it passed before.
+    ``is_equal_to(tolerance=)``, which takes the difference.  Each spelling now takes any of the three, so a
+    pair all of them measure gets one answer.
 
     A window the ordering engine cannot order is one way fewer of holding, and the difference still
     answers: a `Decimal` refuses to order against a `numpy.int64` it subtracts exactly.  Only a pair with
@@ -345,7 +353,21 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     never classified: two finite values far enough apart overflow their difference to an infinity and are
     still measured.  An infinite tolerance was a wildcard before this, `1` was close to `inf` within `inf`
     through the window around `1`, and it now covers every finite pair and no more.
+
+    A `numpy` integer is measured as the `int` it holds (`_as_measured`): taken through its own arithmetic,
+    `uint8(3)` was 9 away from 250.  Two of `int` and of a `Fraction` of two `int` are measured by their
+    difference alone, which is exact: a window under a float tolerance rounds an integer past ``2**53``, and
+    ``2**53 + 1`` was within ``0.0`` of ``2**53``.  A `Fraction` built from a `numpy` integer keeps it as a
+    part, wraps in its own arithmetic as it does in Python's, and is measured as before.
     """
+    kind, other, span = type(actual), type(expected), type(tolerance)
+    # asked of the classes kept: a call for every triple cost two `float64` 10%
+    if not (kind is float and other is float and span is float) and (
+        (kind is not int and type(kind) is type and kind not in _NOT_FIXED)
+        or (other is not int and type(other) is type and other not in _NOT_FIXED)
+        or (span is not int and span is not float and (kind is int or (type(span) is type and span not in _NOT_FIXED)))
+    ):
+        actual, expected, tolerance = _as_measured(actual, expected, tolerance)
     actual_kind, expected_kind = _non_finite(actual), _non_finite(expected)
     if actual_kind or expected_kind:
         return actual_kind == expected_kind == "inf" and bool(actual == expected)
@@ -357,8 +379,8 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
         if raised_inside(refusal):
             raise
     difference = _difference_within(actual, expected, tolerance)
-    if difference:
-        return True
+    if difference or (difference is not None and _differ_exactly(actual, expected)):
+        return bool(difference)
     unordered = None
     try:
         if _window_holds(expected, actual, tolerance):
@@ -373,6 +395,40 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     if unordered is not None and difference is None:
         raise unordered
     return False
+
+
+def _differ_exactly(actual, expected) -> bool:
+    """Whether each of the two is an `int` or a `Fraction` of two, so their difference is exact.
+
+    A `Fraction` built from a `numpy` integer keeps it as a part, and its own arithmetic wraps at that width.
+    """
+    return _exact_rational(actual) and _exact_rational(expected)
+
+
+def _exact_rational(value) -> bool:
+    kind = type(value)
+    if kind is int:
+        return True
+    return kind is fractions.Fraction and type(value.numerator) is int and type(value.denominator) is int
+
+
+def _as_measured(actual, expected, tolerance) -> tuple[Any, Any, Any]:
+    """The operands of a closeness as they are measured where one of them may be a `numpy` integer.
+
+    With one in the pair, all three are read as the Python numbers they hold (`python_numbers`).  So is the
+    tolerance of a pair whose difference is exact: held against a `numpy` float, an exact distance would be
+    rounded to the float's width, and ``2**24 + 1`` was within ``float32(2**24)`` of zero.  Standing as the
+    tolerance alone a `numpy` integer is read as its `int`, since a window around a Python number wraps it.  Not
+    beside a pair that holds a `numpy` float, whatever that float holds: `numpy` measures a float against an
+    integer of any width without wrapping, and a Python `int` in its place would be rounded to the float's
+    width.
+    """
+    one, other = python_numbers(actual, expected)
+    if one is not actual or other is not expected or _differ_exactly(one, other):
+        return one, other, python_number(tolerance)
+    if numpy_float(actual) or numpy_float(expected):
+        return actual, expected, tolerance
+    return actual, expected, unwrapped(tolerance)
 
 
 def _difference_within(actual, expected, tolerance) -> bool | None:
@@ -569,13 +625,59 @@ def _keyed_types_differ(actual, expected) -> bool:
     Each side is reduced to its members paired with their types.  `(bool, True)` and `(int, 1)` are
     different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
     Values are left alone here: they do become pairs, and the walk judges them.
+
+    A member that is no atom is then read beside the one it was matched with (`typed_apart`): `(1, 2)` and
+    `(True, 2)` are both a tuple, and the type that differs is inside.
     """
     # structural, like everything here: the concrete-type check let a `UserDict` pass where the matcher refused it
-    if is_mapping_like(actual) and is_mapping_like(expected):
-        return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
-    if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
-        return {(type(member), member) for member in actual} != {(type(member), member) for member in expected}
+    keyed = is_mapping_like(actual) and is_mapping_like(expected)
+    if not keyed and not (isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset))):
+        return False
+    if of_one_atom(actual, expected):
+        return False
+    typed = {(type(member), member) for member in actual}
+    if typed != {(type(member), member) for member in expected}:
+        return True
+    if _EQ_ATOMIC.issuperset(map(type, actual)):
+        return False
+    held = {member: member for member in expected}
+    return any(kind not in _EQ_ATOMIC and typed_apart(member, held.get(member, member)) for kind, member in typed)
+
+
+def of_one_atom(actual: Any, expected: Any) -> bool:
+    """Whether every member of both is of one class, and that class an atom: no two of them differ in type then.
+
+    Asked of the classes alone, ahead of any pass that pairs the members.
+    """
+    kinds = set(map(type, actual))
+    return len(kinds) == 1 and kinds <= _EQ_ATOMIC and kinds == set(map(type, expected))
+
+
+def typed_apart(member: Any, counterpart: Any) -> bool:
+    """Whether two values a hash holds equal differ in type, at any depth of the tuples and frozensets in them.
+
+    Those two are the containers a hash reads through, and each is read where its ``==`` is the builtin one,
+    which is what pairs the parts: a tuple or a frozenset of a class with an ``==`` of its own may hold two
+    equal with nothing in them alike, and is compared by its class alone, as a record used as a key is.
+    Walked on a list, since a tuple nested past the recursion limit is still a key.
+    """
+    pending = [(member, counterpart)]
+    while pending:
+        one, other = pending.pop()
+        kind = type(one)
+        if kind is not type(other):
+            return True
+        if kind is tuple or (issubclass(kind, tuple) and _keeps_equality_of(kind, tuple)):
+            pending.extend(zip(tuple.__iter__(one), tuple.__iter__(other), strict=False))
+        elif kind is frozenset or (issubclass(kind, frozenset) and _keeps_equality_of(kind, frozenset)):
+            held = {part: part for part in frozenset.__iter__(other)}
+            pending.extend((part, held.get(part, part)) for part in frozenset.__iter__(one))
     return False
+
+
+def _keeps_equality_of(kind: type, builtin: type) -> bool:
+    """Whether the ``==`` *kind* answers with is the one *builtin* defines, read off the class tree."""
+    return (definition_of(kind, "__eq__") or (object, None))[0] is builtin
 
 
 def _kinds_never_equal(actual, expected) -> bool:
@@ -583,7 +685,8 @@ def _kinds_never_equal(actual, expected) -> bool:
 
     Under a compare config the walker decides by parts, so ``[1.0]`` against ``(1.0,)``, or two dataclasses
     of different classes holding the same fields, had no differing part and passed, while ``==`` rejects
-    both outright.  Asked only once ``==`` has already said no, so it never fails a pair ``==`` accepts.
+    both outright.  Asked once ``==`` has said no, or of two sequences a key option takes element by element.
+    Either way it never fails a pair ``==`` accepts, by the second paragraph.
 
     The kind alone is not the answer: a list subclass may define ``__eq__`` to accept a tuple.  So a pair
     of different kinds counts only when both sides' own ``__eq__`` decline it, which leaves ``==`` at
@@ -623,7 +726,9 @@ def _both_decline(actual: Any, expected: Any) -> bool:
         return False
 
 
-def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None, at_root: bool = False) -> str:
+def _node_decision(
+    actual, expected, config: _CompareConfig | None, *, field=None, at_root: bool = False, keys_left_out: bool = False
+) -> str:
     """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"``, ``"unanswered"`` or ``"strict"``.
 
     With ``config is None`` this is exactly the engine's historical behavior: differing values ``"recurse"``
@@ -653,12 +758,12 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if _types_differ(actual, expected):
                 # ahead of tolerance: how far apart is not the same as may differ in type
                 return "leaf"
-            if _keyed_types_differ(actual, expected):
-                # before the walk: it descends keys into values, so `True` and `1` keys present the same values
-                return "leaf"
             if type(actual) not in _EQ_ATOMIC and _walked_equal(actual, expected):
-                # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
-                return "strict"
+                # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going.
+                # Its keys first: the walk descends keys into values, so `True` and `1` keys present the same
+                # values.  Asked of an equal pair alone: two that differ may differ only in a key left out.
+                # Not where a path leaves keys of this pair out: the walk asks the types of the keys it keeps
+                return "leaf" if not keys_left_out and _keyed_types_differ(actual, expected) else "strict"
         if config.tolerance is not None and (
             numpy_duration(as_held(actual)) and numpy_duration(as_held(expected))
             if config.duration
@@ -674,6 +779,21 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             # a container's `==` says nothing of what a comparator says of the leaves inside it, so the walk goes on
             return "strict"
     return _plain_decision(actual, expected, config, at_root=at_root)
+
+
+def held_equal_decision(actual, expected, config: _CompareConfig, *, field) -> str:
+    """`_node_decision` for a field of two objects their own ``==`` holds equal, where ``"equal"`` is also not judged.
+
+    That ``==`` has judged what the two hold, so a field ``==`` holds apart is not the walk's to fail: it is one
+    the object leaves out of its ``==`` or reads another way, and which of the two cannot be told.  A field
+    ``==`` holds equal is asked what the options add to that: a comparator that owns it, under ``strict_types``
+    its type, and either of what it holds.  A field ``==`` cannot answer for, a graph it runs out of stack
+    on, is ``"unanswered"`` here as anywhere, and the walk is its judge.
+    """
+    if actual is not expected and _walked_equal(actual, expected) is False:
+        return "equal"
+    decision = _node_decision(actual, expected, config, field=field)
+    return decision if decision in ("leaf", "strict", "unanswered") else "equal"
 
 
 def _tolerance_decision(actual, expected, config: _CompareConfig, *, at_root: bool) -> str:

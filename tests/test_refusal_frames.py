@@ -131,6 +131,10 @@ class TestARefusalShowsNoFrameOfTheLibrary:
             pytest.param(lambda: match.contains_only(), ValueError, id="no item to contain only"),
             pytest.param(lambda: match.is_subset_of(), ValueError, id="no superset"),
             pytest.param(lambda: match.is_now(datetime.timedelta(seconds=-1)), ValueError, id="a negative span"),
+            pytest.param(lambda: match.is_now(float("inf")), ValueError, id="a span no timedelta holds"),
+            pytest.param(lambda: match.starts_with(""), ValueError, id="an empty prefix"),
+            pytest.param(lambda: match.ends_with(b""), ValueError, id="an empty suffix"),
+            pytest.param(lambda: match.matches_regex(""), ValueError, id="an empty pattern"),
             pytest.param(lambda: assert_that(1).is_equal_to(1, tolerence=1), TypeError, id="an option misspelled"),
             pytest.param(lambda: assert_that(1).satisfies(_answers_later), TypeError, id="a verdict not awaited"),
             pytest.param(

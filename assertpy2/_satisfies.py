@@ -11,7 +11,6 @@ from ._engine._introspection import (
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
-    materialized,
     plainly_hashed,
 )
 from ._engine._mixin_base import _MixinBase
@@ -313,7 +312,7 @@ class SatisfiesMixin(_MixinBase):
         """
         if _is_matcher(matcher):
             # asked twice about one value: on a one-shot iterator the second call made `each_item` name the wrong item
-            value = materialized(self.val)
+            value = self._drained()
             # a matcher that walks its value is asked once, so a `key` inside it runs once
             if _has_own_evaluate(matcher):
                 outcome = _evaluate_matcher(matcher, value)
@@ -330,7 +329,7 @@ class SatisfiesMixin(_MixinBase):
                     ),
                 )
         elif callable(matcher):
-            if not verdict(cast("Callable[..., object]", matcher)(self.val)):
+            if not verdict(cast("Callable[..., object]", matcher)(self._handed_out())):
                 return self.error(
                     f"Expected <{_capped(self.val)}> to satisfy {_describe_matcher(matcher)}, but did not.",
                     expected=_describe_matcher(matcher),
@@ -376,7 +375,7 @@ class SatisfiesMixin(_MixinBase):
         if _is_matcher(matcher):
             # a structure is asked for its failure alone, so the spec is described only for the item that failed
             structural = getattr(type(matcher), "evaluate", None) is StructureMatcher.evaluate
-            for i, item in enumerate(self.val):
+            for i, item in enumerate(self._walked()):
                 walked += 1
                 # the verdict and the reason come from the same look, so a user's `key` runs once
                 if structural or _has_own_evaluate(matcher):
@@ -403,7 +402,7 @@ class SatisfiesMixin(_MixinBase):
                         ),
                     )
         else:
-            for i, item in enumerate(self.val):
+            for i, item in enumerate(self._walked()):
                 walked += 1
                 if not verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
@@ -543,7 +542,7 @@ class SatisfiesMixin(_MixinBase):
         # resolving is what refuses, so the matcher is inspected once rather than here and again there
         reading = _resolved(matcher)
         apply = reading.apply  # read once: the attribute lookup is per item otherwise
-        values = materialized(self.val)
+        values = self._drained()
         # kept as the verdict walks them: the message names them, and a second walk is a read the verdict never made
         items = []
         for item in values:
@@ -619,14 +618,14 @@ class SatisfiesMixin(_MixinBase):
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
         if _is_matcher(matcher):
-            for i, item in enumerate(self.val):
+            for i, item in enumerate(self._walked()):
                 if verdict(matcher.matches(item), subject="the matcher"):
                     return self.error(
                         f"Expected no item to satisfy {matcher.describe()},"
                         f" but item at index {i} <{_capped_format(item)}> did."
                     )
         elif callable(matcher):
-            for i, item in enumerate(self.val):
+            for i, item in enumerate(self._walked()):
                 if verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected no item to satisfy {_describe_matcher(matcher)},"
@@ -670,7 +669,7 @@ class SatisfiesMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
-        items = list(self.val)
+        items = list(self._walked())
         if len(items) != len(matchers):
             return self.error(
                 f"Expected collection length <{len(matchers)}>, but was <{len(items)}>.",
@@ -732,7 +731,7 @@ class SatisfiesMixin(_MixinBase):
         appliers = [reading.apply for reading in (_resolved(matcher) for matcher in matchers)]
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
-        items = list(self.val)
+        items = list(self._walked())
         if len(items) != len(matchers):
             return self.error(
                 f"Expected collection length <{len(matchers)}>, but was <{len(items)}>.",
@@ -811,7 +810,7 @@ class SatisfiesMixin(_MixinBase):
             refuse(self.val, "iterable")
         if not isinstance(other, collections.abc.Iterable):
             refuse(other, "iterable", subject=argument("other"))
-        val_items = list(self.val)
+        val_items = list(self._walked())
         other_items = list(other)
         if len(val_items) != len(other_items):
             return self.error(

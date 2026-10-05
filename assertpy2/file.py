@@ -205,7 +205,7 @@ class FileMixin(_MixinBase):
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent_path)
         try:
-            is_child = os.path.commonpath([val_abspath, parent_abspath]) == parent_abspath
+            is_child = os.path.commonpath([val_abspath, parent_abspath]) == parent_abspath != val_abspath
         except ValueError:  # pragma: no cover - Windows-only: paths on different drives share no common path
             is_child = False
         if not is_child:

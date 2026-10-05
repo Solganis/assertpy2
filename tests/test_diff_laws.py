@@ -34,7 +34,7 @@ from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
-from assertpy2._engine import _diff, _equality, _introspection
+from assertpy2._engine import _diff, _introspection
 from assertpy2._engine._introspection import TakenApart, compares_by_parts
 from tests.test_duality import _PAIRS, Case
 
@@ -816,7 +816,7 @@ class TestAContainerOfAClassOfItsOwnIsNoBagOfFields:
         ids=lambda value: getattr(value, "__name__", None),
     )
     def test_what_a_value_holds_is_read_off_the_layout_of_its_class(self, kind, only_its_dict):
-        assert_that(_equality._holds_only_its_dict(kind)).is_equal_to(only_its_dict)
+        assert_that(_introspection.holds_only_its_dict(kind)).is_equal_to(only_its_dict)
 
     def test_the_layout_is_read_off_type_and_not_as_a_metaclass_spells_it(self):
         size = type.__dict__["__basicsize__"].__get__
@@ -831,7 +831,7 @@ class TestAContainerOfAClassOfItsOwnIsNoBagOfFields:
                 self.code = code
 
         assert_that(Slotted.__basicsize__).is_equal_to(_Weak.__basicsize__)
-        assert_that(_equality._holds_only_its_dict(Slotted)).is_false()
+        assert_that(_introspection.holds_only_its_dict(Slotted)).is_false()
         with pytest.raises(AssertionFailure):
             assert_that([Slotted(1)]).is_equal_to([Slotted(2)], ignore="unrelated")
 

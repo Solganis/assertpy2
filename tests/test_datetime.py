@@ -846,6 +846,61 @@ class TestAMessageNamesTheWholeInstant:
         assert_that(outcome.message).contains("+03:00")
 
 
+class _Jumps(datetime.tzinfo):
+    """A clock that changes its offset once, at a moment given in UTC: back for a repeated stretch, or forward."""
+
+    def __init__(self, at: datetime.datetime, before: datetime.timedelta, after: datetime.timedelta) -> None:
+        self.at, self.before, self.after = at, before, after
+
+    def utcoffset(self, moment):
+        wall = moment.replace(tzinfo=None)
+        first_reading = wall < self.at + min(self.before, self.after)
+        repeated = self.after < self.before and wall < self.at + self.before and not moment.fold
+        return self.before if first_reading or repeated else self.after
+
+    def tzname(self, moment):
+        return "jumps"
+
+    def dst(self, moment):
+        return None
+
+    def fromutc(self, moment):
+        wall = moment.replace(tzinfo=None)
+        if wall < self.at:
+            return moment + self.before
+        return (moment + self.after).replace(fold=wall < self.at + (self.before - self.after))
+
+
+_HOUR = datetime.timedelta(hours=1)
+_FALLS_BACK = _Jumps(datetime.datetime(2026, 11, 1, 1), 2 * _HOUR, _HOUR)
+_BACK_A_MINUTE = _Jumps(datetime.datetime(2026, 11, 1, 11, 1), _HOUR, _HOUR - datetime.timedelta(minutes=1))
+_BACK_BY_THIRTY = _Jumps(datetime.datetime(2026, 11, 1, 11, 1, 10), _HOUR, _HOUR - datetime.timedelta(seconds=30))
+_ON_BY_TWENTY = _Jumps(datetime.datetime(2026, 11, 1, 11, 0, 30), _HOUR, _HOUR + datetime.timedelta(seconds=20))
+
+
+class _OnePerOffset(datetime.tzinfo):
+    """One object per offset of a zone that falls back at 01:00 UTC on 1 November 2026, as some libraries hand out."""
+
+    def __init__(self, hours: int) -> None:
+        self.hours = hours
+
+    def utcoffset(self, moment):
+        return datetime.timedelta(hours=self.hours)
+
+    def tzname(self, moment):
+        return f"+{self.hours}"
+
+    def dst(self, moment):
+        return None
+
+    def fromutc(self, moment):
+        zone = _SUMMER if moment.replace(tzinfo=None) < datetime.datetime(2026, 11, 1, 1) else _WINTER
+        return (moment + datetime.timedelta(hours=zone.hours)).replace(tzinfo=zone)
+
+
+_SUMMER, _WINTER = _OnePerOffset(2), _OnePerOffset(1)
+
+
 class TestTwoZonesAreOneInstant:
     """The guide says making both sides aware is what makes these well defined, and field-by-field they were not."""
 
@@ -876,6 +931,92 @@ class TestTwoZonesAreOneInstant:
         assert_that(datetime.datetime(2026, 1, 1, 22, tzinfo=datetime.timezone.utc)).is_equal_to_ignoring_time(
             datetime.datetime(2026, 1, 2, 3, tzinfo=east)
         )
+
+    @pytest.mark.parametrize("call", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"])
+    def test_the_two_readings_of_a_repeated_hour_are_an_hour_apart(self, call):
+        """Read on the value's clock, the other moment shows the same wall time and another offset."""
+        first = datetime.datetime(2026, 11, 1, 2, 30, tzinfo=_FALLS_BACK)
+        hour_later = first.astimezone(datetime.timezone.utc) + datetime.timedelta(hours=1)
+        outcome = getattr(assert_that(first).check(), call)(hour_later)
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).contains("02:30").contains("+02:00> to be equal to").contains("+01:00>")
+        getattr(assert_that(first), call)(first.astimezone(datetime.timezone.utc))
+        getattr(assert_that(first.replace(fold=1)), call)(hour_later)
+        getattr(assert_that(first).not_, call)(hour_later)
+
+    @pytest.mark.parametrize("call", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"])
+    def test_two_on_one_zone_object_are_left_to_their_wall_clocks_as_equality_is(self, call):
+        first = datetime.datetime(2026, 11, 1, 2, 30, tzinfo=_FALLS_BACK)
+        second = first.replace(fold=1)
+        assert_that(first == second).is_true()
+        getattr(assert_that(first), call)(second)
+
+    @pytest.mark.parametrize("call", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"])
+    def test_a_fold_set_where_the_clock_reads_once_changes_nothing(self, call):
+        noon = datetime.datetime(2026, 11, 1, 12, 0, tzinfo=_FALLS_BACK, fold=1)
+        getattr(assert_that(noon), call)(noon.astimezone(datetime.timezone.utc))
+
+    @pytest.mark.parametrize("call", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"])
+    def test_a_zone_that_hands_out_an_object_per_offset_is_told_by_the_offsets(self, call):
+        first = datetime.datetime(2026, 11, 1, 2, 30, tzinfo=_SUMMER)
+        hour_later = first.astimezone(datetime.timezone.utc) + datetime.timedelta(hours=1)
+        read = hour_later.astimezone(_SUMMER)
+        assert_that([read.tzinfo is _WINTER, read.fold, read.hour, read.minute]).is_equal_to([True, 0, 2, 30])
+        assert_that(getattr(assert_that(first).check(), call)(hour_later).passed).is_false()
+        getattr(assert_that(first), call)(first.astimezone(datetime.timezone.utc))
+
+    @pytest.mark.parametrize("call", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"])
+    def test_one_moment_read_through_two_objects_of_one_offset_is_one_reading(self, call):
+        first = datetime.datetime(2026, 11, 1, 2, 30, tzinfo=_OnePerOffset(2))
+        same = first.astimezone(datetime.timezone.utc)
+        assert_that(same.astimezone(first.tzinfo).tzinfo).is_same_as(_SUMMER).is_not_same_as(first.tzinfo)
+        getattr(assert_that(first), call)(same)
+
+    def test_a_minute_the_clock_reads_twice_is_two_readings_however_close(self):
+        """Twenty seconds apart, and each reads 12:00 on a clock that went back a minute between them."""
+        first = datetime.datetime(2026, 11, 1, 12, 0, 50, tzinfo=_BACK_A_MINUTE)
+        second = datetime.datetime(2026, 11, 1, 11, 1, 10, tzinfo=datetime.timezone.utc)
+        read = second.astimezone(_BACK_A_MINUTE)
+        assert_that([second - first, read.hour, read.minute, read.fold]).is_equal_to(
+            [datetime.timedelta(seconds=20), 12, 0, 1]
+        )
+        assert_that(assert_that(first).check().is_equal_to_ignoring_seconds(second).passed).is_false()
+        assert_that(first).is_equal_to_ignoring_seconds(second - datetime.timedelta(seconds=30))
+
+    def test_a_minute_left_and_come_back_to_is_two_readings_with_no_fold_between_them(self):
+        """12:01:05, back to 12:00:40 at 12:01:10, then 12:01:15: 40 seconds apart, neither in the stretch read twice"""
+        first = datetime.datetime(2026, 11, 1, 11, 1, 5, tzinfo=datetime.timezone.utc)
+        second = datetime.datetime(2026, 11, 1, 11, 1, 45, tzinfo=datetime.timezone.utc)
+        early, late = first.astimezone(_BACK_BY_THIRTY), second.astimezone(_BACK_BY_THIRTY)
+        assert_that([early.second, late.second, early.minute, late.minute, early.fold, late.fold]).is_equal_to(
+            [5, 15, 1, 1, 0, 0]
+        )
+        assert_that(assert_that(early).check().is_equal_to_ignoring_seconds(second).passed).is_false()
+        assert_that(assert_that(late).check().is_equal_to_ignoring_seconds(first).passed).is_false()
+        assert_that(early).is_equal_to_ignoring_seconds(first)
+
+    def test_a_clock_that_goes_forward_inside_a_minute_reads_it_once(self):
+        """Twenty-five seconds apart and both read 12:00, on either side of a change of twenty seconds."""
+        first = datetime.datetime(2026, 11, 1, 12, 0, 10, tzinfo=_ON_BY_TWENTY)
+        second = datetime.datetime(2026, 11, 1, 11, 0, 35, tzinfo=datetime.timezone.utc)
+        read = second.astimezone(_ON_BY_TWENTY)
+        assert_that([second - first, read.minute, read.second, read.utcoffset() - first.utcoffset()]).is_equal_to(
+            [datetime.timedelta(seconds=25), 0, 55, datetime.timedelta(seconds=20)]
+        )
+        assert_that(first).is_equal_to_ignoring_seconds(second)
+        assert_that(first.replace(fold=1)).is_equal_to_ignoring_seconds(second)
+        assert_that(read.replace(fold=1)).is_equal_to_ignoring_seconds(first.astimezone(datetime.timezone.utc))
+
+    def test_a_fold_set_where_the_clock_reads_once_passes_two_moments_of_one_minute(self):
+        noon = datetime.datetime(2026, 11, 1, 12, 0, 10, tzinfo=_FALLS_BACK, fold=1)
+        later = noon.astimezone(datetime.timezone.utc) + datetime.timedelta(seconds=30)
+        earlier = noon.astimezone(datetime.timezone.utc) - datetime.timedelta(seconds=5)
+        assert_that(noon).is_equal_to_ignoring_seconds(later).is_equal_to_ignoring_seconds(earlier)
+
+    def test_a_day_holds_both_readings_of_its_repeated_hour(self):
+        first = datetime.datetime(2026, 11, 1, 2, 30, tzinfo=_FALLS_BACK)
+        hour_later = first.astimezone(datetime.timezone.utc) + datetime.timedelta(hours=1)
+        assert_that(first).is_equal_to_ignoring_time(hour_later)
 
     def test_a_naive_pair_is_left_as_it_is(self):
         assert_that(datetime.datetime(2026, 1, 1, 12, 0, 5)).is_equal_to_ignoring_seconds(
