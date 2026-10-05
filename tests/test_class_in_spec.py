@@ -91,7 +91,7 @@ class TestAClassInASpec:
 
     def test_the_sentence_above_the_line_is_the_one_it_was(self):
         assert_that(_lines({"id": 7}, {"id": int})[0]).is_equal_to(
-            "Expected <{'id': 7}> to match structure a mapping matching structure {id: <<class 'int'>>}, but at <id>:"
+            "Expected <{'id': 7}> to match structure {id: <<class 'int'>>}, but at <id>:"
             " expected <<class 'int'>>, but was <7>."
         )
 

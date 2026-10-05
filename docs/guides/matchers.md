@@ -221,7 +221,7 @@ try:
     })
 except AssertionError as failure:
     print(str(failure).splitlines()[0])
-    # Expected <{.., 'age': 15, ..}> to match structure a mapping matching structure {.., age: a value between <18> and <120>, ..}, but at <age>: expected a value between <18> and <120>, but was <15>.
+    # Expected <{.., 'age': 15, ..}> to match structure {.., age: a value between <18> and <120>, ..}, but at <age>: expected a value between <18> and <120>, but was <15>.
 ```
 
 A plain dict, a model and an attrs instance are written that way, a record under its class name:

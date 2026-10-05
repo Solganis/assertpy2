@@ -467,7 +467,7 @@ class SatisfiesMixin(_MixinBase):
             shown = _elided_mapping(mapped, kept, *spelling)
             return self.error(
                 f"Expected <{_capped(self.val) if shown is None else _truncated(shown)}> to match structure"
-                f" {_elided_spec(matcher, kept)}, but"
+                f" {_elided_spec(spec, kept)}, but"
                 f" {matcher.render_mismatch(mismatches)}."
                 f"{under(class_in_spec((one.path.text, one.actual, one.literal) for one in mismatches))}",
                 actual=self.val,

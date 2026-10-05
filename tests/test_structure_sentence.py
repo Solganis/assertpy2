@@ -50,7 +50,7 @@ def _sentence(value: object, spec: dict) -> str:
 
 
 def _value_said(value: object, spec: dict) -> str:
-    found = re.match(r"Expected <(.*)> to match structure a mapping matching structure ", _sentence(value, spec))
+    found = re.match(r"Expected <(.*)> to match structure ", _sentence(value, spec))
     assert found is not None
     return found[1]
 
@@ -155,31 +155,30 @@ class _Dumped:
 class TestTheSentenceLeavesOutWhatMatched:
     def test_one_wrong_leaf(self):
         assert_that(_sentence(_RECORD, {"id": match.is_instance_of(str), "name": "Ann"})).is_equal_to(
-            "Expected <{'id': 7, ..}> to match structure a mapping matching structure {id: an instance of <str>, ..},"
+            "Expected <{'id': 7, ..}> to match structure {id: an instance of <str>, ..},"
             " but at <id>: expected an instance of <str>, but was <7> of type <int>."
         )
 
     def test_a_leaf_below_is_reached_through_the_key_it_is_under(self):
         assert_that(_sentence(_RECORD, {"name": "Ann", "profile": {"city": "Paris", "zip": "0150"}})).is_equal_to(
-            "Expected <{.., 'profile': {'city': 'Oslo', ..}, ..}> to match structure a mapping matching structure"
+            "Expected <{.., 'profile': {'city': 'Oslo', ..}, ..}> to match structure"
             " {.., profile: {city: <Paris>, ..}}, but at <profile.city>: expected <Paris>, but was <Oslo>."
         )
 
     def test_every_mismatch_stands_and_the_first_is_named(self):
         assert_that(_sentence(_RECORD, {"id": 8, "profile": {"city": "Paris"}, "name": "Ann"})).is_equal_to(
-            "Expected <{'id': 7, .., 'profile': {'city': 'Oslo', ..}, ..}> to match structure a mapping matching"
-            " structure {id: <8>, profile: {city: <Paris>}, ..}, but at <id>: expected <8>, but was <7>."
+            "Expected <{'id': 7, .., 'profile': {'city': 'Oslo', ..}, ..}> to match structure"
+            " {id: <8>, profile: {city: <Paris>}, ..}, but at <id>: expected <8>, but was <7>."
         )
 
     def test_a_key_the_value_does_not_hold_leaves_nothing_of_it_standing(self):
         assert_that(_sentence(_RECORD, {"name": "Ann", "phone": match.is_non_empty_string()})).is_equal_to(
-            "Expected <{..}> to match structure a mapping matching structure {.., phone: a non-empty string},"
-            " but missing key <phone>."
+            "Expected <{..}> to match structure {.., phone: a non-empty string}, but missing key <phone>."
         )
 
     def test_a_key_not_held_below_leaves_the_key_above_it(self):
         assert_that(_sentence(_RECORD, {"profile": {"country": "NO"}})).is_equal_to(
-            "Expected <{.., 'profile': {..}, ..}> to match structure a mapping matching structure"
+            "Expected <{.., 'profile': {..}, ..}> to match structure"
             " {profile: {country: <NO>}}, but missing key <profile.country>."
         )
 
@@ -199,13 +198,11 @@ class TestTheSentenceLeavesOutWhatMatched:
         assert_that(_value_said(value, spec)).is_equal_to(said)
 
     def test_the_spec_keeps_its_own_order(self):
-        assert_that(_spec_said({"a": 0, "b": 0, "c": 0}, {"c": 1, "b": 0, "a": 1})).is_equal_to(
-            "a mapping matching structure {c: <1>, .., a: <1>}"
-        )
+        assert_that(_spec_said({"a": 0, "b": 0, "c": 0}, {"c": 1, "b": 0, "a": 1})).is_equal_to("{c: <1>, .., a: <1>}")
 
     def test_a_value_that_is_no_mapping_where_the_spec_goes_on_is_printed_there(self):
         assert_that(_sentence(_RECORD, {"tags": {"first": "a"}, "name": "Ann"})).is_equal_to(
-            "Expected <{.., 'tags': ['a']}> to match structure a mapping matching structure {tags: {first: <a>}, ..},"
+            "Expected <{.., 'tags': ['a']}> to match structure {tags: {first: <a>}, ..},"
             " but at <tags>: expected a mapping, but was <['a']>."
         )
 
@@ -217,22 +214,21 @@ class TestTheSentenceLeavesOutWhatMatched:
     def test_a_structure_matcher_below_keeps_its_words(self):
         spec = {"name": "Ann", "profile": match.structure({"city": "Paris", "zip": "0150"})}
         assert_that(_spec_said(_RECORD, spec)).is_equal_to(
-            "a mapping matching structure {.., profile: a mapping matching structure {city: <Paris>, ..}}"
+            "{.., profile: a mapping matching structure {city: <Paris>, ..}}"
         )
         assert_that(_value_said(_RECORD, spec)).is_equal_to("{.., 'profile': {'city': 'Oslo', ..}, ..}")
 
     def test_a_matcher_that_failed_is_described_whole(self):
         spec = {"name": "Ann", "tags": match.each_item(match.structure({"id": 1, "kind": "x"}))}
         assert_that(_spec_said(_RECORD, spec)).is_equal_to(
-            "a mapping matching structure"
-            " {.., tags: each item matching a mapping matching structure {id: <1>, kind: <x>}}"
+            "{.., tags: each item matching a mapping matching structure {id: <1>, kind: <x>}}"
         )
 
     def test_past_five_the_rest_are_counted(self):
         held = {f"k{i}": i for i in range(9)}
         assert_that(_sentence(held, {f"k{i}": -1 for i in range(8)})).is_equal_to(
-            "Expected <{'k0': 0, 'k1': 1, 'k2': 2, 'k3': 3, 'k4': 4, ... and 3 more}> to match structure a mapping"
-            " matching structure {k0: <-1>, k1: <-1>, k2: <-1>, k3: <-1>, k4: <-1>, ... and 3 more},"
+            "Expected <{'k0': 0, 'k1': 1, 'k2': 2, 'k3': 3, 'k4': 4, ... and 3 more}> to match structure"
+            " {k0: <-1>, k1: <-1>, k2: <-1>, k3: <-1>, k4: <-1>, ... and 3 more},"
             " but at <k0>: expected <-1>, but was <0>."
         )
 
@@ -243,7 +239,7 @@ class TestTheSentenceLeavesOutWhatMatched:
         spec["count"] = {"clicks": match.is_type_of(int), "positive_feedback": match.is_type_of(int)}
         sentence = _sentence(wide, spec)
         assert_that(sentence).is_equal_to(
-            "Expected <{.., 'count': {'clicks': '12', ..}}> to match structure a mapping matching structure"
+            "Expected <{.., 'count': {'clicks': '12', ..}}> to match structure"
             " {.., count: {clicks: exactly type <int>, ..}}, but at <count.clicks>: expected exactly type <int>,"
             " but was <12> of type <str>."
         )
@@ -266,7 +262,7 @@ class TestTheSentenceLeavesOutWhatMatched:
         raised = _raised(held, {"leaf": _Never(), "d": 4})
         assert_that(type(raised)).is_same_as(AssertionFailure)
         assert_that(str(raised).split("\n")[0]).is_equal_to(
-            "Expected <{.., 'leaf': Shrinking()}> to match structure a mapping matching structure {leaf: nothing, ..},"
+            "Expected <{.., 'leaf': Shrinking()}> to match structure {leaf: nothing, ..},"
             " but at <leaf>: expected nothing, but was something."
         )
 
@@ -294,8 +290,8 @@ class TestARecordIsWrittenAsItsClass:
 
         held = Customer(id=1, name="Ann", address=Address(city="Oslo", zip="0150"), tags=["a"])
         assert_that(_sentence(held, {"name": "Ann", "address": {"city": "Paris"}})).is_equal_to(
-            "Expected <Customer(.., address={'city': 'Oslo', ..}, ..)> to match structure a mapping matching"
-            " structure {.., address: {city: <Paris>}}, but at <address.city>: expected <Paris>, but was <Oslo>."
+            "Expected <Customer(.., address={'city': 'Oslo', ..}, ..)> to match structure"
+            " {.., address: {city: <Paris>}}, but at <address.city>: expected <Paris>, but was <Oslo>."
         )
 
     def test_an_attrs_instance_is_named_and_a_record_it_holds_is_printed_whole(self):
@@ -357,9 +353,7 @@ class TestWhatCannotBeReadThatWayIsPrintedWhole:
     )
     def test_a_mapping_that_is_no_exact_dict(self, held):
         assert_that(_value_said(held, {"id": 8, "name": "Ann"})).is_equal_to(str(held))
-        assert_that(_spec_said(held, {"id": 8, "name": "Ann"})).is_equal_to(
-            "a mapping matching structure {id: <8>, ..}"
-        )
+        assert_that(_spec_said(held, {"id": 8, "name": "Ann"})).is_equal_to("{id: <8>, ..}")
 
     def test_a_dict_below_that_is_no_exact_dict_is_printed_whole_there(self):
         held = {"id": 7, "profile": collections.OrderedDict(city="Oslo", zip="0150")}
@@ -392,7 +386,7 @@ class TestWhatCannotBeReadThatWayIsPrintedWhole:
         walked = _counts_of(lambda: StructureMatcher(spec).walk_mismatches(held))
         assert_that(_counts_of(lambda: _failed(held, spec))).is_equal_to(walked)
         assert_that(_value_said(held, spec)).is_equal_to(str(held))
-        assert_that(_spec_said(held, spec)).is_equal_to("a mapping matching structure {Counted(): <2>, ..}")
+        assert_that(_spec_said(held, spec)).is_equal_to("{Counted(): <2>, ..}")
 
     def test_a_key_of_a_class_of_its_own_the_spec_asks_for_and_the_value_lacks(self):
         held = {"id": 7, "name": "Ann"}
@@ -406,15 +400,13 @@ class TestWhatCannotBeReadThatWayIsPrintedWhole:
 
     def test_a_spec_that_is_no_exact_dict_is_described_whole(self):
         assert_that(_sentence(_RECORD, _Spec(id=8, name="Ann"))).is_equal_to(
-            "Expected <{'id': 7, ..}> to match structure a mapping matching structure {id: <8>, name: <Ann>},"
+            "Expected <{'id': 7, ..}> to match structure {id: <8>, name: <Ann>},"
             " but at <id>: expected <8>, but was <7>."
         )
 
     def test_a_spec_below_that_is_no_exact_dict_is_described_whole_there(self):
         spec = {"name": "Ann", "profile": _Spec(city="Paris", zip="0150")}
-        assert_that(_spec_said(_RECORD, spec)).is_equal_to(
-            "a mapping matching structure {.., profile: {city: <Paris>, zip: <0150>}}"
-        )
+        assert_that(_spec_said(_RECORD, spec)).is_equal_to("{.., profile: {city: <Paris>, zip: <0150>}}")
         assert_that(_value_said(_RECORD, spec)).is_equal_to("{.., 'profile': {'city': 'Oslo', ..}, ..}")
 
     def test_a_structure_matcher_of_a_class_of_its_own_describes_itself(self):
@@ -423,7 +415,7 @@ class TestWhatCannotBeReadThatWayIsPrintedWhole:
                 return "a profile"
 
         spec = {"name": "Ann", "profile": Named({"city": "Paris", "zip": "0150"})}
-        assert_that(_spec_said(_RECORD, spec)).is_equal_to("a mapping matching structure {.., profile: a profile}")
+        assert_that(_spec_said(_RECORD, spec)).is_equal_to("{.., profile: a profile}")
 
 
 class TestTheFailureHoldsWhatItHeld:
@@ -534,7 +526,7 @@ class TestTheSentenceIsWhatLiesOnTheWayToItsMismatches:
     def test_read_back_the_spec_said_is_the_spec_on_the_way_and_nothing_else(self, pair):
         record, spec = pair
         standing = _on_the_way(spec, _failed(record, spec))
-        read_back = _read_back(_spec_said(record, spec).removeprefix("a mapping matching structure "))
+        read_back = _read_back(_spec_said(record, spec))
         assert read_back == standing
         assert repr(read_back) == repr(standing)
 
