@@ -133,7 +133,10 @@ assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 `path` is the operation's key in the spec, not the request URL. A Swagger 2.0 `basePath` (or an OpenAPI 3
 server prefix) is not part of it, so an endpoint served at `/api/v1/version` is looked up as `/version`.
 
-`status` defaults to `200`, then `201`, then `default`. Pass `status=` to pick another.
+`status` defaults to `200`, then `201`, then the range `2XX`, then `default`. Pass `status=` to pick
+another. A status is looked up as the spec declares it: its own code first, then its range (`404` under
+`4XX`), then `default`. A status none of the three covers is refused with a `ValueError`. Swagger 2.0
+has no ranges.
 
 When the body does not conform, the message names the operation and counts the failures. Every one is
 reported with its JSON path and the constraint it broke, not just the first:

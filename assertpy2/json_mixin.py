@@ -202,6 +202,28 @@ def _resolve_local_ref(spec: dict[str, Any], ref: str):
     return node, segments
 
 
+def _status_text(status: Any) -> str:
+    """A status as a Responses Object spells it.  Read off `int` where it is one: below 3.11 the `str` of
+    `HTTPStatus.NOT_FOUND` was its name, and the response it named was not found."""
+    kind = type(status)
+    return str(int.__index__(status)) if issubclass(kind, int) and not issubclass(kind, bool) else str(status)
+
+
+def _declared_for(status: str, responses: Any, *, ranged: bool) -> str | None:
+    """The key under which an operation declares the response for *status*, or ``None`` where it declares none.
+
+    Its own code first, then its range, then ``default``.  OpenAPI 3: "2XX represents all response codes between
+    [200-299]", "only the following range definitions are allowed: 1XX, 2XX, 3XX, 4XX, and 5XX", and "the
+    explicit code definition takes precedence over the range definition for that code".  ``default`` is "the
+    documentation of responses other than the ones declared for specific HTTP response codes".  Swagger 2.0 has
+    codes and ``default``, and no ranges.
+    """
+    known = [status, "default"]
+    if ranged and len(status) == 3 and status.isascii() and status.isdigit() and status[0] in "12345":
+        known.insert(1, f"{status[0]}XX")
+    return next((key for key in known if key in responses), None)
+
+
 def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str | int | None, content_type: str):
     """Resolve an operation's response-body schema to a JSON Pointer into the spec document.
 
@@ -216,12 +238,15 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         responses = operation["responses"]
     except (KeyError, TypeError):
         raise ValueError(f"OpenAPI spec has no operation <{method.upper()} {path}>.") from None
+    ranged = not str(spec.get("swagger", "")).startswith("2")
     if status is not None:
-        status_key = str(status)
-        if status_key not in responses:
-            raise ValueError(f"Operation <{method.upper()} {path}> declares no response <{status_key}>.")
+        asked = _status_text(status)
+        status_key = _declared_for(asked, responses, ranged=ranged)
+        if status_key is None:
+            raise ValueError(f"Operation <{method.upper()} {path}> declares no response <{asked}>.")
     else:
-        status_key = next((code for code in ("200", "201", "default") if code in responses), "")
+        success = ("200", "201", "2XX", "default") if ranged else ("200", "201", "default")
+        status_key = next((code for code in success if code in responses), "")
         if not status_key:
             raise ValueError(f"Specify status: <{method.upper()} {path}> declares responses {sorted(responses)}.")
     response = responses[status_key]
@@ -230,7 +255,7 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         response, response_segments = _resolve_local_ref(spec, response["$ref"])
         if response is None:
             raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> has an unresolvable $ref.")
-    if str(spec.get("swagger", "")).startswith("2"):
+    if not ranged:
         # Swagger 2.0 lists media types in `produces`, checked the way the 3.x content lookup does
         produces = operation.get("produces") or spec.get("produces")
         if produces and content_type not in produces:
@@ -444,8 +469,9 @@ class JsonMixin(_MixinBase):
             spec: a parsed OpenAPI document (dict); loading YAML/JSON is the caller's job.
             path: the operation's path template, e.g. ``"/orders/{id}"``.
             method: the HTTP method, e.g. ``"get"`` (case-insensitive).
-            status: response status to validate against; defaults to ``200``, then ``201``, then
-                ``default``.
+            status: response status to validate against; defaults to ``200``, then ``201``, then the range
+                ``2XX``, then ``default``.  A status is looked up by its own code, then by its range
+                (``404`` under ``4XX``), then under ``default``.  Swagger 2.0 has no ranges.
             content_type: response content type; defaults to ``"application/json"``. Swagger 2.0 has no
                 content-type layer, so it is checked against the operation's ``produces`` list instead
                 (and skipped when the spec declares none).

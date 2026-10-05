@@ -1,3 +1,4 @@
+import http
 import typing
 
 import pytest
@@ -263,8 +264,9 @@ class TestStructuralErrors:
             assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/nope", "get")
 
     def test_unknown_status(self):
-        with pytest.raises(ValueError, match="no response <404>"):
-            assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "get", status=404)
+        asked = assert_that([CONFORMANT]).conforms_to_openapi
+        said = assert_that(asked).raises(ValueError).when_called_with(SPEC_30, "/orders", "get", status=404)
+        said.is_equal_to("Operation <GET /orders> declares no response <404>.")
 
     def test_no_autopickable_status(self):
         spec = {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": {"418": {"content": {}}}}}}}
@@ -378,9 +380,9 @@ class TestSwagger20:
 
 
 class TestStatusAutoSelection:
-    """With no ``status=`` the first declared response among 200, 201 and ``default`` is used, in that
-    order.  Every test above either names a status or declares exactly one, so neither the order nor
-    the membership of that list was pinned."""
+    """With no ``status=`` the first declared response among 200, 201, the range ``2XX`` and ``default`` is
+    used, in that order.  Every test above either names a status or declares exactly one, so neither the
+    order nor the membership of that list was pinned."""
 
     @staticmethod
     def _spec(*status_codes):
@@ -408,6 +410,139 @@ class TestStatusAutoSelection:
             assert_that({}).conforms_to_openapi(self._spec("418"), "/x", "get")
 
 
+class _Code(int):
+    """A number of a class of its own, which prints as it pleases."""
+
+    def __str__(self) -> str:
+        return "a code"
+
+
+class TestAResponseIsSelectedByItsCodeThenItsRangeThenTheDefault:
+    """OpenAPI 3: "2XX represents all response codes between [200-299]", "the explicit code definition takes
+    precedence over the range definition for that code", and ``default`` documents "responses other than the
+    ones declared for specific HTTP response codes".  Swagger 2.0 has codes and ``default``, and no ranges.
+
+    Each schema asks for a property named after its own key, so a failure names the response chosen."""
+
+    @staticmethod
+    def _spec(declared, dialect="3.0.3"):
+        if dialect == "2.0":
+            responses = {code: {"schema": {"type": "object", "required": [code]}} for code in declared}
+            return {"swagger": "2.0", "paths": {"/x": {"get": {"responses": responses}}}}
+        responses = {
+            code: {"content": {"application/json": {"schema": {"type": "object", "required": [code]}}}}
+            for code in declared
+        }
+        return {"openapi": dialect, "paths": {"/x": {"get": {"responses": responses}}}}
+
+    def _chosen(self, declared, status, dialect="3.0.3"):
+        options = {} if status is None else {"status": status}
+        try:
+            assert_that({}).conforms_to_openapi(self._spec(declared, dialect), "/x", "get", **options)
+        except AssertionError as failure:
+            return str(failure).partition("response <")[2].partition(">")[0]
+        except ValueError as refusal:
+            return f"refused: {refusal}"
+        return "passed"
+
+    @pytest.mark.parametrize(
+        ("declared", "status", "chosen"),
+        [
+            (("2XX",), 200, "2XX"),
+            (("2XX",), "299", "2XX"),
+            (("2XX",), "2XX", "2XX"),
+            (("200", "2XX"), 200, "200"),
+            (("200", "2XX"), 204, "2XX"),
+            (("2XX", "default"), 200, "2XX"),
+            (("2XX", "default"), 404, "default"),
+            (("4XX", "default"), 404, "4XX"),
+            (("default",), 500, "default"),
+            (("1XX", "3XX", "5XX"), 101, "1XX"),
+            (("1XX", "3XX", "5XX"), 302, "3XX"),
+            (("1XX", "3XX", "5XX"), 503, "5XX"),
+        ],
+    )
+    def test_the_code_comes_first_then_its_range_then_the_default(self, declared, status, chosen):
+        assert_that(self._chosen(declared, status)).is_equal_to(chosen)
+        assert_that(self._chosen(declared, status, "3.1.0")).is_equal_to(chosen)
+
+    @pytest.mark.parametrize(
+        ("declared", "status"),
+        [
+            (("5XX",), 404),
+            (("2xx",), 200),
+            (("2XX",), 20),
+            (("2XX",), "2000"),
+            (("2XX",), "20X"),
+            (("6XX",), 600),
+            (("0XX",), "099"),
+            (("2XX",), "2\u0660\u0660"),
+        ],
+        ids=[
+            "another range",
+            "a small x",
+            "two digits",
+            "four digits",
+            "no code",
+            "past 5XX",
+            "below 1XX",
+            "other digits",
+        ],
+    )
+    def test_a_status_no_declaration_covers_is_refused_by_its_name(self, declared, status):
+        assert_that(self._chosen(declared, status)).is_equal_to(
+            f"refused: Operation <GET /x> declares no response <{status}>."
+        )
+
+    @pytest.mark.parametrize("status", [404, "404", http.HTTPStatus.NOT_FOUND, _Code(404)])
+    def test_a_status_is_read_by_the_number_it_holds(self, status):
+        """Below 3.11 the `str` of `HTTPStatus.NOT_FOUND` was its name, and the response it named was not found."""
+        assert_that(self._chosen(("404", "4XX"), status)).is_equal_to("404")
+        assert_that(self._chosen(("4XX",), status)).is_equal_to("4XX")
+        assert_that(self._chosen(("200",), status)).is_equal_to(
+            "refused: Operation <GET /x> declares no response <404>."
+        )
+
+    def test_a_truth_value_is_no_status(self):
+        assert_that(self._chosen(("1", "default"), True)).is_equal_to("default")
+        assert_that(self._chosen(("1",), True)).is_equal_to("refused: Operation <GET /x> declares no response <True>.")
+
+    def test_a_response_declared_under_an_empty_key_is_found_by_it(self):
+        assert_that(self._chosen(("",), "")).is_equal_to("")
+
+    def test_swagger_two_has_the_default_and_no_ranges(self):
+        assert_that(self._chosen(("2XX",), 200, "2.0")).starts_with("refused: Operation <GET /x> declares no response")
+        assert_that(self._chosen(("default",), 404, "2.0")).is_equal_to("default")
+        assert_that(self._chosen(("200", "default"), 200, "2.0")).is_equal_to("200")
+
+    @pytest.mark.parametrize(
+        ("declared", "dialect", "chosen"),
+        [
+            (("2XX",), "3.0.3", "2XX"),
+            (("2XX", "default"), "3.0.3", "2XX"),
+            (("201", "2XX"), "3.0.3", "201"),
+            (("2XX", "default"), "3.1.0", "2XX"),
+            (("2XX", "default"), "2.0", "default"),
+        ],
+    )
+    def test_with_no_status_named_a_success_range_comes_ahead_of_the_default(self, declared, dialect, chosen):
+        assert_that(self._chosen(declared, None, dialect)).is_equal_to(chosen)
+
+    def test_with_no_status_named_swagger_two_does_not_pick_a_range(self):
+        assert_that(self._chosen(("2XX",), None, "2.0")).starts_with("refused: Specify status")
+
+    def test_a_response_under_a_range_may_be_a_reference(self):
+        named = {"content": {"application/json": {"schema": {"type": "integer"}}}}
+        spec = {
+            "openapi": "3.0.3",
+            "components": {"responses": {"Count": named}},
+            "paths": {"/x": {"get": {"responses": {"2XX": {"$ref": "#/components/responses/Count"}}}}},
+        }
+        assert_that(7).conforms_to_openapi(spec, "/x", "get", status=204)
+        with pytest.raises(AssertionError, match="response <2XX>"):
+            assert_that("seven").conforms_to_openapi(spec, "/x", "get", status=204)
+
+
 class TestStructuralErrorsNameTheMethodInUpperCase:
     """The operation is echoed as the caller would find it in the spec, which is upper case: the
     argument itself is lower case, so a message built from it unchanged reads as a different key."""
@@ -417,8 +552,8 @@ class TestStructuralErrorsNameTheMethodInUpperCase:
             assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "post")
 
     def test_an_unknown_status_upper_cases_the_method(self):
-        with pytest.raises(ValueError, match=r"<GET /orders/\{id\}>"):
-            assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "get", status=404)
+        with pytest.raises(ValueError, match=r"<GET /orders>"):
+            assert_that([CONFORMANT]).conforms_to_openapi(SPEC_30, "/orders", "get", status=404)
 
     def test_a_missing_content_type_upper_cases_the_method(self):
         spec = {
