@@ -375,6 +375,122 @@ def _stringify_keys(node: Any) -> Any:
     return node
 
 
+def _refers_to(part: Any) -> list[str] | None:
+    """Every ``$ref`` held anywhere in *part*, as data, or ``None`` where places alone do not say what it reads.
+
+    That is under JSON Schema 2020-12 a schema with an ``$id``, which is the base of the references under it,
+    a ``$dynamicRef``, which is followed like a reference and names its schema another way, and a ``$schema``:
+    jsonschema reads a schema by the dialect it declares, and another dialect has other ways to refer, the
+    ``$recursiveRef`` of 2019-09 to the root of the document among them.  Read as data and not by the keywords
+    that hold a schema, so a reference inside an ``example`` counts as well: more is copied than is read, and
+    never less.
+    """
+    found: list[str] = []
+    pending = [part]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            if "$id" in node or "$dynamicRef" in node or "$schema" in node:
+                return None
+            ref = node.get("$ref")
+            if isinstance(ref, str):
+                found.append(ref)
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    return found
+
+
+def _named_by_its_keys(holder: Any, sound: set[int]) -> bool:
+    """Whether a text key of *holder* names in a part cut out below it what it names in the copy of the whole.
+
+    Not where a key of it is no text: the copy turns keys to text and keeps the later of two that read alike,
+    so ``7`` beside ``"7"`` names another schema there.  And not where the mapping is a schema with an ``id``
+    or ``$id`` of its own: a reference under it is read from that base, which a part cut out below it does
+    not carry.  *sound* holds the mappings found so, and each is gone through once a check: a mapping of
+    20 000 schemas costs 0.2 ms.
+    """
+    if id(holder) in sound:
+        return True
+    if not isinstance(holder, dict) or isinstance(holder.get("id"), str) or isinstance(holder.get("$id"), str):
+        return False
+    if not set(map(type, holder)) <= {str}:
+        return False
+    sound.add(id(holder))
+    return True
+
+
+def _responses_read(spec: Any, path: Any, method: Any, sound: set[int]) -> dict[str, Any] | None:
+    """The responses of one operation and what the spec says of itself, copied to the places they have in it.
+
+    ``None`` where the operation is not found as written, or a mapping on the way to it does not name by its
+    keys what it would in the whole (`_named_by_its_keys`).
+    """
+    if not (isinstance(path, str) and isinstance(method, str)):
+        return None
+    operation: Any = spec
+    for key in ("paths", path, method.lower()):
+        if not _named_by_its_keys(operation, sound) or key not in operation:
+            return None
+        operation = operation[key]
+    if not _named_by_its_keys(operation, sound):
+        return None
+    read = {key: _stringify_keys(operation[key]) for key in ("responses", "produces") if key in operation}
+    part = {key: _stringify_keys(spec[key]) for key in ("openapi", "swagger", "produces") if key in spec}
+    part["paths"] = {path: {method.lower(): read}}
+    return part
+
+
+def _taken_to(part: dict[str, Any], spec: Any, segments: list[str], sound: set[int]) -> tuple[tuple[str, ...], Any]:
+    """Copy what *segments* name in *spec* to the same place in *part*: the place copied whole, and the copy.
+
+    A list on the way is the place, and is copied whole: a place in a list is a number, and a part of a list
+    has other numbers.  The copy is ``None`` where a mapping on the way does not name by its keys what it
+    would in the whole (`_named_by_its_keys`), and nothing is copied.
+    """
+    holder, taken, depth = spec, part, 0
+    while _named_by_its_keys(holder, sound):
+        child = holder[segments[depth]]
+        if depth == len(segments) - 1 or isinstance(child, list):
+            taken[segments[depth]] = _stringify_keys(child)
+            return tuple(segments[: depth + 1]), taken[segments[depth]]
+        holder, taken, depth = child, taken.setdefault(segments[depth], {}), depth + 1
+    return (), None
+
+
+def _part_read(spec: Any, path: Any, method: Any) -> dict[str, Any] | None:
+    """The part of a spec that a check of one operation reads, copied with its keys as text.
+
+    The responses of the operation, and whatever they refer to, each at the place it has in the spec, so a
+    pointer names in the part what it names in the whole.  The rest is never looked at: copied whole on every
+    call, a spec of 4 MB cost 13 ms a check, and one of 16 MB cost 60.
+
+    ``None`` where the part cannot be cut out by places alone (`_refers_to`, `_named_by_its_keys`), or the
+    operation or something it refers to is not found as a pointer into this document names it: a reference
+    elsewhere, to an anchor or by an address is none.  The whole is copied then, as it was, and says what is
+    wrong.
+    """
+    sound: set[int] = set()
+    part = _responses_read(spec, path, method, sound)
+    if part is None:
+        return None
+    whole: set[tuple[str, ...]] = {("paths", path, method.lower(), "responses")}
+    pending = _refers_to(part)
+    while pending:
+        target, segments = _resolve_local_ref(spec, pending.pop())
+        if target is None:
+            return None
+        if any(tuple(segments[:depth]) in whole for depth in range(1, len(segments) + 1)):
+            continue
+        place, copied = _taken_to(part, spec, segments, sound)
+        more = _refers_to(copied)
+        if copied is None or more is None:
+            return None
+        whole.add(place)
+        pending.extend(more)
+    return None if pending is None else part
+
+
 def _resolve_local_ref(spec: dict[str, Any], ref: str):
     """Follow a local JSON-Pointer ``$ref`` (``#/a/b/c``); return ``(target_node, [a, b, c])``, or
     ``(None, [])`` for a non-local or dangling ref.
@@ -545,9 +661,13 @@ def _pointer_to(document: Any, wanted: object) -> str:
 
 
 def _read_as_json_schema(
-    document: dict[str, Any], reference: str, resolver: Any, references: _References, *, swagger: bool
-) -> None:
+    document: dict[str, Any], reference: str, resolver: Any, references: _References, *, swagger: bool, whole: bool
+) -> bool:
     """Read the schemas a response reaches into the JSON Schema the validator knows, in the copy handed here.
+
+    ``False``, with nothing read or refused, where *document* is a part of the spec and a schema reached holds
+    an ``id`` of its own: a reference under it is then read from another base than the place it is written at,
+    which the part was not cut out for.
 
     Every mark is read before any ``nullable`` is rewritten: a schema one property names may be rewritten for
     another first, and the union it becomes holds the mark a level down.
@@ -557,6 +677,8 @@ def _read_as_json_schema(
     ``nullable`` is rewritten, which may move what a schema holds a level down.
     """
     reached = _schemas_reached(reference, resolver, references)
+    if not whole and any("id" in schema for schema, _ in reached):
+        return False
     for schema, _ in reached:
         unheard = _unheard(schema)
         if unheard:
@@ -572,6 +694,7 @@ def _read_as_json_schema(
     for schema, _ in reached:
         schema.pop("$schema", None)
         _nullable_as_null(schema, "x-nullable" if swagger else "nullable")
+    return True
 
 
 def _status_text(status: Any) -> str:
@@ -646,6 +769,51 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         segments = [*response_segments, "content", content_type, "schema"]
     pointer = "#/" + "/".join(segment.replace("~", "~0").replace("/", "~1") for segment in segments)
     return status_key, pointer
+
+
+def _validator_over(
+    document: Any, path: str, method: str, status: str | int | None, content_type: str, *, whole: bool
+) -> tuple[str, Any] | None:
+    """The key of the response asked for and a validator of its schema, over *document*, which is its to rewrite.
+
+    ``None`` where *document* is a part of the spec that turns out too small to be read alone.
+    """
+    jsonschema_mod = _ensure_jsonschema()
+    import referencing
+    from referencing.exceptions import Unresolvable
+    from referencing.jsonschema import DRAFT4, DRAFT202012
+
+    version = str(document.get("openapi", ""))
+    is_swagger_2 = _SWAGGER_2.fullmatch(str(document.get("swagger", ""))) is not None
+    # matched whole, not by prefix: "3.10.0" starts with "3.1", and "3.1.garbage" is no version at all
+    read = _OPENAPI_VERSION.fullmatch(version)
+    if version and read is None:
+        # read as 3.0 an unknown version validates against Draft 4, which passes anything it cannot spell
+        raise ValueError(f"openapi version <{version}> is not one this can validate (3.0, 3.1 and 3.2 are)")
+    # 3.2 keeps 3.1's dialect: the schema object is JSON Schema 2020-12 in both
+    is_openapi_31 = read is not None and read.group(1) in ("1", "2")
+    status_key, pointer = _openapi_resolve(document, path, method, status, content_type)
+    specification = DRAFT202012 if is_openapi_31 else DRAFT4
+    validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
+    base = "urn:assertpy2-openapi"
+    registry = referencing.Registry().with_resource(
+        uri=base, resource=referencing.Resource(contents=document, specification=specification)
+    )
+    # 3.1 is JSON Schema 2020-12 already
+    if not is_openapi_31 and not _read_as_json_schema(
+        document,
+        base + pointer,
+        registry.resolver(base_uri=base),
+        _References(Unresolvable, DRAFT4),
+        swagger=is_swagger_2,
+        whole=whole,
+    ):
+        return None
+    return status_key, validator_cls(
+        {"$ref": base + pointer},
+        registry=registry,
+        format_checker=_openapi_formats(jsonschema_mod, a_labels=is_openapi_31),
+    )
 
 
 def _openapi_expected(error: Any) -> str:
@@ -868,42 +1036,12 @@ class JsonMixin(_MixinBase):
             ValueError: if the operation, status, or content type is not found in the spec, or a schema of
                 OpenAPI 3.0 or Swagger 2.0 holds a keyword of later JSON Schema, which would be passed over
         """
-        jsonschema_mod = _ensure_jsonschema()
-        import referencing
-        from referencing.exceptions import Unresolvable
-        from referencing.jsonschema import DRAFT4, DRAFT202012
-
-        normalized = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
-        version = str(normalized.get("openapi", ""))
-        is_swagger_2 = _SWAGGER_2.fullmatch(str(normalized.get("swagger", ""))) is not None
-        # matched whole, not by prefix: "3.10.0" starts with "3.1", and "3.1.garbage" is no version at all
-        read = _OPENAPI_VERSION.fullmatch(version)
-        if version and read is None:
-            # read as 3.0 an unknown version validates against Draft 4, which passes anything it cannot spell
-            raise ValueError(f"openapi version <{version}> is not one this can validate (3.0, 3.1 and 3.2 are)")
-        # 3.2 keeps 3.1's dialect: the schema object is JSON Schema 2020-12 in both
-        is_openapi_31 = read is not None and read.group(1) in ("1", "2")
-        status_key, pointer = _openapi_resolve(normalized, path, method, status, content_type)
-        document = normalized
-        specification = DRAFT202012 if is_openapi_31 else DRAFT4
-        validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
-        base = "urn:assertpy2-openapi"
-        registry = referencing.Registry().with_resource(
-            uri=base, resource=referencing.Resource(contents=document, specification=specification)
-        )
-        if not is_openapi_31:  # 3.1 is JSON Schema 2020-12 already
-            _read_as_json_schema(
-                document,
-                base + pointer,
-                registry.resolver(base_uri=base),
-                _References(Unresolvable, DRAFT4),
-                swagger=is_swagger_2,
-            )
-        validator = validator_cls(
-            {"$ref": base + pointer},
-            registry=registry,
-            format_checker=_openapi_formats(jsonschema_mod, a_labels=is_openapi_31),
-        )
+        part = _part_read(spec, path, method)
+        over = None if part is None else _validator_over(part, path, method, status, content_type, whole=False)
+        if over is None:
+            # YAML may parse numeric-looking keys (e.g. status 200) as ints, so the copy has them as text
+            over = _validator_over(_stringify_keys(spec), path, method, status, content_type, whole=True)
+        status_key, validator = cast("tuple[str, Any]", over)
         errors = sorted(validator.iter_errors(self.val), key=lambda error: (error.json_path, str(error.validator)))
         if not errors:
             return self
