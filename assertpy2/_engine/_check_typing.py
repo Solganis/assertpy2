@@ -132,6 +132,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> AssertionOutcome: ...
         @property
         def not_(self) -> Self: ...

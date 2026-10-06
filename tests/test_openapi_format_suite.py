@@ -1,9 +1,10 @@
-"""The formats `conforms_to_openapi` checks, held to the official JSON Schema test suite.
+"""What `conforms_to_openapi` checks of its own, held to the official JSON Schema test suite.
 
 The files under ``tests/data/json_schema_test_suite`` are ``tests/draft2020-12/optional/format`` of
-json-schema-org/JSON-Schema-Test-Suite at revision ``5b0ee1613e45fcc2bddac00e07c19cd49b00d8a8``, unchanged,
-with the licence of that repository beside them.  They are cases written by other hands than this
-library's: a test written with the code pins the reading of whoever wrote both.
+json-schema-org/JSON-Schema-Test-Suite at revision ``5b0ee1613e45fcc2bddac00e07c19cd49b00d8a8``, and
+``multipleOf.json`` of ``tests/draft2020-12`` beside them, unchanged, with the licence of that repository.
+They are cases written by other hands than this library's: a test written with the code pins the reading of
+whoever wrote both.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ pytest.importorskip("jsonschema", reason="jsonschema not installed")
 pytest.importorskip("idna", reason="idna not installed")
 
 _SUITE = pathlib.Path(__file__).resolve().parent / "data" / "json_schema_test_suite"
-_FORMATS = ("date", "date-time", "duration", "hostname", "time", "uri")
+_FORMATS = ("date", "date-time", "duration", "email", "hostname", "time", "uri")
 
 
 def _cases(formats: tuple[str, ...]) -> list[Any]:
@@ -43,7 +44,9 @@ _CONTENT = {
     "date": "b8e7e8448fdd9d6ff1674bae652e966f5b7bd2bfe2a98b04ba3cae1ab2d73d68",
     "date-time": "a33151e215521153f9f463be0d28c5b422d376572169e61b2425a634b008202c",
     "duration": "bba1dbed0c41c16eabc0a1ab6d26d58a6fdd6b9624358bc9583fcceccfe41a91",
+    "email": "5354bb2971299ef6edd36c65f86ac66f50cd25cd1a770c9199be05bb6ec5866d",
     "hostname": "d621bd19097237f36b6b297109ff651b85603633f7461b803dcdc052b463a206",
+    "multipleOf": "4af4e2bcf6c098695e9dbdcbb33ae5ee8139e3100dcb03a3ff7d68156f61bc06",
     "time": "dc9491c5e982465f09dcb47be21c98940abceee1882dfbdb4be7f87d7546701e",
     "uri": "68260e635545d2fa2d3a6afb9e0cb6dec688aa7477b375b0d52a2f2d9d67949f",
 }
@@ -82,16 +85,31 @@ def test_the_cases_three_zero_reads_otherwise_are_the_a_labels_of_the_suite():
         assert_that(_took({"format": "hostname"}, value, "3.1.0")).described_as(value).is_false()
 
 
+@pytest.mark.parametrize("version", ["3.0.3", "3.1.0"])
+@pytest.mark.parametrize(("schema", "value", "valid"), _cases(("multipleOf",)))
+def test_a_case_of_multiple_of_gets_the_verdict_the_suite_gives_it(schema, value, valid, version):
+    assert_that(_took(schema, value, version)).is_equal_to(valid)
+
+
 def test_the_files_are_the_ones_of_the_revision_named():
     """Held by content: a case edited to agree with the library would keep every count as it was."""
-    read = {form: json.loads((_SUITE / f"{form}.json").read_text(encoding="utf-8")) for form in _FORMATS}
-    counted = {form: sum(len(group["tests"]) for group in groups) for form, groups in read.items()}
+    read = {name: json.loads((_SUITE / f"{name}.json").read_text(encoding="utf-8")) for name in _CONTENT}
+    counted = {name: sum(len(group["tests"]) for group in groups) for name, groups in read.items()}
     assert_that(counted).is_equal_to(
-        {"date": 81, "date-time": 43, "duration": 52, "hostname": 64, "time": 55, "uri": 47}
+        {
+            "date": 81,
+            "date-time": 43,
+            "duration": 52,
+            "email": 71,
+            "hostname": 64,
+            "multipleOf": 11,
+            "time": 55,
+            "uri": 47,
+        }
     )
     content = {
-        form: hashlib.sha256(json.dumps(groups, sort_keys=True, ensure_ascii=True).encode("ascii")).hexdigest()
-        for form, groups in read.items()
+        name: hashlib.sha256(json.dumps(groups, sort_keys=True, ensure_ascii=True).encode("ascii")).hexdigest()
+        for name, groups in read.items()
     }
     assert_that(content).is_equal_to(_CONTENT)
     licence = " ".join((_SUITE / "LICENSE").read_text(encoding="utf-8").split())

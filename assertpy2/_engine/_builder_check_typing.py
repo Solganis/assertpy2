@@ -1051,6 +1051,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> AssertionOutcome: ...
         @overload
         def conforms_to_openapi(
@@ -1061,6 +1062,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> AssertionOutcome: ...
 
         def is_before(self: _CheckAnyValue[datetime.datetime], other: datetime.datetime) -> AssertionOutcome: ...

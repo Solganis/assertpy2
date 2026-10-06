@@ -1,4 +1,5 @@
-"""Texts near a `uri`, a `hostname` and a `duration`, for the checks of `conforms_to_openapi` to be compared on.
+"""Texts near a `uri`, a `hostname`, a `duration` and an `email`, for the checks of `conforms_to_openapi` to be
+compared on.
 
 One corpus for two comparisons: with the packages jsonschema asks for each format, and with the grammar of the
 format written out a second time.
@@ -101,3 +102,36 @@ def uris() -> Iterator[str]:
     yield from near(["http", ":", "//", "example.com", "", "/a/b", "", "", ""], with_a_host)
     yield from near(["urn", ":", "//u:p@", "[2001:db8::7]", ":80", "", "?a=b&c=/?", "#a/?", ""], with_a_host)
     yield from near(["urn", ":", "a", "", "", ""], [scheme, colon, rootless, query, fragment, end])
+
+
+def mailboxes() -> Iterator[str]:
+    """No label here is past 63 characters: the length of a domain is the host name's rule, held apart."""
+    local = ["a", "a.b", "a..b", ".a", "a.", "", "!#$%&'*+-/=?^_`{|}~", "a b", "a(b)", "a,b", "a:b", "\u00e9"]
+    local += [
+        '"a b"',
+        '""',
+        '"a\\"b"',
+        '"a\\\\"',
+        '"a"b',
+        '"a"b"',
+        '"a',
+        'a"',
+        '"a\\"',
+        '"\u007f"',
+        '"a\tb"',
+        '"\\\u00e9"',
+    ]
+    local += ["a\\@b", "a@b", "[1.2.3.4]"]
+    at = ["@", "", "@@", "\uff20"]
+    labels = ["b", "B1", "0", "b-c", "b--c", "-b", "b-", "b_c", "", "\u00e9", "b c", "b(c)"]
+    in_them = ["1.2.3.4", "001.02.3.4", "1.2.3.256", "1.2.3", "1.2.3.4.5", "", "::1", "IPv4:1.2.3.4", "x400:abc"]
+    in_them += [
+        "IPv6:",
+        "\u0131Pv6:::1",
+        *(f"{tag}:{inner[1:-1]}" for tag in ("IPv6", "ipv6") for inner in in_brackets()),
+    ]
+    hosts = [*labels, *(f"[{inner}]" for inner in in_them), "[1.2.3.4", "1.2.3.4]", "b[1.2.3.4]"]
+    later = ["", *["." + label for label in labels]]
+    parts = [local, at, hosts, later, ["", "\n", " ", "."]]
+    yield from near(["a", "@", "b", ".c", ""], parts)
+    yield from near(['"a b"', "@", "[IPv6:2001:db8::7]", "", ""], parts)

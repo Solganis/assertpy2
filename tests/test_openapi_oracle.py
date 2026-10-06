@@ -39,7 +39,7 @@ _AS_REQUIRED = extend(_AS_SENT, validators={"writeOnly": None})
 """The oracle without its refusal of a ``writeOnly`` property that did arrive, which 3.0.3 words as SHOULD NOT."""
 
 
-def _here(value: object, schema: dict[str, Any]) -> bool:
+def _here(value: object, schema: dict[str, Any], **options: Any) -> bool:
     """The verdict of this library, which must leave the spec and the value it was handed as they were."""
     wrapped = {"type": "object", "properties": {"v": schema}}
     spec = {
@@ -50,7 +50,7 @@ def _here(value: object, schema: dict[str, Any]) -> bool:
     body = {"v": value}
     handed, sent = copy.deepcopy(spec), copy.deepcopy(body)
     try:
-        assert_that(body).conforms_to_openapi(spec, "/x", "get")
+        assert_that(body).conforms_to_openapi(spec, "/x", "get", **options)
     except AssertionFailure:
         passed = False
     else:
@@ -146,24 +146,53 @@ def test_a_response_gets_the_verdict_the_other_validator_gives_it(schema, value)
     assert_that(_here(value, schema)).described_as(f"{value!r} against {schema!r}").is_equal_to(_there(value, schema))
 
 
+@settings(deadline=None, max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+@given(schema=_SCHEMAS.map(lambda schema: schema if "type" in schema else {**schema, "nullable": True}), value=_VALUES)
+def test_under_strict_nullable_a_mark_with_no_type_beside_it_gets_that_verdict_too(schema, value):
+    """With ``strict_nullable`` the mark is read as the other validator reads it, on whatever schema it stands."""
+    assert_that(_here(value, schema, strict_nullable=True)).described_as(f"{value!r} against {schema!r}").is_equal_to(
+        _there(value, schema)
+    )
+
+
+_NULLABLE_WITH_NO_TYPE = pytest.mark.parametrize(
+    "schema",
+    [
+        {"nullable": True, "$ref": "#/components/schemas/Text"},
+        {"nullable": True, "allOf": [{"type": "string"}]},
+        {"nullable": True, "anyOf": [{"type": "string"}]},
+        {"nullable": True, "oneOf": [{"type": "string"}]},
+    ],
+    ids=["$ref", "allOf", "anyOf", "oneOf"],
+)
+
+
 class TestWhereTheTwoAreMeantToPart:
     """Each is a decision recorded in the guide, with the other validator's verdict beside this library's."""
 
-    @pytest.mark.parametrize(
-        "schema",
-        [
-            {"nullable": True, "$ref": "#/components/schemas/Text"},
-            {"nullable": True, "allOf": [{"type": "string"}]},
-            {"nullable": True, "anyOf": [{"type": "string"}]},
-            {"nullable": True, "oneOf": [{"type": "string"}]},
-        ],
-        ids=["$ref", "allOf", "anyOf", "oneOf"],
-    )
+    @_NULLABLE_WITH_NO_TYPE
     def test_a_nullable_reference_or_composition_allows_null_here_alone(self, schema):
         assert_that(_there(None, schema)).is_false()
         assert_that(_here(None, schema)).is_true()
         assert_that(_here("a", schema)).is_equal_to(_there("a", schema)).is_true()
         assert_that(_here(5, schema)).is_equal_to(_there(5, schema)).is_false()
+
+    @_NULLABLE_WITH_NO_TYPE
+    def test_under_strict_nullable_it_does_not(self, schema):
+        assert_that(_here(None, schema, strict_nullable=True)).is_equal_to(_there(None, schema)).is_false()
+        assert_that(_here("a", schema, strict_nullable=True)).is_true()
+
+    @pytest.mark.parametrize(("value", "step"), [(19.99, 0.01), (0.3, 0.1), (4.35, 0.01), (0.07, 0.01)])
+    def test_a_decimal_multiple_is_one_here_alone(self, value, step):
+        """The other validator divides two floats, as jsonschema does, and ``19.99 / 0.01`` is no whole number."""
+        schema = {"type": "number", "multipleOf": step}
+        assert_that(_there(value, schema)).is_false()
+        assert_that(_here(value, schema)).is_true()
+        past = value + step / 2
+        assert_that(_here(past, schema)).is_equal_to(_there(past, schema)).is_false()
+        assert_that(_here(7.5, {"type": "number", "multipleOf": 2.5})).is_equal_to(
+            _there(7.5, schema | {"multipleOf": 2.5})
+        )
 
     def test_a_write_only_property_that_did_arrive_is_refused_there_alone(self):
         schema = {"type": "object", "properties": {"p": {"type": "string", "writeOnly": True}}}
@@ -241,6 +270,9 @@ _LEFT_OUT: dict[str, dict[str, Any]] = {
         "a unit left out between two": lambda written: re.sub("(?<=H)(?=[0-9]+S)|(?<=Y)(?=[0-9]+D)", "0M", written),
     },
 }
+_TAKEN_HERE_ALONE: dict[str, dict[str, Any]] = {"duration": {"a letter in lower case": str.upper}}
+"""Why this library takes a text a package refuses: an ABNF has a quoted letter stand for either case."""
+
 """Why a package takes a text this library refuses, each reason one the grammar of the format rules out.
 
 Beside each stands the text with that reason taken out of it.  A text the two part on has to pass here once
@@ -251,9 +283,10 @@ every reason it shows is taken out, so a reason is what kept the text out and no
 class TestTheThreeFormatsBesideThePackagesJsonschemaAsks:
     """`uri`, `hostname` and `duration` are checked here by their grammars, where jsonschema asks a package each.
 
-    Asked the texts of one fixed corpus, the two have to agree, with two things allowed.  Over that corpus this
-    library is never the wider one: no text passes here that the package refuses.  Where the package takes a
-    text refused here, the text passes here too once the reasons of `_LEFT_OUT` are taken out of it.
+    Asked the texts of one fixed corpus, the two have to agree, with two things allowed.  Where the package
+    takes a text refused here, the text passes here too once the reasons of `_LEFT_OUT` are taken out of it.
+    Where a text passes here that the package refuses, the package takes it once the reasons of
+    `_TAKEN_HERE_ALONE` are taken out, and there is one: a letter of a `duration` in lower case.
     """
 
     CHECKS: ClassVar[dict[str, Any]] = {
@@ -268,14 +301,23 @@ class TestTheThreeFormatsBesideThePackagesJsonschemaAsks:
         pytest.importorskip(package, reason=f"{package} not installed")
         theirs = pytest.importorskip("jsonschema").FormatChecker()
         assert_that(theirs.checkers).contains_key(form)
-        seen = {"taken by both": 0, "refused by both": 0, **dict.fromkeys(_LEFT_OUT[form], 0)}
+        wider = _TAKEN_HERE_ALONE.get(form, {})
+        seen = {"taken by both": 0, "refused by both": 0, **dict.fromkeys([*_LEFT_OUT[form], *wider], 0)}
         for written in sorted(set(texts())):
             took, they_took = here(written), theirs.conforms(written, form)
             if took is they_took:
                 seen["taken by both" if took else "refused by both"] += 1
                 continue
-            assert_that(took).described_as(f"{written!r} passes here and is refused by {package}").is_false()
             mended = written
+            for reason, without in wider.items() if took else ():
+                if without(mended) != mended:
+                    mended = without(mended)
+                    seen[reason] += 1
+            if took:
+                assert_that(mended != written and theirs.conforms(mended, form)).described_as(
+                    f"{written!r} passes here and is refused by {package}, and no reason named explains it"
+                ).is_true()
+                continue
             for reason, without in _LEFT_OUT[form].items():
                 if without(mended) != mended:
                     mended = without(mended)

@@ -17,7 +17,7 @@ from unittest.mock import patch
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, json_mixin
-from tests.format_corpus import uris
+from tests.format_corpus import mailboxes, uris
 
 jsonschema = pytest.importorskip("jsonschema", reason="jsonschema not installed")
 
@@ -222,7 +222,6 @@ class TestWhatJsonschemaCheckedAlreadyIsCheckedStill:
         ("form", "good", "bad"),
         [
             ("date", "2026-02-28", "2026-13-45"),
-            ("email", "a@b.example", "not-an-email"),
             ("ipv4", "10.0.0.1", "10.0.0.256"),
             ("uuid", "123e4567-e89b-12d3-a456-426614174000", "not-a-uuid"),
         ],
@@ -634,7 +633,10 @@ class TestATimeIsTheFullTimeOfRfc3339:
 
 
 class TestADurationIsWrittenAsRfc3339WritesIt:
-    """The grammar is appendix A of RFC 3339, which is what the format names, and is narrower than ISO 8601."""
+    """The grammar is appendix A of RFC 3339, which is what the format names, and is narrower than ISO 8601.
+
+    A letter is taken in either case.  RFC 5234 has a quoted letter of an ABNF stand for both, and the official
+    suite takes the ``t`` and ``z`` of a `date-time` on that ground."""
 
     @pytest.mark.parametrize(
         "duration",
@@ -660,6 +662,12 @@ class TestADurationIsWrittenAsRfc3339WritesIt:
             "PT0S",
             "P001D",
             "P99999999999999999999Y",
+            "p1d",
+            "pt1h",
+            "p1w",
+            "p1y2m3dt4h5m6s",
+            "P1y2M3dT4h5M6s",
+            "pT1S",
         ],
     )
     def test_a_duration_passes(self, duration):
@@ -674,7 +682,6 @@ class TestADurationIsWrittenAsRfc3339WritesIt:
             "PT",
             "P1",
             "1D",
-            "p1d",
             "P1YT",
             "P1DT",
             "PTT1S",
@@ -701,16 +708,229 @@ class TestADurationIsWrittenAsRfc3339WritesIt:
             " P1D",
             "P1D\n",
             "P\u0661D",
+            "pt0.5s",
+            "pt0,5s",
+            "p1w1d",
+            "p1y2d",
+            "PT1\u017f",
+            "\u212a1D",
         ],
     )
     def test_a_text_that_is_none_fails(self, text):
         assert_that(_conforms(text, _text_of("duration"), "3.1.0")).is_false()
         assert_that(_conforms(text, _text_of("duration"))).is_false()
 
+    def test_a_letter_unicode_folds_to_one_of_them_is_none(self):
+        """The long ``s`` upper-cases to ``S``, and a pattern told to ignore case takes it for one."""
+        assert_that("PT1\u017f".upper()).is_equal_to("PT1S")
+        assert_that(re.fullmatch("(?i:PT1S)", "PT1\u017f")).is_not_none()
+        assert_that(_conforms("PT1\u017f", _text_of("duration"))).is_false()
+
+
+class TestAnEmailIsTheMailboxOfRfc5321:
+    """jsonschema asks a text for an ``@`` and no more, so ``@`` passed for an address.  The grammar is the
+    ``Mailbox`` of RFC 5321, section 4.1.2, which is what the format names.  The 71 cases the official suite
+    has for it are held in `tests/test_openapi_format_suite.py`."""
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "a@b",
+            "a@b.example",
+            "A.b-c_d+e@Example.COM",
+            "1@2",
+            "!#$%&'*+-/=?^_`{|}~@b.example",
+            '"a b"@c.example',
+            '""@c.example',
+            '"a@b"@c.example',
+            '"a\\"b"@c.example',
+            '"a\\\\"@c.example',
+            '"a\\ b"@c.example',
+            "a@1.2.3.4",
+            "a@" + "x" * 63 + ".example",
+            "a@[1.2.3.4]",
+            "a@[001.002.003.004]",
+            "a@[255.255.255.255]",
+            "a@[IPv6:1:2:3:4:5:6:7:8]",
+            "a@[IPv6:::]",
+            "a@[IPv6:::1]",
+            "a@[IPv6:1::]",
+            "a@[ipv6:2001:db8::7]",
+            "a@[IPV6:2001:DB8::7]",
+            "a@[IPv6:1:2:3:4:5:6::]",
+            "a@[IPv6:::1:2:3:4:5:6]",
+            "a@[IPv6:1:2:3::4:5:6]",
+            "a@[IPv6:1:2:3:4:5:6:1.2.3.4]",
+            "a@[IPv6:::1.2.3.4]",
+            "a@[IPv6:1:2:3:4::1.2.3.4]",
+            "a@[IPv6:::1:2:3:4:1.2.3.4]",
+            "a@[IPv6:::ffff:1.2.3.04]",
+        ],
+    )
+    def test_an_address_passes(self, address):
+        assert_that(_conforms(address, _text_of("email"), "3.1.0")).is_true()
+        assert_that(_conforms(address, _text_of("email"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "a",
+            "@",
+            "a@",
+            "@b",
+            "a@b@c",
+            "a b@c",
+            "a.@b",
+            ".a@b",
+            "a..b@c",
+            "a@b.",
+            "a@.b",
+            "a@b..c",
+            "a@-b",
+            "a@b-",
+            "a@b_c",
+            "a@" + "x" * 64 + ".example",
+            "\u00e9@b.example",
+            "a@\u00e9.example",
+            "a@b.example\n",
+            " a@b.example",
+            "a@b.example ",
+            '"a@b.example',
+            '"a"b@c.example',
+            '"a"b"@c.example',
+            '"a""@c.example',
+            '"a"@',
+            '"a\u007f"@c.example',
+            '"a\\\u00e9"@c.example',
+            '"a\\"@c.example',
+            "a@[1.2.3]",
+            "a@[1.2.3.256]",
+            "a@[1.2.3.1000]",
+            "a@[1.2.3.4",
+            "a@1.2.3.4]",
+            "a@[]",
+            "a@[::1]",
+            "a@[IPv6:]",
+            "a@[IPv6:1:2:3:4:5:6:7]",
+            "a@[IPv6:1:2:3:4:5:6:7:8:9]",
+            "a@[IPv6:1:2:3:4:5:6:7::]",
+            "a@[IPv6:::1:2:3:4:5:6:7]",
+            "a@[IPv6:1::2:3:4:5:6:7]",
+            "a@[IPv6:1:2:3:4:5::1.2.3.4]",
+            "a@[IPv6:1:2:3:4::5:1.2.3.4]",
+            "a@[IPv6:1:2:3::4:5:6:7]",
+            "a@[IPv6:1:2:3:4:5:1.2.3.4]",
+            "a@[IPv6:1:2:3:4:5:6:7:1.2.3.4]",
+            "a@[IPv6:12345::]",
+            "a@[IPv6:g::]",
+            "a@[IPv6:1::2::3]",
+            "a@[IPv6:::1%eth0]",
+            "a@[IPv6:::1.2.3.256]",
+            "a@[IPv4:1.2.3.4]",
+            "a@[x400:abc]",
+            "a@[\u0131Pv6:::1]",
+        ],
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(text, _text_of("email"), "3.1.0")).is_false()
+        assert_that(_conforms(text, _text_of("email"))).is_false()
+
+    def test_the_domain_has_the_lengths_of_a_host_name(self):
+        """What `format: hostname` holds a name to: 63 characters a label and 253 in all."""
+        longest = ".".join(["x" * 63, "x" * 63, "x" * 63, "x" * 61])
+        assert_that(len(longest)).is_equal_to(253)
+        assert_that(_conforms("a@" + longest, _text_of("email"))).is_true()
+        assert_that(_conforms("a@" + longest + "x", _text_of("email"))).is_false()
+        assert_that(_conforms("a@" + "x" * 63, _text_of("email"))).is_true()
+        assert_that(_conforms("a@" + "x" * 64, _text_of("email"))).is_false()
+
+    def test_the_local_part_has_no_length_in_the_grammar(self):
+        """SMTP allows it 64 characters, which is a limit of the transport and none of the ``Mailbox`` rule."""
+        for length in (64, 65, 1000, 100_000):
+            assert_that(_conforms("a" * length + "@b.example", _text_of("email"))).described_as(length).is_true()
+            assert_that(_conforms('"' + "a" * length + '"@b.example', _text_of("email"))).described_as(length).is_true()
+            assert_that(_conforms("a" * length + ".@b.example", _text_of("email"))).described_as(length).is_false()
+            assert_that(_conforms('"' + "a" * length + '\\"@b.example', _text_of("email"))).described_as(
+                length
+            ).is_false()
+
+    @pytest.mark.parametrize(
+        "local",
+        ["a." * 500_000 + "a", '"' + "a" * 1_000_000 + '"', '"' + "\\a" * 500_000 + '"'],
+        ids=["atoms and dots", "a quoted string", "quoted pairs"],
+    )
+    def test_a_megabyte_is_read_without_the_engine_holding_it(self, local):
+        """Written as a group that repeats, a megabyte of atoms held 63 MB of the engine's stack and one in quotes
+        122: no account of memory shows it, so the pattern is held to having no such group."""
+        assert_that(_conforms(local + "@b.example", _text_of("email"))).is_true()
+        local_part = json_mixin._MAILBOX[: json_mixin._MAILBOX.index(")@") + 1]
+        assert_that(re.findall(r"\)[*+]|\)\{", local_part)).is_empty()
+
+
+def _abnf_of_rfc_5321() -> Any:
+    """Section 4.1.2 of RFC 5321 written out production by production, and the address of 4.1.3 read by counting
+    its groups: a second writing of the pattern checked, which spells the address as its alternatives.
+
+    ``General-address-literal`` is left out of both: its tag has to be registered, and ``IPv6`` is the one that
+    is.  ``Domain`` has no lengths in the ABNF, and `mailboxes()` holds none past a host name's.
+    """
+    atext = r"[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~]"
+    dot_string = rf"{atext}+(?:\.{atext}+)*"
+    qtext_smtp, quoted_pair_smtp = r"[\x20-\x21\x23-\x5b\x5d-\x7e]", r"\x5c[\x20-\x7e]"
+    quoted_string = f'"(?:{qtext_smtp}|{quoted_pair_smtp})*"'
+    let_dig = "[A-Za-z0-9]"
+    sub_domain = f"{let_dig}(?:[A-Za-z0-9-]*{let_dig})?"
+    mailbox = re.compile(
+        rf"(?:{dot_string}|{quoted_string})@(?:{sub_domain}(?:\.{sub_domain})*|\[(?P<literal>[^\[\]]*)\])"
+    )
+
+    def ipv4(text: str) -> bool:
+        snums = text.split(".")
+        return len(snums) == 4 and all(re.fullmatch("[0-9]{1,3}", snum) and int(snum) <= 255 for snum in snums)
+
+    def ipv6(text: str) -> bool:
+        last = text.rsplit(":", 1)[-1]
+        ends_in_ipv4 = "." in last
+        if ends_in_ipv4:
+            if not ipv4(last) or not text[: -len(last)].endswith(":"):
+                return False
+            text = text[: -len(last)]
+            text = text if text.endswith("::") else text[:-1]
+        halves = text.split("::")
+        hexes = [group for half in halves for group in (half.split(":") if half else [])]
+        if len(halves) > 2 or not all(re.fullmatch("[0-9A-Fa-f]{1,4}", group) for group in hexes):
+            return False
+        if len(halves) == 2:
+            return len(hexes) <= (4 if ends_in_ipv4 else 6)
+        return len(hexes) == (6 if ends_in_ipv4 else 8)
+
+    def is_mailbox(text: str) -> bool:
+        read = mailbox.fullmatch(text)
+        if read is None or read.group("literal") is None:
+            return read is not None
+        literal = read.group("literal")
+        return ipv4(literal) or (re.fullmatch("[Ii][Pp][Vv]6:", literal[:5]) is not None and ipv6(literal[5:]))
+
+    return is_mailbox
+
+
+class TestTheEmailCheckIsTheGrammarWrittenOut:
+    def test_over_every_text_of_the_corpus_the_two_writings_agree(self):
+        by_the_grammar = _abnf_of_rfc_5321()
+        took = 0
+        for text in sorted(set(mailboxes())):
+            took += by_the_grammar(text)
+            assert_that(json_mixin._is_email(text)).described_as(f"{text!r} against the ABNF").is_equal_to(
+                by_the_grammar(text)
+            )
+        assert_that(took).is_greater_than(1000)
+
 
 class TestEachIsCheckedAlikeEverywhere:
     CASES: typing.ClassVar[dict[str, tuple[str, str]]] = {
         "uri": ("http://example.com/a", "not a uri"),
+        "email": ("a@b.example", "a b@c.example"),
         "hostname": ("example.com", "not_a_host"),
         "duration": ("P1D", "a day"),
         "time": ("10:00:00Z", "10:00:00"),
@@ -756,7 +976,8 @@ class TestEachIsCheckedAlikeEverywhere:
         asked = (
             "import re, sys; compiled = []; whole = re.compile;"
             "re.compile = lambda pattern, flags=0: compiled.append(pattern) or whole(pattern, flags);"
-            "import assertpy2; mixin = assertpy2.json_mixin; ours = (mixin._URI, mixin._HOSTNAME, mixin._DURATION);"
+            "import assertpy2; mixin = assertpy2.json_mixin;"
+            "ours = (mixin._URI, mixin._HOSTNAME, mixin._DURATION, mixin._MAILBOX);"
             "print([pattern for pattern in compiled if pattern in ours],"
             " sorted({'urllib.parse', 'ipaddress'} & set(sys.modules)) if sys.version_info >= (3, 13) else [])"
         )

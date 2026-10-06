@@ -105,6 +105,13 @@ a 3.0 or 2.0 document changes nothing: the document is read as one dialect throu
 Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf` and `enum` validate with full JSON-Schema
 semantics.
 
+A `multipleOf` divides the numbers as they are written: `19.99` is a multiple of `0.01`. As two floats
+divided it is not, the quotient being `1998.9999999999998`, and jsonschema fails it there. A float is
+read as the decimal it prints as, so `0.30000000000000004` is no multiple of `0.1`. Digits a float
+does not keep are gone before the check sees the number: `1.0000000000000001` is `1.0` once parsed.
+Where they matter, parse with `json.loads(text, parse_float=decimal.Decimal)`, and a `Decimal` is
+divided exactly. A `multipleOf` that is no number above zero is refused with a `ValueError`.
+
 Two keywords of OpenAPI 3.0 are read as 3.0.3 words them, since the value is a response:
 
 - `nullable: true` adds `null` to the `type` beside it and leaves every other keyword as written, so an
@@ -123,6 +130,13 @@ is usually written, and a spec written so would fail on every `null` otherwise. 
 an `allOf`, `anyOf` or `oneOf` is still asked of `null`: an `enum` there lets it through only where it
 lists it, as beside a `type`.
 
+Pass `strict_nullable=True` to leave that reading out and hold `nullable` to the text. With no `type`
+beside it the keyword then does nothing, and `null` is asked of what else the schema holds, as it
+would be with no mark there: a `$ref` to a string refuses it and one to a nullable string takes it, an
+`anyOf` takes it where a branch does, a `oneOf` where exactly one does, and a schema that holds
+nothing else takes it as it takes any value. `x-nullable` and OpenAPI 3.1 are read the same either
+way.
+
 Three limits:
 
 - `required` in one branch of an `allOf` and the `writeOnly` property in another are not brought
@@ -135,13 +149,14 @@ A `format` is checked where there is a check for it:
 
 | `format` | Checked |
 | --- | --- |
-| `date`, `email`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
+| `date`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
+| `email` | always, as the mailbox of RFC 5321: atoms joined by dots or a quoted string, an `@`, then a host name or an address in brackets. `a@b.example`, `"a b"@c.example` and `a@[IPv6:::1]` pass. `@`, `a b@c.example` and `a..b@c.example` fail, and so does an address with a letter past ASCII, which is for `idn-email`. The domain has the lengths of a host name. The local part has none in the grammar, and the 64 characters SMTP allows it are not held |
 | `time` | always, as the `full-time` of RFC 3339, which needs its offset: `10:00:00Z` and `10:00:00+02:00` pass, `10:00:00` fails. A second of `60` is taken in the last minute of a UTC day |
 | `date-time` | always, by the grammar of RFC 3339: `"yesterday"` and `"2026-02-30T10:00:00Z"` fail. A second of `60` is taken in the last minute of a UTC month, where a leap second can fall. The check is the same one whether or not the package that gives jsonschema its own is installed |
 | `int32`, `int64` | always, as the signed range: `2**40` is no `int32` |
 | `uri` | always, by the grammar of RFC 3986: a scheme is required, so `/orders/7` is no `uri` (it is a `uri-reference`), and neither is a text with a space or a non-ASCII letter in it |
 | `hostname` | always, as the syntax of RFC 1123: labels of ASCII letters, digits and hyphens, 63 characters each and 253 in all, with no dot after the last. Under OpenAPI 3.1, whose JSON Schema takes punycode into the format, a label that opens `xn--` has to be a valid A-label of IDNA 2008 as well: `xn--nxasmq6b` passes, `xn--X` fails. The `idna` package of the `json` extra judges it by the Unicode tables of the release installed, so a newer release takes code points assigned since. Under 3.0 and Swagger 2.0 the format is the syntax alone |
-| `duration` | always, by the grammar RFC 3339 gives for it: `P1DT12H` and `P2W` pass. It is narrower than ISO 8601: `PT0.5S`, `P1Y2D` and `-P1D` fail |
+| `duration` | always, by the grammar RFC 3339 gives for it: `P1DT12H` and `P2W` pass, with the letters in either case. It is narrower than ISO 8601: `PT0.5S`, `P1Y2D` and `-P1D` fail. A fraction of a second, which Java and .NET print, is none: leave the format out for a field that carries one |
 | `uri-reference`, `iri`, `idn-email`, `json-pointer`, `uri-template` and the others jsonschema checks beside a package of their own | where that package is installed, and not where it is missing. `jsonschema[format-nongpl]` brings them all |
 
 Pass the parsed spec plus the operation's path and method. Loading the YAML or JSON is your job:

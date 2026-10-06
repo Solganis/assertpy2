@@ -1174,6 +1174,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def conforms_to_openapi(
@@ -1184,6 +1185,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         def is_before(self: _SyncPoll[datetime.datetime], other: datetime.datetime) -> _SyncPoll[_P_co]: ...
@@ -2535,6 +2537,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def conforms_to_openapi(
@@ -2545,6 +2548,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         def is_before(self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime) -> _SyncPoll[_P_co]: ...
@@ -3896,6 +3900,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def conforms_to_openapi(
@@ -3906,6 +3911,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         def is_before(self: _AsyncPoll[datetime.datetime], other: datetime.datetime) -> _AsyncPoll[_P_co]: ...
@@ -5262,6 +5268,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def conforms_to_openapi(
@@ -5272,6 +5279,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         def is_before(self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime) -> _AsyncPoll[_P_co]: ...

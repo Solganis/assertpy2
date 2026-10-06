@@ -230,6 +230,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> Self: ...
 
     class _StructureAssertion(_WalkAssertion, _JsonAssertion, Protocol):

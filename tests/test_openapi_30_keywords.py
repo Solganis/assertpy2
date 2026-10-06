@@ -234,6 +234,103 @@ class TestNullableAddsToTheTypeAndLeavesTheEnumAsWritten:
         assert_that(_violations({"anyOf": [{"allOf": []}, {"type": "null"}]}, {"enum": [untyped]})).is_not_empty()
 
 
+class TestStrictNullableHoldsTheKeywordToItsText:
+    """``strict_nullable=True`` leaves the one wider reading out: with no ``type`` beside it, the keyword does
+    nothing, "only if type is explicitly defined within the same Schema Object"."""
+
+    @staticmethod
+    def _took(value: object, spec: dict[str, Any], **options: Any) -> bool:
+        return assert_that(value).check().conforms_to_openapi(spec, "/x", "get", **options).passed
+
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            {"nullable": True, "$ref": "#/components/schemas/Plain"},
+            {"nullable": True, "allOf": [{"type": "string"}]},
+            {"nullable": True, "anyOf": [{"type": "string"}]},
+            {"nullable": True, "oneOf": [{"type": "string"}]},
+            {"type": "object", "properties": {"p": {"nullable": True, "$ref": "#/components/schemas/Plain"}}},
+        ],
+        ids=["$ref", "allOf", "anyOf", "oneOf", "a property"],
+    )
+    def test_null_is_refused_where_the_wider_reading_alone_took_it(self, schema):
+        nested = "properties" in schema
+        null, text = ({"p": None}, {"p": "a"}) if nested else (None, "a")
+        spec = _spec(schema, "3.0.3")
+        assert_that(self._took(null, spec)).is_true()
+        assert_that(self._took(null, spec, strict_nullable=True)).is_false()
+        assert_that(self._took(null, spec, strict_nullable=False)).is_true()
+        assert_that(self._took(text, spec, strict_nullable=True)).is_true()
+
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            {"type": "string", "nullable": True},
+            {"type": ["string", "integer"], "nullable": True},
+            {"nullable": True, "$ref": "#/components/schemas/A Note"},
+            {"nullable": True, "anyOf": [{"type": "string", "nullable": True}]},
+            {"nullable": True},
+        ],
+        ids=["a type", "a list of types", "a reference to a nullable type", "a nullable branch", "no schema at all"],
+    )
+    def test_null_passes_where_the_text_has_it_pass(self, schema):
+        assert_that(self._took(None, _spec(schema, "3.0.3"), strict_nullable=True)).is_true()
+
+    @pytest.mark.parametrize(
+        ("schema", "takes_null"),
+        [
+            ({"nullable": True, "enum": ["a", None]}, True),
+            ({"nullable": True, "enum": ["a"]}, False),
+            ({"nullable": True, "not": {"type": "string"}}, True),
+            ({"nullable": True, "allOf": [{"type": "string", "nullable": True}]}, True),
+            ({"nullable": True, "allOf": [{"type": "string", "nullable": True}, {"type": "string"}]}, False),
+            ({"nullable": True, "anyOf": [{"type": "string"}, {"type": "integer", "nullable": True}]}, True),
+            ({"nullable": True, "oneOf": [{"type": "string"}, {"type": "integer", "nullable": True}]}, True),
+            (
+                {
+                    "nullable": True,
+                    "oneOf": [{"type": "string", "nullable": True}, {"type": "integer", "nullable": True}],
+                },
+                False,
+            ),
+        ],
+        ids=[
+            "an enum that lists it",
+            "an enum that does not",
+            "a negation it meets",
+            "every branch of allOf takes it",
+            "one branch of allOf does not",
+            "a branch of anyOf takes it",
+            "one branch of oneOf takes it",
+            "two branches of oneOf take it",
+        ],
+    )
+    def test_null_is_asked_of_what_else_the_schema_holds(self, schema, takes_null):
+        """The mark with no ``type`` beside it does nothing, so each keyword answers as it would with no mark."""
+        unmarked = {keyword: held for keyword, held in schema.items() if keyword != "nullable"}
+        assert_that(self._took(None, _spec(schema, "3.0.3"), strict_nullable=True)).is_equal_to(takes_null)
+        assert_that(self._took(None, _spec(unmarked, "3.0.3"))).is_equal_to(takes_null)
+
+    def test_it_is_held_so_where_the_whole_spec_is_copied(self):
+        """A key that is no text beside the schema referred to sends the check to the copy of the whole."""
+        spec = _spec({"nullable": True, "$ref": "#/components/schemas/Plain"}, "3.0.3")
+        spec["components"]["schemas"] = {**COMPONENTS, 404: {"type": "string"}}
+        assert_that(json_mixin._part_read(spec, "/x", "get")).is_none()
+        assert_that(self._took(None, spec)).is_true()
+        assert_that(self._took(None, spec, strict_nullable=True)).is_false()
+
+    def test_the_extension_of_swagger_two_has_no_text_to_be_held_to(self):
+        spec = _spec({"x-nullable": True, "$ref": "#/definitions/Plain"}, "2.0")
+        assert_that(self._took(None, spec)).is_true()
+        assert_that(self._took(None, spec, strict_nullable=True)).is_true()
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_three_one_has_no_such_keyword_either_way(self, strict):
+        spec = _spec({"nullable": True, "$ref": "#/components/schemas/Plain"}, "3.1.0")
+        assert_that(self._took(None, spec, strict_nullable=strict)).is_false()
+        assert_that(self._took("a", spec, strict_nullable=strict)).is_true()
+
+
 class TestARequiredWriteOnlyPropertyIsNotAskedOfAResponse:
     def test_the_property_may_be_absent(self):
         assert_that(_violations({"id": 1}, _account(["id", "password"], SECRET))).is_empty()

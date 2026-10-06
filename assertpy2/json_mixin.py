@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import decimal
+import fractions
 import functools
 import json
 import re
@@ -7,10 +9,13 @@ from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import _exact_real
 from ._engine._require import argument, require_type
 from .errors import DiffEntry, DiffResult
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ._engine._compat import Self
 
 __tracebackhide__ = True
@@ -28,19 +33,20 @@ _RFC_3339_TIME: Final = r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(?:[Zz]|(
 _RFC_3339_MOMENT: Final = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]" + _RFC_3339_TIME)
 """A `date-time` as RFC 3339 writes it: a full date, a `T`, then `_RFC_3339_TIME`."""
 
-# The three below are texts that `re` compiles at first use: compiled at import they cost 0.5 ms.
+# The four below are texts that `re` compiles at first use: compiled at import they cost 0.5 ms.
 _DURATION: Final = (
-    r"P(?:"
+    r"(?ai:P(?:"
     r"(?:[0-9]+D|[0-9]+M(?:[0-9]+D)?|[0-9]+Y(?:[0-9]+M(?:[0-9]+D)?)?)"
     r"(?:T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S))?"
     r"|T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S)"
-    r"|[0-9]+W)"
+    r"|[0-9]+W))"
 )
 """A `duration` by the ABNF of RFC 3339, appendix A, which the format is defined by.
 
 Narrower than ISO 8601 where the ABNF is: a unit may be followed only by the next smaller one, so ``P1Y2D`` and
-``PT1H2S`` are no durations, weeks stand alone, and there is no fraction and no sign.  The letters are upper
-case, as ISO 8601 writes them, though a quoted letter of an ABNF stands for either case.
+``PT1H2S`` are no durations, weeks stand alone, and there is no fraction and no sign.  A letter is taken in
+either case: a quoted letter of an ABNF stands for both (RFC 5234), which is the ground the ``t`` and ``z`` of a
+`date-time` are taken on.  In either case of ASCII alone: the long ``s`` of Unicode folds to ``S`` and is none.
 """
 
 _HOSTNAME: Final = (
@@ -50,6 +56,48 @@ _HOSTNAME: Final = (
 """A `hostname` by RFC 1123, section 2.1: labels of ASCII letters, digits and hyphens, a hyphen at neither end,
 63 characters at most, joined by dots with none after the last, and 253 characters in all.  What an ``xn--``
 label may decode to is asked apart, where the dialect asks it (`_is_hostname`)."""
+
+
+def _mailbox_pattern() -> str:
+    """An `email` by the ``Mailbox`` of RFC 5321, section 4.1.2: a local part, an ``@``, then a domain or an
+    address in brackets.
+
+    The local part is atoms joined by dots or a quoted string, and the domain is `_HOSTNAME`.  ASCII alone: an
+    address with other letters is for the format `idn-email`.  The grammar has no lengths, and the 64 that SMTP
+    allows a local part is not held: the domain has the lengths of a host name, as under the format `hostname`.
+
+    The atoms are one run of their characters and their dots, and a quoted string one run of what may stand in
+    it, with what a backslash quotes there judged apart (`_is_email`).
+
+    The address is an IPv4 one, or ``IPv6:`` and an IPv6 one as section 4.1.3 writes it, which is narrower than
+    RFC 4291: ``::`` stands for two groups at least, so six stand beside it at most, and four before an IPv4
+    address.  No other tag is registered, so none is taken.
+    """
+    atoms = r"[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~.]+"
+    octet = "(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])"
+    ipv4 = rf"{octet}(?:\.{octet}){{3}}"
+    group = "[0-9A-Fa-f]{1,4}"
+
+    def groups(count: int) -> str:
+        return f"{group}(?::{group}){{{count - 1}}}" if count else ""
+
+    ipv6 = "|".join(
+        [
+            groups(8),
+            f"{groups(6)}:{ipv4}",
+            *(f"{groups(left)}::(?:{group}(?::{group}){{0,{5 - left}}})?" for left in range(6)),
+            f"{groups(6)}::",
+            *(f"{groups(left)}::(?:{group}:){{0,{4 - left}}}{ipv4}" for left in range(5)),
+        ]
+    )
+    return (
+        # no group repeats: as one, a megabyte of atoms held 63 MB of the engine's stack, and one in quotes 122
+        rf'(?:(?!\.)(?![^@]*\.[.@]){atoms}|"(?P<quoted>[ -~]*)")@'
+        rf"(?:{_HOSTNAME}|\[(?:{ipv4}|(?ai:IPv6):(?:{ipv6}))\])"
+    )
+
+
+_MAILBOX: Final = _mailbox_pattern()
 
 
 def _uri_pattern() -> str:
@@ -171,6 +219,25 @@ def _written_as(pattern: str) -> Any:
 _is_duration: Final = _written_as(_DURATION)
 
 
+def _is_email(value: object) -> bool:
+    """Whether a text is a mailbox of RFC 5321: `_MAILBOX`, and a quoted local part one in which each backslash
+    quotes the character after it and no quote stands bare.
+
+    jsonschema asks a text for an ``@`` and no more, so ``@`` and ``a b@c`` passed for an address.
+    """
+    if not issubclass(type(value), str):
+        return True
+    read = re.fullmatch(_MAILBOX, cast("str", value))
+    if read is None:
+        return False
+    quoting = False
+    for character in read.group("quoted") or "":
+        if not quoting and character == '"':
+            return False
+        quoting = not quoting and character == "\\"
+    return not quoting
+
+
 def _is_hostname(value: object) -> bool:
     """Whether a text is a host name: `_HOSTNAME`, and each label that opens ``xn--`` an A-label of IDNA 2008.
 
@@ -260,7 +327,8 @@ def _openapi_formats(jsonschema_mod: Any, *, a_labels: bool) -> Any:
     rest of what jsonschema checks beside a package of its own stays unchecked where that package is missing.
 
     `time` it checks everywhere, and by the rule of Draft 3: ``HH:MM:SS`` and no more, so ``10:00:00Z``
-    failed and ``10:00:00`` passed, where the format has been RFC 3339's ``full-time`` since Draft 7.
+    failed and ``10:00:00`` passed, where the format has been RFC 3339's ``full-time`` since Draft 7.  `email`
+    it checks everywhere too, by asking for an ``@``.
 
     *a_labels* is whether a `hostname` holds its ``xn--`` labels to IDNA: the dialect of OpenAPI 3.1 does,
     the one of 3.0 and Swagger 2.0 has the format as the syntax of a host name and no more.
@@ -271,9 +339,105 @@ def _openapi_formats(jsonschema_mod: Any, *, a_labels: bool) -> Any:
     checker.checks("date-time")(_is_rfc_3339_moment)
     checker.checks("time")(_is_rfc_3339_time)
     checker.checks("duration")(_is_duration)
+    checker.checks("email")(_is_email)
     checker.checks("hostname")(_is_hostname if a_labels else _written_as(_HOSTNAME))
     checker.checks("uri")(_is_uri)
     return checker
+
+
+def _as_written(number: Any) -> fractions.Fraction | None:
+    """A number exactly, and a float as the decimal it prints as: ``None`` for one that is not finite.
+
+    A float prints as the shortest decimal that reads back as it, which is the number a document wrote unless
+    that had more digits than a float keeps: ``0.30000000000000004`` stays what it is, and no ``0.3``.  The
+    print is `float`'s own, whatever the class of the value.
+    """
+    if issubclass(type(number), float):
+        try:
+            # through `Decimal`, which reads the text in C: `Fraction` reading it cost a number 0.4 us more
+            return fractions.Fraction(decimal.Decimal(float.__repr__(number)))
+        except (ValueError, OverflowError):
+            return None
+    exact = _exact_real(number)
+    return exact[1] if isinstance(exact, tuple) and not exact[0] else None
+
+
+@functools.lru_cache(maxsize=64)
+def _step_written(divisor: float) -> fractions.Fraction | None:
+    """`_as_written` of a ``multipleOf`` that is a plain `int` or `float`, kept: read again for each number a
+    schema holds to it, it cost the number 0.7 us."""
+    return _as_written(divisor)
+
+
+def _a_reference_alone(schema: Any) -> Any:
+    """What Draft 4 reads of a schema: its ``$ref`` alone where it has one, and every keyword where it has none."""
+    ref = schema.get("$ref")
+    return schema.items() if ref is None else [("$ref", ref)]
+
+
+@functools.cache
+def _dividing_as_written(validator_cls: Any, *, redeclared: bool = False) -> Any:
+    """*validator_cls* with a ``multipleOf`` that divides the numbers as they are written (`_as_written`).
+
+    jsonschema divides two floats and asks whether the quotient is whole, and ``19.99 / 0.01`` is
+    ``1998.9999999999998``: a price failed the ``multipleOf: 0.01`` it meets.  The class is made once: made
+    for each check it cost the check 213 us.
+
+    A ``multipleOf`` that is no number above zero is refused, as every draft has the keyword.  jsonschema
+    raised `ZeroDivisionError` for a zero, took a negative one by its size and passed every number for an
+    infinity.
+
+    jsonschema hands a schema that declares a ``$schema`` to the class it keeps for that dialect, whose
+    division is its own.  With *redeclared*, the schema goes to the class made here from that one instead,
+    whichever of the drafts that have the keyword it declares: the one the document is read by or another.
+    That is asked of every schema entered, at 0.1 to 0.2 us each, so it is for a document that may hold a ``$schema``
+    and no other.
+
+    Made by ``create()`` with what Draft 4 reads beside a ``$ref`` handed in.  ``extend()`` of jsonschema 4.18,
+    the oldest the ``json`` extra takes, makes a class that has lost it and validates what stands there.
+    """
+    jsonschema_mod = _ensure_jsonschema()
+    import attrs
+    from jsonschema.validators import create
+
+    def multiple_of(validator: Any, divisor: Any, instance: Any, schema: Any) -> Iterator[Any]:
+        if not validator.is_type(instance, "number"):
+            return
+        if type(divisor) in (int, float):
+            step = _step_written(divisor)
+        else:
+            step = _as_written(divisor) if validator.is_type(divisor, "number") else None
+        if step is None or step <= 0:
+            raise ValueError(f"multipleOf <{divisor!r}> is no number above zero, which is what the keyword takes")
+        read = _as_written(instance)
+        if read is None or read.numerator * step.denominator % (read.denominator * step.numerator):
+            yield jsonschema_mod.ValidationError(f"{instance!r} is not a multiple of {divisor}")
+
+    keywords: dict[str, Any] = {**validator_cls.VALIDATORS, "multipleOf": multiple_of}
+    # the drafts that read a `$ref` alone.  Draft 3 has no `multipleOf` and is left to jsonschema
+    alone = (jsonschema_mod.Draft4Validator, jsonschema_mod.Draft6Validator, jsonschema_mod.Draft7Validator)
+    divided = (*alone, jsonschema_mod.Draft201909Validator, jsonschema_mod.Draft202012Validator)
+    made: Any = create(
+        meta_schema=validator_cls.META_SCHEMA,
+        validators=keywords,
+        type_checker=validator_cls.TYPE_CHECKER,
+        format_checker=validator_cls.FORMAT_CHECKER,
+        id_of=validator_cls.ID_OF,
+        **({"applicable_validators": _a_reference_alone} if validator_cls in alone else {}),
+    )
+    as_jsonschema_evolves = made.evolve
+
+    def evolve(validator: Any, **changes: Any) -> Any:
+        evolved = as_jsonschema_evolves(validator, **changes)
+        named = type(evolved)
+        if named not in divided:
+            return evolved
+        ours = _dividing_as_written(named, redeclared=True)
+        return ours(**{field.alias: getattr(evolved, field.name) for field in attrs.fields(named) if field.init})
+
+    if redeclared:
+        made.evolve = evolve
+    return made
 
 
 def _parsed_json_path(path: str):
@@ -321,7 +485,7 @@ def _ensure_jsonschema():
     return jsonschema
 
 
-def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
+def _nullable_as_null(schema: dict[str, Any], keyword: str, *, by_the_text: bool) -> None:
     """Rewrite ``nullable: true`` of one Schema Object into JSON Schema, in place (jsonschema ignores the keyword).
 
     ``"null"`` is added to the ``type`` beside it, which keeps per-keyword error paths precise: a bad ``format``
@@ -336,8 +500,11 @@ def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
     an ``enum`` there allows ``null`` only where it lists it, and a ``not`` still refuses what it refuses.  A
     ``$ref`` goes into the union with everything beside it: OpenAPI 3.0 ignores what stands beside a reference.
 
+    *by_the_text* leaves that wider reading out: ``nullable`` with no ``type`` beside it then does nothing.
+
     Swagger 2.0 spells the idea ``x-nullable``.  It is an extension with no text of its own and keeps the
-    reading it had: ``null`` passes its enum, and any schema with no ``type`` becomes the union.
+    reading it had: ``null`` passes its enum, and any schema with no ``type`` becomes the union, whatever
+    *by_the_text* says.
     """
     nullable = schema.get(keyword)
     if not isinstance(nullable, bool):
@@ -352,6 +519,8 @@ def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
         enum = schema.get("enum")
         if extension and isinstance(enum, list) and None not in enum:
             schema["enum"] = [*enum, None]
+    elif by_the_text and not extension:
+        return
     elif extension or "$ref" in schema:
         inner = dict(schema)
         schema.clear()
@@ -661,7 +830,14 @@ def _pointer_to(document: Any, wanted: object) -> str:
 
 
 def _read_as_json_schema(
-    document: dict[str, Any], reference: str, resolver: Any, references: _References, *, swagger: bool, whole: bool
+    document: dict[str, Any],
+    reference: str,
+    resolver: Any,
+    references: _References,
+    *,
+    swagger: bool,
+    whole: bool,
+    strict_nullable: bool,
 ) -> bool:
     """Read the schemas a response reaches into the JSON Schema the validator knows, in the copy handed here.
 
@@ -693,7 +869,7 @@ def _read_as_json_schema(
         _unrequire_write_only(schema, within, references)
     for schema, _ in reached:
         schema.pop("$schema", None)
-        _nullable_as_null(schema, "x-nullable" if swagger else "nullable")
+        _nullable_as_null(schema, "x-nullable" if swagger else "nullable", by_the_text=strict_nullable)
     return True
 
 
@@ -772,7 +948,14 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
 
 
 def _validator_over(
-    document: Any, path: str, method: str, status: str | int | None, content_type: str, *, whole: bool
+    document: Any,
+    path: str,
+    method: str,
+    status: str | int | None,
+    content_type: str,
+    *,
+    whole: bool,
+    strict_nullable: bool,
 ) -> tuple[str, Any] | None:
     """The key of the response asked for and a validator of its schema, over *document*, which is its to rewrite.
 
@@ -794,7 +977,11 @@ def _validator_over(
     is_openapi_31 = read is not None and read.group(1) in ("1", "2")
     status_key, pointer = _openapi_resolve(document, path, method, status, content_type)
     specification = DRAFT202012 if is_openapi_31 else DRAFT4
-    validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
+    # a part holds no `$schema` (`_refers_to`), and under 3.0 each one is taken out
+    validator_cls = _dividing_as_written(
+        jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator,
+        redeclared=whole and is_openapi_31,
+    )
     base = "urn:assertpy2-openapi"
     registry = referencing.Registry().with_resource(
         uri=base, resource=referencing.Resource(contents=document, specification=specification)
@@ -807,6 +994,7 @@ def _validator_over(
         _References(Unresolvable, DRAFT4),
         swagger=is_swagger_2,
         whole=whole,
+        strict_nullable=strict_nullable,
     ):
         return None
     return status_key, validator_cls(
@@ -987,6 +1175,7 @@ class JsonMixin(_MixinBase):
         *,
         status: str | int | None = None,
         content_type: str = "application/json",
+        strict_nullable: bool = False,
     ) -> Self:
         """Assert that val conforms to an OpenAPI operation's response-body schema.
 
@@ -1003,10 +1192,15 @@ class JsonMixin(_MixinBase):
         as written, so ``null`` passes an enum only where the enum lists it.  A property marked
         ``writeOnly: true`` is not asked for by ``required``, since val is a response.
 
+        A ``multipleOf`` divides the numbers as they are written, so ``19.99`` is a multiple of ``0.01``,
+        which it is not as two floats divided.  A float is read as the decimal it prints as: digits a float
+        does not keep are gone before val is handed in, and a `decimal.Decimal` keeps them.
+
         A ``format`` is checked where there is a check for it: ``date``, ``time``, ``date-time``, ``email``,
         ``ipv4``, ``ipv6``, ``uuid``, ``regex``, ``uri``, ``hostname``, ``duration``, and OpenAPI's ``int32``
         and ``int64``.  A ``time`` is RFC 3339's, with its offset: ``10:00:00Z``, and not ``10:00:00``.  A
-        ``hostname`` under OpenAPI 3.1 has its ``xn--`` labels held to IDNA by the ``idna`` package.  The
+        ``hostname`` under OpenAPI 3.1 has its ``xn--`` labels held to IDNA by the ``idna`` package.  An
+        ``email`` is the mailbox of RFC 5321, and a ``duration`` has no fraction: ``PT0.5S`` is none.  The
         others jsonschema checks only beside a package of their own, ``uri-reference``,
         ``iri``, ``json-pointer`` and ``uri-template`` among them, are checked where that package is
         installed (``jsonschema[format-nongpl]`` brings them all), and pass unchecked where it is not.
@@ -1021,6 +1215,11 @@ class JsonMixin(_MixinBase):
             content_type: response content type; defaults to ``"application/json"``. Swagger 2.0 has no
                 content-type layer, so it is checked against the operation's ``produces`` list instead
                 (and skipped when the spec declares none).
+            strict_nullable: hold OpenAPI 3.0's ``nullable`` to its text, where it adds ``null`` to the
+                ``type`` beside it and does nothing with no ``type`` there.  By default ``nullable: true``
+                beside a ``$ref``, an ``allOf``, an ``anyOf`` or a ``oneOf`` allows ``null`` as well, which is
+                how a nullable reference is usually written.  Swagger 2.0's ``x-nullable`` and OpenAPI 3.1 are
+                read the same either way.
 
         Examples:
             Usage:
@@ -1033,14 +1232,21 @@ class JsonMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does not conform to the response schema
-            ValueError: if the operation, status, or content type is not found in the spec, or a schema of
-                OpenAPI 3.0 or Swagger 2.0 holds a keyword of later JSON Schema, which would be passed over
+            ValueError: if the operation, status, or content type is not found in the spec, a schema of
+                OpenAPI 3.0 or Swagger 2.0 holds a keyword of later JSON Schema, which would be passed over,
+                or a ``multipleOf`` that val is held to is no number above zero
         """
         part = _part_read(spec, path, method)
-        over = None if part is None else _validator_over(part, path, method, status, content_type, whole=False)
+        over = None
+        if part is not None:
+            over = _validator_over(
+                part, path, method, status, content_type, whole=False, strict_nullable=strict_nullable
+            )
         if over is None:
             # YAML may parse numeric-looking keys (e.g. status 200) as ints, so the copy has them as text
-            over = _validator_over(_stringify_keys(spec), path, method, status, content_type, whole=True)
+            over = _validator_over(
+                _stringify_keys(spec), path, method, status, content_type, whole=True, strict_nullable=strict_nullable
+            )
         status_key, validator = cast("tuple[str, Any]", over)
         errors = sorted(validator.iter_errors(self.val), key=lambda error: (error.json_path, str(error.validator)))
         if not errors:

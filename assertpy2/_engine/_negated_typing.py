@@ -523,6 +523,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _DictAssertion[_K, _V]: ...
 
     class _NegatedIterableAssertion(Protocol[_E]):
@@ -634,6 +635,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _IterableAssertion[_E]: ...
 
     class _NegatedDateTimeAssertion(Protocol):
@@ -1707,6 +1709,7 @@ if TYPE_CHECKING:
             *,
             status: str | int | None = ...,
             content_type: str = ...,
+            strict_nullable: bool = ...,
         ) -> _ListAssertion[_E]: ...
 
     class _NegatedTextAssertion(Protocol):
