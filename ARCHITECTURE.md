@@ -120,6 +120,7 @@ import lines are templates inside the generators.
 | `test_typing_chain_corpus.py` | do the chains the chain model takes, to two pivots, still type the way they were recorded |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
 | `test_typing_integrations.py`, `test_typing_http.py` | do real pandas, polars, numpy and HTTP values still resolve |
+| `test_typing_harness.py` | is pyright's report read off its output alone, and refused where that is not one report |
 | `test_overload_order.py` | is the frame overload still above every other shape-keyed one |
 | `test_operation_contract.py` | is the register of operations that reach no verdict still the true one |
 | `test_typing_claims.py` | are the four checkers still run with zero suppressions, as the badge says |

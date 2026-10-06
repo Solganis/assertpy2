@@ -18,7 +18,7 @@ import pathlib
 import re
 import subprocess
 import sys
-from typing import Final
+from typing import Any, Final
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -72,7 +72,15 @@ def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = Non
     working directory first, so run it from the root and it reads this checkout no matter which
     interpreter it was pointed at.
     """
-    result = subprocess.run(
+    result = _finished(command, cwd, python)
+    # every one of them exits non-zero as soon as it reports anything, so the output is what to read
+    return result.stdout + result.stderr
+
+
+def _finished(
+    command: tuple[str, ...], cwd: pathlib.Path | None, python: str | None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [python or sys.executable, "-m", *command],
         capture_output=True,
         text=True,
@@ -80,12 +88,32 @@ def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = Non
         check=False,
         env=checker_env(),
     )
-    # every one of them exits non-zero as soon as it reports anything, so the output is what to read
-    return result.stdout + result.stderr
+
+
+def report_of(finished: subprocess.CompletedProcess[str]) -> Any:
+    """The JSON report a checker printed: its output stream, whole, and nothing of its error stream.
+
+    Read off both streams joined, as the text checkers are, a line pyright wrote to its error stream came after
+    the report and ended every test reading one with ``Extra data``.  Nothing is skipped over to find a report:
+    an output that is not one document is refused with both streams, since the first brace of a notice, or a
+    second document, would be read as the report.  A document with no list of diagnostics is none either.
+    """
+    try:
+        report = json.loads(finished.stdout)
+    except json.JSONDecodeError as refused:
+        report, reason = None, str(refused)
+    else:
+        reason = "it holds no list of diagnostics"
+    if not (isinstance(report, dict) and isinstance(report.get("generalDiagnostics"), list)):
+        raise ValueError(
+            f"a checker printed no JSON report ({reason}): exit code {finished.returncode},"
+            f" output {finished.stdout!r}, error stream {finished.stderr!r}"
+        )
+    return report
 
 
 def pyright(path: pathlib.Path, *options: str) -> Reported:
-    report = json.loads(run("pyright", "--outputjson", *options, str(path)))
+    report = report_of(_finished(("pyright", "--outputjson", *options, str(path)), None, None))
     found: Reported = {}
     for item in report["generalDiagnostics"]:
         found.setdefault(item["range"]["start"]["line"] + 1, set()).add(item.get("rule", item["severity"]))
