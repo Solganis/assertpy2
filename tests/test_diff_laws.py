@@ -13,7 +13,15 @@ Two laws, asked of `is_equal_to` and of what answers the same question, `match.e
    The expected verdict is not a second implementation of the comparison: it is the library's own answer on the
    trees, which hold no cycle.  Two nodes that can be told apart are told apart within as many steps as there
    are pairs of nodes, so nothing past that depth decides.  Where Python's own ``==`` is what compares, a cycle
-   raises `RecursionError` as it does there, and that is the one difference allowed.
+   raises `RecursionError` as it does there, and that is the one difference allowed in the verdict.
+
+   The paths of a graph's diff are among its tree's, with one exception.  Two lists of different lengths are
+   aligned on what their elements print as, and a value that leads back prints ``[...]`` there, whatever it
+   leads back to.  Two such elements may print alike and differ, and the trees they unfold into print apart: the
+   graph is aligned as it prints and the tree as it does, and the two are paired otherwise.  The exception is
+   what lies under two lists aligned so and no more: every other path of the graph is still held to the tree.
+   Three ways of pairing the graph as its tree each paired some other graph, or some list with no cycle in it,
+   worse than it was (`test_two_lists_matched_on_what_leads_back_are_aligned_as_they_print`).
 
 The second law holds for options that read a value the same whether it is reached once or again: a comparator
 that asks whether its operand holds itself answers differently on a tree by design, and is outside it.
@@ -27,7 +35,7 @@ import dataclasses
 import functools
 import itertools
 import types
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from hypothesis import HealthCheck, example, given, settings
@@ -36,12 +44,12 @@ from hypothesis import strategies as st
 from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
 from assertpy2._engine import _diff, _introspection
 from assertpy2._engine._introspection import TakenApart, compares_by_parts
+from assertpy2.errors import DiffEntry, Step
 from tests.test_duality import _PAIRS, Case
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from assertpy2.errors import DiffEntry, Step
 
 _VALUE_OPTIONS = ("strict_types", "tolerance", "comparators")
 """The options that say how two values compare, which a pair taken out of the comparison is asked under again."""
@@ -58,6 +66,97 @@ def _outcome(call: Callable[[], object]) -> tuple[str, AssertionFailure | None]:
     except Exception as refusal:  # a refusal is an outcome here, whatever its class
         return f"refused: {type(refusal).__name__}", None
     return "held", None
+
+
+_Regions = list[tuple[Step, ...]]
+"""Where a comparison walked two sequences it had aligned on a print that stops short, each as the steps to it."""
+
+
+def _printed(value: object) -> tuple[object, list[object]] | None:
+    """What the print of *value* is made of: what it writes of its own, and the values it goes into in turn.
+
+    ``None`` for a value whose print goes into nothing this knows of, which is then its print whole.  A dataclass
+    with the print dataclasses write is gone into by the fields that print, and one with a print of its own is not.
+    """
+    kind = type(value)
+    if kind.__repr__ is dict.__repr__:
+        return ("dict", [repr(key) for key in cast("dict", value)]), list(cast("dict", value).values())
+    if kind.__repr__ in (list.__repr__, tuple.__repr__):
+        return (kind.__repr__, len(cast("list", value))), list(cast("list", value))
+    if dataclasses.is_dataclass(value) and hasattr(kind.__repr__, "__wrapped__"):
+        shown = [field.name for field in dataclasses.fields(value) if field.repr]
+        return (kind.__qualname__, shown), [getattr(value, name) for name in shown]
+    return None
+
+
+def _print_apart_written_out(one: object, other: object) -> bool:
+    """Whether two values print apart once what they lead back to is written out, however far: as their trees do.
+
+    ``repr()`` stops at a value it is inside already and writes ``...`` for it.  Gone through side by side with
+    each pair asked once, the two prints are followed past that, and they part where one writes what the other
+    does not: another class, another length or key, or two values gone into nowhere that print apart.
+    """
+    met: set[tuple[int, int]] = set()
+    pending = [(one, other)]
+    while pending:
+        left, right = pending.pop()
+        if (id(left), id(right)) in met:
+            continue
+        met.add((id(left), id(right)))
+        written, as_written = _printed(left), _printed(right)
+        if written is None or as_written is None:
+            if written is not as_written or repr(left) != repr(right):
+                return True
+        elif written[0] != as_written[0]:
+            return True
+        else:
+            pending.extend(zip(written[1], as_written[1], strict=True))
+    return False
+
+
+def _walked_as_aligned(aligned: list[tuple[object, object]], walked: list[tuple[object, object, Any]]) -> _Regions:
+    """The steps to each two sequences in *walked* that *aligned* holds as a pair, each on its own side."""
+    return [steps for one, other, steps in walked if any(one is left and other is right for left, right in aligned)]
+
+
+def _matched_apart(call: Callable[[], object]) -> tuple[str, AssertionFailure | None, _Regions]:
+    """The outcome of *call*, and where it walked two sequences aligned on a print that stops at an elision.
+
+    Two of their elements were matched on what they print as and then found unequal, and the two print apart
+    once what they lead back to is written out (`_print_apart_written_out`), as their trees do: so a tree is
+    not matched where the graph was.  Two that print alike however far they are written out are matched in a
+    tree as well, and are no exception: with no value that leads back, with one their print leaves out or does
+    not go into, or with three dots that are what a field holds.
+
+    Where, and not which: an index under an aligned list is the actual side's, so the steps of an entry do not
+    lead to its expected side, and the two lists are known by the place the walk took them at.
+    """
+    aligned: list[tuple[object, object]] = []
+    walked: list[tuple[object, object, Any]] = []
+    rechecked, sequence = _diff._rechecked_equal_runs, _diff._Walk.sequence
+
+    def spied(opcodes: list, actual: Any, expected: Any) -> list:
+        answered = rechecked(opcodes, actual, expected)
+        matched = {index for tag, start, stop, _, _ in opcodes if tag == "equal" for index in range(start, stop)}
+        if any(
+            tag == "replace" and at in matched and _print_apart_written_out(actual[at], expected[at - start + other])
+            for tag, start, stop, other, _ in answered
+            for at in range(start, stop)
+        ):
+            aligned.append((actual, expected))
+        return answered
+
+    def followed(walk: Any, actual: Any, expected: Any, prefix: Any) -> Any:
+        # a walk that may not align is one a pairing asks of two values, from a root of its own
+        if walk.aligns:
+            walked.append((actual, expected, prefix.entry().steps))
+        return sequence(walk, actual, expected, prefix)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(_diff, "_rechecked_equal_runs", spied)
+        patched.setattr(_diff._Walk, "sequence", followed)
+        outcome, failure = _outcome(call)
+    return outcome, failure, _walked_as_aligned(aligned, walked)
 
 
 _UNREAD = object()
@@ -83,6 +182,18 @@ def _led_to(root: object, entry: DiffEntry) -> object:
         if value is _NOTHING or value is _UNREAD:
             return value if position == len(entry.steps) - 1 else _UNREAD
     return value
+
+
+def _lies_under(regions: _Regions, entry: DiffEntry) -> bool:
+    """Whether *entry* is at one of *regions* or under it."""
+    return any(entry.steps[: len(region)] == region for region in regions)
+
+
+def _hold_the_paths(failure: AssertionFailure, of_tree: set[str], regions: _Regions, said: str) -> None:
+    """The paths of a graph's diff are among its tree's, but for what lies under one of *regions*."""
+    assert failure.diff is not None
+    apart = {entry.path for entry in failure.diff.entries if not _lies_under(regions, entry)}
+    assert_that(apart).described_as(f"a path the tree does not differ at: {said}").is_subset_of(of_tree)
 
 
 def _spec_paths(option: object) -> list[tuple[object, ...]]:
@@ -279,7 +390,7 @@ def _hold_the_graph(actual: _Graph, expected: _Graph, options: dict[str, Any]) -
     depth = _depth(actual, expected, options)
     tree_left, tree_right = _unfolded(actual, depth), _unfolded(expected, depth)
     of_trees, tree_failure = _outcome(lambda: assert_that(tree_left).is_equal_to(tree_right, **options))
-    of_graphs, failure = _outcome(lambda: assert_that(left).is_equal_to(right, **options))
+    of_graphs, failure, matched_apart = _matched_apart(lambda: assert_that(left).is_equal_to(right, **options))
     if of_graphs == "RecursionError":
         assert_that(_may_run_out_of_stack(actual, expected, options)).described_as(
             f"out of stack where the library compares: {said}"
@@ -296,9 +407,7 @@ def _hold_the_graph(actual: _Graph, expected: _Graph, options: dict[str, Any]) -
         _hold_the_diff(left, right, options, failure)
     if failure is not None and tree_failure is not None and failure.diff is not None:
         of_tree = {entry.path for entry in tree_failure.diff.entries}
-        assert_that({entry.path for entry in failure.diff.entries}).described_as(
-            f"a path the tree does not differ at: {said}"
-        ).is_subset_of(of_tree)
+        _hold_the_paths(failure, of_tree, matched_apart, said)
     return of_graphs
 
 
@@ -472,6 +581,13 @@ def _graph_pairs(draw: st.DrawFn) -> tuple[_Graph, _Graph]:
     ),
     option="comparators",
 )
+@example(
+    pair=(
+        (_Node("list", 2, 1, 0, 1), _Node("list", 2, 2, None, 2), _Node("list", 0, 0, None, 1)),
+        (_Node("list", 2, 1, 2, 1), _Node("list", 2, 0, None, 2), _Node("list", 0, 0, None, 1)),
+    ),
+    option="bare",
+)
 @given(pair=_graph_pairs(), option=st.sampled_from(sorted(_OPTIONS)))
 def test_a_graph_is_read_as_the_tree_it_unfolds_into(pair: tuple[_Graph, _Graph], option: str) -> None:
     actual, expected = pair
@@ -480,6 +596,246 @@ def test_a_graph_is_read_as_the_tree_it_unfolds_into(pair: tuple[_Graph, _Graph]
     if _size(actual, depth) + _size(expected, depth) > 4000:
         return
     _hold_the_graph(actual, expected, options)
+
+
+def test_two_lists_matched_on_what_leads_back_are_aligned_as_they_print() -> None:
+    """Where the paths of a graph are not its tree's: both diffs are true, and they pair the lists otherwise.
+
+    Tried and put back, each for a diff it made worse.  Joining the pieces around every pair that came apart
+    read a list beside its near twin seven rows for four.  Joining around a pair whose print holds ``[...]``
+    did the same wherever a ``__repr__`` writes those characters.  Joining around a pair that differs under
+    where it leads back paired a list holding a record with a field left out of its print, and one beside an
+    ordinary pair that came apart, otherwise than its tree, where they had been paired as it.
+    """
+    outer: list = ["s"]
+    outer.append(["a", outer])
+    inner: list = ["a"]
+    inner.append(inner)
+    assert_that(repr(outer)).is_equal_to(repr(["s", inner])).is_equal_to("['s', ['a', [...]]]")
+    _, of_graphs = _outcome(lambda: assert_that(["a", "b", outer]).is_equal_to(["b", "a", ["s", inner], "a"]))
+    tree, other_tree = ["s", ["a", ["s", ["a", _CUT]]]], ["s", ["a", ["a", ["a", _CUT]]]]
+    _, of_trees = _outcome(lambda: assert_that(["a", "b", tree]).is_equal_to(["b", "a", other_tree, "a"]))
+    assert_that([entry.path for entry in of_graphs.diff.entries]).is_equal_to(["[0]", "[1]", "[2][1][1][0]", "[3]"])
+    assert_that([entry.path for entry in of_trees.diff.entries]).is_equal_to(["expected[0]", "[1]", "[2]"])
+
+
+class TestTheExceptionOfTheSecondLawReachesNoFurtherThanTheListsAlignedSo:
+    """A dict that holds the pair Hypothesis found beside a value of its own: what lies under the two lists
+    aligned on an elision is the exception, and the value beside them is held to the tree like any other."""
+
+    _LISTS = (
+        (_Node("list", 2, 1, 0, 1), _Node("list", 2, 2, None, 2), _Node("list", 0, 0, None, 1)),
+        (_Node("list", 2, 1, 2, 1), _Node("list", 2, 0, None, 2), _Node("list", 0, 0, None, 1)),
+    )
+
+    @staticmethod
+    def _under_a_parent(lists: _Graph, value: object, kind: str) -> _Graph:
+        """The graph of *lists* a node further down, under a parent of *kind* that holds *value* beside it."""
+        moved = tuple(
+            dataclasses.replace(
+                node,
+                next=None if node.next is None else node.next + 1,
+                also=None if node.also is None else node.also + 1,
+            )
+            for node in lists
+        )
+        return (_Node(kind, value, 1), *moved)
+
+    @staticmethod
+    def _paths_of_the_trees(actual: _Graph, expected: _Graph) -> set[str]:
+        depth = _depth(actual, expected, {})
+        _, failure = _outcome(lambda: assert_that(_unfolded(actual, depth)).is_equal_to(_unfolded(expected, depth)))
+        assert failure is not None
+        return {entry.path for entry in failure.diff.entries}
+
+    def test_what_the_exception_covers_in_the_pair_alone(self):
+        """The two lists aligned so are walked at two places of the pair.  Six of its twelve entries lie under
+        them, the four its tree does not have among them, and the other six are paths of the tree."""
+        actual, expected = self._LISTS
+        left, right = _built(actual), _built(expected)
+        _, failure, regions = _matched_apart(lambda: assert_that(left).is_equal_to(right))
+        assert_that(sorted({"".join(f"[{step.value}]" for step in region) for region in regions})).is_equal_to(
+            ["[2][3][2][2]", "[3][2]"]
+        )
+        of_tree = self._paths_of_the_trees(actual, expected)
+        under = sorted(entry.path for entry in failure.diff.entries if _lies_under(regions, entry))
+        assert_that(under).is_equal_to(
+            [
+                "[2][3][2][2][1]",
+                "[2][3][2][2][2]",
+                "[2][3][2][2][4]",
+                "[3][2][1]",
+                "[3][2][2]",
+                "[3][2][4]",
+            ]
+        )
+        assert_that(sorted(entry.path for entry in failure.diff.entries if entry.path not in of_tree)).is_equal_to(
+            ["[2][3][2][2][1]", "[2][3][2][2][2]", "[3][2][1]", "[3][2][2]"]
+        )
+        assert_that(len(failure.diff.entries)).is_equal_to(12)
+
+    @pytest.mark.parametrize(("kind", "beside"), [("dict", "v"), ("list", "[0]"), ("record", ".v")])
+    def test_a_difference_beside_the_lists_is_held_to_the_tree(self, kind, beside):
+        """Under a parent of each kind, the value beside the pair lies outside the exception, the four paths the
+        tree does not have lie under it, and the law holds for the whole."""
+        actual = self._under_a_parent(self._LISTS[0], "one", kind)
+        expected = self._under_a_parent(self._LISTS[1], "other", kind)
+        assert_that(_hold_the_graph(actual, expected, {})).is_equal_to("failed")
+        left, right = _built(actual), _built(expected)
+        _, failure, regions = _matched_apart(lambda: assert_that(left).is_equal_to(right))
+        of_tree = self._paths_of_the_trees(actual, expected)
+        under = {entry.path: _lies_under(regions, entry) for entry in failure.diff.entries}
+        assert_that(under[beside]).is_false()
+        apart = [path for path in under if path not in of_tree]
+        assert_that(apart).is_length(4)
+        assert_that([under[path] for path in apart]).is_equal_to([True] * 4)
+
+    def test_a_path_the_tree_does_not_have_beside_them_is_refused(self):
+        """A diff that named a place outside the two lists, which the tree does not differ at, would be a defect
+        of the pairing somewhere else: the exception does not cover it."""
+        actual = self._under_a_parent(self._LISTS[0], "one", "dict")
+        expected = self._under_a_parent(self._LISTS[1], "other", "dict")
+        left, right = _built(actual), _built(expected)
+        _, failure, regions = _matched_apart(lambda: assert_that(left).is_equal_to(right))
+        of_tree = self._paths_of_the_trees(actual, expected)
+        _hold_the_paths(failure, of_tree, regions, "the pair under a dict")
+        with pytest.raises(AssertionFailure, match="a path the tree does not differ at"):
+            _hold_the_paths(failure, of_tree - {"v"}, regions, "the pair under a dict")
+        with pytest.raises(AssertionFailure, match="a path the tree does not differ at"):
+            _hold_the_paths(failure, of_tree, [], "the pair under a dict")
+
+    def test_an_entry_is_under_a_place_by_the_steps_that_lead_to_it(self):
+        region = (Step("key", "next"), Step("index", 2))
+        under = DiffEntry(path="next[2][0]", steps=(*region, Step("index", 0)))
+        one_sided = DiffEntry(path="next[2]expected[1]", steps=(*region, Step("index", 1, side="expected")))
+        assert_that(_lies_under([region], under)).is_true()
+        assert_that(_lies_under([region], one_sided)).is_true()
+        assert_that(_lies_under([region], DiffEntry(path="next[2]", steps=region))).is_true()
+        assert_that(_lies_under([region], DiffEntry(path="next[3][0]", steps=(region[0], Step("index", 3))))).is_false()
+        assert_that(_lies_under([region], DiffEntry(path="next", steps=region[:1]))).is_false()
+        assert_that(_lies_under([], under)).is_false()
+
+    def test_the_two_lists_of_an_exception_are_a_pair_each_on_its_own_side(self):
+        """One of them walked beside some other list is another comparison, and no place of the exception."""
+        one, other, apart = ["a"], ["b"], ["c"]
+        walked: Any = [(one, other, "as aligned"), (one, apart, "beside another"), (apart, other, "beside another")]
+        assert_that(_walked_as_aligned([(one, other)], walked)).is_equal_to(["as aligned"])
+        assert_that(_walked_as_aligned([(other, one)], walked)).is_empty()
+        assert_that(_walked_as_aligned([], walked)).is_empty()
+
+    def test_two_prints_are_followed_past_where_they_stop(self):
+        outer: list = ["s"]
+        outer.append(["a", outer])
+        inner: list = ["a"]
+        inner.append(inner)
+        assert_that(repr(outer)).is_equal_to(repr(["s", inner]))
+        assert_that(_print_apart_written_out(outer, ["s", inner])).is_true()
+        keyed: dict = {}
+        keyed["k"] = {"a": keyed}
+        looped: dict = {}
+        looped["a"] = looped
+        assert_that(_print_apart_written_out(keyed, {"k": looped})).is_true()
+        record = _Record("s")
+        record.next = _Record("a", record)
+        held = _Record("a")
+        held.next = held
+        assert_that(repr(record)).is_equal_to(repr(_Record("s", held)))
+        assert_that(_print_apart_written_out(record, _Record("s", held))).is_true()
+        longer: list = []
+        longer.extend([[longer], None])
+        shorter: list = []
+        shorter.append(shorter)
+        assert_that(_print_apart_written_out(longer, [shorter, None])).is_true()
+
+    def test_two_that_print_alike_however_far_do_not_part(self):
+        once: list = []
+        once.append(once)
+        twice: list = []
+        twice.append([twice])
+        shared = ["s"]
+        for one, other in (
+            (once, twice),
+            (once, once),
+            ([shared, shared], [["s"], ["s"]]),
+            ("...", "..."),
+            (["[...]"], ["[...]"]),
+            ((1, [2, {"k": 3}]), (1, [2, {"k": 3}])),
+            (_Record("r", _Record("s")), _Record("r", _Record("s"))),
+        ):
+            assert_that(_print_apart_written_out(one, other)).described_as(f"{one!r} and {other!r}").is_false()
+        for one, other in (
+            ([1], (1,)),
+            ([1], [1, 2]),
+            ({"a": 1}, {"b": 1}),
+            (_Record(1), [1]),
+            ("a", "b"),
+            ([1], "[1]"),
+        ):
+            assert_that(_print_apart_written_out(one, other)).described_as(f"{one!r} and {other!r}").is_true()
+
+    @pytest.mark.parametrize("shape", ["fields left out of the print", "a print of its own", "three dots in a field"])
+    def test_two_that_lead_back_where_their_print_does_not_go_are_no_exception(self, shape):
+        """A value that leads back in a field its print leaves out, or under a print that goes into nothing, with
+        or without three dots that are what a field holds: the tree prints as the graph does, the two are
+        matched there as here, and the law holds for them whole."""
+
+        @dataclasses.dataclass
+        class Holding:
+            name: int = dataclasses.field(repr=False)
+            back: object = dataclasses.field(default=None, repr=False)
+            marker: str = dataclasses.field(default="...", repr=shape == "three dots in a field")
+
+            if shape == "a print of its own":
+
+                def __repr__(self) -> str:
+                    return "held"
+
+        def looped(name: int) -> Holding:
+            value = Holding(name)
+            value.back = [value]
+            return value
+
+        one, other = looped(1), looped(2)
+        assert_that(cast("list", one.back)[0]).is_same_as(one)
+        assert_that(repr(one)).is_equal_to(repr(other)).is_equal_to(
+            {
+                "fields left out of the print": f"{Holding.__qualname__}()",
+                "a print of its own": "held",
+                "three dots in a field": f"{Holding.__qualname__}(marker='...')",
+            }[shape]
+        )
+        left, right = ["first", one, None], ["first", "second", other, None]
+        assert_that([tag for tag, *_ in _diff._alignment_opcodes(left, right)]).contains("replace")
+        _, failure, regions = _matched_apart(lambda: assert_that(left).is_equal_to(right))
+        assert_that(failure).is_not_none()
+        assert_that(regions).is_empty()
+
+    @pytest.mark.parametrize("printed", ["Alike()", "Alike(...)", "[...]"])
+    def test_two_that_print_alike_and_lead_nowhere_back_are_no_exception(self, printed):
+        """Matched on their print and found unequal as well, and alike in a tree: the law holds for them whole,
+        whatever the print says, and three dots in it are no elision."""
+
+        class Alike:
+            __hash__ = None
+
+            def __init__(self, held: int) -> None:
+                self.held = held
+
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, Alike) and self.held == other.held
+
+            def __repr__(self) -> str:
+                return printed
+
+        actual = (_Node("list", Alike(1), None, None, 1),)
+        expected = (_Node("list", Alike(2), None, None, 2),)
+        left, right = _built(actual), _built(expected)
+        came_apart = _diff._alignment_opcodes(left, right)
+        assert_that([tag for tag, *_ in came_apart]).contains("replace")
+        _, failure, regions = _matched_apart(lambda: assert_that(left).is_equal_to(right))
+        assert_that(failure).is_not_none()
+        assert_that(regions).is_empty()
+        assert_that(_hold_the_graph(actual, expected, {})).is_equal_to("failed")
 
 
 def _ring_of_pairs(size: int) -> tuple[list, list]:

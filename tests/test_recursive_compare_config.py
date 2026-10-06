@@ -1004,6 +1004,41 @@ class TestConfigSurvivesTheFilteredPaths:
         with pytest.raises(AssertionFailure):
             assert_that(Point(1.0, 1.0)).is_equal_to(Point(1.5, 99.0), ignore="y", tolerance=0.1)
 
+    def test_a_plain_object_is_opened_to_a_tolerance_by_a_key_option_beside_it(self):
+        """A value option leaves a plain object to its own ``==``, and a key option reads it by its attributes."""
+
+        class Price:
+            def __init__(self, amount: float) -> None:
+                self.amount = amount
+
+        with pytest.raises(AssertionFailure):
+            assert_that(Price(1.0)).is_equal_to(Price(1.0), tolerance=0.1)
+        assert_that(Price(1.0)).is_equal_to(Price(1.0), ignore="absent")
+        with pytest.raises(AssertionFailure):
+            assert_that(Price(1.0)).is_equal_to(Price(1.05), ignore="absent")
+        assert_that(Price(1.0)).is_equal_to(Price(1.05), ignore="absent", tolerance=0.1)
+        with pytest.raises(AssertionFailure):
+            assert_that(Price(1.0)).is_equal_to(Price(1.5), ignore="absent", tolerance=0.1)
+
+    @pytest.mark.parametrize("key_option", [{"ignore": "note"}, {"include": "amount"}], ids=["ignore", "include"])
+    def test_under_a_key_option_the_equality_of_a_plain_object_is_not_asked(self, key_option):
+        class Price:
+            __hash__ = None
+
+            def __init__(self, amount: float, note: str) -> None:
+                self.amount = amount
+                self.note = note
+
+            def __eq__(self, other: object) -> bool:
+                raise RuntimeError("its own == was asked")
+
+        assert_that(Price(1.0, "a")).is_equal_to(Price(1.0, "b"), **key_option)
+        assert_that(Price(1.0, "a")).is_equal_to(Price(1.05, "b"), **key_option, tolerance=0.1)
+        with pytest.raises(AssertionFailure):
+            assert_that(Price(1.0, "a")).is_equal_to(Price(1.05, "b"), **key_option)
+        with pytest.raises(RuntimeError, match="its own == was asked"):
+            assert_that(Price(1.0, "a")).is_equal_to(Price(1.0, "a"), tolerance=0.1)
+
     def test_strict_types_reaches_a_nested_list_element(self):
         assert_that([[1]]).is_equal_to([[1]], strict_types=True, ignore="absent")
         with pytest.raises(AssertionFailure):

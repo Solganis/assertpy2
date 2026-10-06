@@ -620,6 +620,12 @@ only add to it: two such objects it holds apart stay apart, under a tolerance an
 for what they hold. Where it holds them equal, each attribute both sides hold equal is then checked
 as any other node is: its type, a comparator that owns it, and what it holds in turn.
 
+A key option changes who is asked. Under `ignore=` or `include=` a plain object is
+[read by its attributes](#selective-comparison-ignore-include) and its own `==` is not asked, so a
+`tolerance` beside the key option reaches them. Two objects of a class with no `==` of its own, one
+holding `1.0` and the other `1.05`, differ under `tolerance=0.1` alone and are equal under
+`tolerance=0.1, ignore="absent"`. A dataclass is read by its fields either way.
+
 ```python
 class User:
     def __init__(self, active):
