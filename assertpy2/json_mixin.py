@@ -28,8 +28,79 @@ _RFC_3339_MOMENT: Final = re.compile(
 )
 """A `date-time` as RFC 3339 writes it: a full date, a `T`, a time to the second, then `Z` or an offset."""
 
+# The three below are texts that `re` compiles at first use: compiled at import they cost 0.5 ms.
+_DURATION: Final = (
+    r"P(?:"
+    r"(?:[0-9]+D|[0-9]+M(?:[0-9]+D)?|[0-9]+Y(?:[0-9]+M(?:[0-9]+D)?)?)"
+    r"(?:T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S))?"
+    r"|T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+S)?)?|[0-9]+M(?:[0-9]+S)?|[0-9]+S)"
+    r"|[0-9]+W)"
+)
+"""A `duration` by the ABNF of RFC 3339, appendix A, which the format is defined by.
+
+Narrower than ISO 8601 where the ABNF is: a unit may be followed only by the next smaller one, so ``P1Y2D`` and
+``PT1H2S`` are no durations, weeks stand alone, and there is no fraction and no sign.  The letters are upper
+case, as ISO 8601 writes them, though a quoted letter of an ABNF stands for either case.
+"""
+
+_HOSTNAME: Final = (
+    r"(?![\s\S]{254})"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
+)
+"""A `hostname` by RFC 1123, section 2.1: labels of ASCII letters, digits and hyphens, a hyphen at neither end,
+63 characters at most, joined by dots with none after the last, and 253 characters in all.  The syntax and no
+more: the rules of IDNA for what an ``xn--`` label may decode to are not applied."""
+
+
+def _uri_pattern() -> str:
+    """A `uri` by the ABNF of RFC 3986, appendix A: a scheme, then an authority and a path, a path alone or
+    nothing, then a query and a fragment.  What stands in brackets as the host is judged apart (`_is_uri`).
+
+    A path is written as one run of its characters and its slashes, which is what the segments of the ABNF
+    come to, and the two hex digits after a ``%`` are asked for once, ahead of the rest.
+    """
+    # no group repeats: with a segment or a `%XX` as one, a megabyte of either held 60 to 280 MB of the engine's stack
+    plain = r"A-Za-z0-9\-._~!$&'()*+,;=%"
+    path = f"[{plain}:@/]*"
+    return (
+        r"(?![\s\S]*%(?![0-9A-Fa-f]{2}))"
+        r"[A-Za-z][A-Za-z0-9+.\-]*:"
+        rf"(?://(?:[{plain}:]*@)?(?:\[(?P<literal>[^\]]*)\]|[{plain}]*)(?::[0-9]*)?(?:/{path})?"
+        f"|/(?:[{plain}:@]{path})?"
+        f"|[{plain}:@]{path}"
+        "|)"
+        rf"(?:\?[{plain}:@/?]*)?(?:#[{plain}:@/?]*)?"
+    )
+
+
+_URI: Final = _uri_pattern()
+
 
 _DAYS_IN: Final = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+_UNHEARD: Final = frozenset(
+    {
+        "const",
+        "contains",
+        "propertyNames",
+        "if",
+        "dependentRequired",
+        "dependentSchemas",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "prefixItems",
+        "$dynamicRef",
+        "$recursiveRef",
+    }
+)
+"""Keywords of later JSON Schema, drafts 6 to 2020-12, that can forbid a value and that Draft 4 does not have.
+
+Draft 4 is the reading of OpenAPI 3.0 and of Swagger 2.0, and a keyword it does not know it passes over: a
+3.0 schema with ``const: a`` took ``b``.  Each one here was measured to pass a value its own draft refuses.
+A schema holding one is refused wherever it stands and whatever it would forbid there: ``if: {}`` forbids
+nothing and is refused as well.  ``then``, ``else``, ``minContains`` and ``maxContains`` are left out, since
+they do nothing without ``if`` or ``contains``, which are here.
+"""
 
 
 def _is_rfc_3339_moment(value: object) -> bool:
@@ -64,6 +135,47 @@ def _is_rfc_3339_moment(value: object) -> bool:
     )
 
 
+def _written_as(pattern: str) -> Any:
+    """A check that a text is written whole as *pattern* writes it.  What is no text is not a format's to judge.
+
+    The text is read by the pattern alone, so a class of its own has no say in its length or its letters.
+    """
+
+    def written(value: object) -> bool:
+        return not issubclass(type(value), str) or re.fullmatch(pattern, cast("str", value)) is not None
+
+    return written
+
+
+_is_duration: Final = _written_as(_DURATION)
+_is_hostname: Final = _written_as(_HOSTNAME)
+
+
+def _is_uri(value: object) -> bool:
+    """Whether a text is a URI of RFC 3986: `_URI`, and a host in brackets that is an IPv6 address or an IPvFuture.
+
+    The address is asked of `ipaddress`, once its text is hex digits, colons and dots alone: a zone, which
+    `ipaddress` takes, is no part of the address as RFC 3986 writes it.
+    """
+    if not issubclass(type(value), str):
+        return True
+    read = re.fullmatch(_URI, cast("str", value))
+    if read is None:
+        return False
+    literal = read.group("literal")
+    if literal is None or re.fullmatch(r"[vV][0-9A-Fa-f]+\.[A-Za-z0-9\-._~!$&'()*+,;=:]+", literal) is not None:
+        return True
+    if re.fullmatch(r"[0-9A-Fa-f:.]+", literal) is None:
+        return False
+    import ipaddress  # 0.8 ms, kept off `import assertpy2`: an address in brackets alone asks it
+
+    try:
+        ipaddress.IPv6Address(literal)
+    except ValueError:
+        return False
+    return True
+
+
 def _fits_in(bits: int) -> Any:
     """The check of OpenAPI's ``int32`` or ``int64``: a whole number within the signed range of *bits*.
 
@@ -88,15 +200,18 @@ def _openapi_formats(jsonschema_mod: Any) -> Any:
     """jsonschema's format checker, with the formats it leaves unchecked that a contract most often declares.
 
     `int32` and `int64` are OpenAPI's own, and jsonschema knows neither: ``2**40`` passed for an `int32`.
-    `date-time` it checks only beside a package this library does not install, so ``"yesterday"`` passed.
-    The check here stands whether that package is there or not, so one text gets one verdict in every
-    environment.  `uri`, `hostname`, `duration` and the rest of what jsonschema checks only beside a package
-    of their own stay unchecked where that package is missing.
+    `date-time`, `uri`, `hostname` and `duration` it checks only beside a package each, none of which this
+    library installs, so ``"yesterday"`` passed for a moment and ``"not a uri"`` for a URI.  The checks here
+    stand whether a package is there or not, so one text gets one verdict in every environment.  The rest
+    of what jsonschema checks beside a package of its own stays unchecked where that package is missing.
     """
     checker = jsonschema_mod.FormatChecker()
     checker.checks("int32")(_fits_in(32))
     checker.checks("int64")(_fits_in(64))
     checker.checks("date-time")(_is_rfc_3339_moment)
+    checker.checks("duration")(_is_duration)
+    checker.checks("hostname")(_is_hostname)
+    checker.checks("uri")(_is_uri)
     return checker
 
 
@@ -145,34 +260,38 @@ def _ensure_jsonschema():
     return jsonschema
 
 
-def _openapi_nullable_to_null(node: Any, keyword: str = "nullable") -> Any:
-    """Rewrite OpenAPI 3.0 ``nullable: true`` into standard JSON Schema (jsonschema ignores it).
+def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
+    """Rewrite ``nullable: true`` of one Schema Object into JSON Schema, in place (jsonschema ignores the keyword).
 
-    For the common scalar-typed field, ``"null"`` is added to ``type`` (and to ``enum`` if present),
-    which keeps per-keyword error paths precise - a bad ``format``/``type`` on a nullable field still
-    reports ``format``/``type``, not a vague union. Only a nullable schema with no scalar ``type``
-    (nullable beside ``$ref``/``oneOf``) falls back to an ``anyOf`` null union. Swagger 2.0 spells the
-    same idea ``x-nullable``, so it is handled by passing ``keyword="x-nullable"``.
+    ``"null"`` is added to the ``type`` beside it, which keeps per-keyword error paths precise: a bad ``format``
+    on a nullable field still reports ``format``, not a vague union.  An ``enum`` is left as written.  OpenAPI
+    3.0.3 has ``nullable`` add to the type alone, "other Schema Object constraints retain their defined
+    behavior", so ``null`` is allowed where the enum lists it.
+
+    With no ``type`` of its own the keyword does nothing by that text.  One reading is kept wider on purpose: a
+    schema that is a ``$ref`` or an ``allOf``, ``anyOf`` or ``oneOf`` becomes a union with ``null``, which is how
+    a nullable reference is written in practice.
+
+    Swagger 2.0 spells the idea ``x-nullable``.  It is an extension with no text of its own and keeps the
+    reading it had: ``null`` passes its enum, and any schema with no ``type`` becomes the union.
     """
-    if isinstance(node, dict):
-        rewritten = {key: _openapi_nullable_to_null(value, keyword) for key, value in node.items()}
-        nullable = rewritten.get(keyword)
-        if not isinstance(nullable, bool):
-            return rewritten
-        del rewritten[keyword]
-        if not nullable:  # nullable: false - drop the keyword, add no null
-            return rewritten
-        node_type = rewritten.get("type")
-        if isinstance(node_type, str):
-            rewritten["type"] = [node_type, "null"]
-            enum = rewritten.get("enum")
-            if isinstance(enum, list) and None not in enum:
-                rewritten["enum"] = [*enum, None]
-            return rewritten
-        return {"anyOf": [rewritten, {"type": "null"}]}
-    if isinstance(node, list):
-        return [_openapi_nullable_to_null(item, keyword) for item in node]
-    return node
+    nullable = schema.get(keyword)
+    if not isinstance(nullable, bool):
+        return
+    del schema[keyword]
+    if not nullable:
+        return
+    extension = keyword == "x-nullable"
+    held = schema.get("type")
+    if isinstance(held, (str, list)):
+        schema["type"] = [*([held] if isinstance(held, str) else held), "null"]
+        enum = schema.get("enum")
+        if extension and isinstance(enum, list) and None not in enum:
+            schema["enum"] = [*enum, None]
+    elif extension or any(key in schema for key in ("$ref", "allOf", "anyOf", "oneOf")):
+        inner = dict(schema)
+        schema.clear()
+        schema["anyOf"] = [inner, {"type": "null"}]
 
 
 def _stringify_keys(node: Any) -> Any:
@@ -190,16 +309,201 @@ def _stringify_keys(node: Any) -> Any:
 
 def _resolve_local_ref(spec: dict[str, Any], ref: str):
     """Follow a local JSON-Pointer ``$ref`` (``#/a/b/c``); return ``(target_node, [a, b, c])``, or
-    ``(None, [])`` for a non-local or dangling ref."""
+    ``(None, [])`` for a non-local or dangling ref.
+
+    Read as the validator reads it, or the two part ways on what a reference names: the fragment is
+    percent-decoded whole, then split, then unescaped, and a segment into a list is whatever `int` takes for
+    an index, ``+0`` and ``-1`` included.
+    """
     if not ref.startswith("#/"):
         return None, []
-    segments = [part.replace("~1", "/").replace("~0", "~") for part in ref[2:].split("/")]
+    fragment = ref[2:]
+    if "%" in fragment:
+        from urllib.parse import unquote  # 1.6 ms, kept off `import assertpy2`: an encoded reference alone asks it
+
+        fragment = unquote(fragment)
+    segments = [part.replace("~1", "/").replace("~0", "~") for part in fragment.split("/")]
     node: Any = spec
     for segment in segments:
-        if not isinstance(node, dict) or segment not in node:
+        if isinstance(node, dict) and segment in node:
+            node = node[segment]
+        elif isinstance(node, list):
+            try:
+                node = node[int(segment)]
+            except (ValueError, IndexError):
+                return None, []
+        else:
             return None, []
-        node = node[segment]
     return node, segments
+
+
+class _References:
+    """How the walk goes through a document: as the validator does, asking its registry and entering a schema.
+
+    Read by a reader of its own, the two parted on what a reference names: one into a list, one whose
+    separators were percent-encoded, one that names the document by its address, one that stands under a
+    schema with an ``id`` of its own.
+    """
+
+    def __init__(self, unresolvable: type[Exception], draft: Any) -> None:
+        self._unresolvable = unresolvable
+        self._draft = draft
+
+    def named(self, reference: str, resolver: Any) -> tuple[Any, Any]:
+        """What *reference* names from the base *resolver* stands at, and the resolver in effect there.
+
+        ``(None, resolver)`` is a reference that names nothing, which the validator says itself where it comes
+        to it: in the registry's own error, or in the `ValueError` it lets out for a segment into a list that
+        is no number.
+        """
+        try:
+            found = resolver.lookup(reference)
+        except (self._unresolvable, ValueError):
+            return None, resolver
+        return found.contents, found.resolver
+
+    def inside(self, schema: dict[str, Any], resolver: Any) -> Any:
+        """The resolver in effect inside a schema its parent holds: an ``id`` of its own moves the base there."""
+        return resolver.in_subresource(self._draft.create_resource(schema))
+
+
+def _schemas_reached(reference: str, resolver: Any, references: _References) -> list[tuple[dict[str, Any], Any]]:
+    """Every schema the one *reference* names reaches, each once, beside the resolver in effect where it stands.
+
+    Walked by the keywords that hold a schema for the validator, through the references it follows, and not as
+    data: an ``enum`` member or an ``example`` shaped like a schema is a value, and rewritten as a schema it no
+    longer matched itself.
+
+    A schema Draft 4 never asks by the shape of what holds it is not reached: ``additionalItems`` beside an
+    ``items`` that is one schema.  One it never asks for what a keyword beside it takes, an
+    ``additionalProperties`` beside a pattern that takes every name, is reached like any other.
+
+    A schema is read once, under the resolver it was first reached with.
+    """
+    reached: list[tuple[dict[str, Any], Any]] = []
+    pending, seen = [references.named(reference, resolver)], set()
+    while pending:
+        schema, within = pending.pop()
+        if not isinstance(schema, dict) or id(schema) in seen:
+            continue
+        seen.add(id(schema))
+        reached.append((schema, within))
+        ref = schema.get("$ref")
+        if isinstance(ref, str):
+            pending.append(references.named(ref, within))
+            continue
+        held: list[Any] = []
+        for keyword in ("properties", "patternProperties", "dependencies"):
+            mapped = schema.get(keyword)
+            if isinstance(mapped, dict):
+                held.extend(mapped.values())
+        for keyword in ("items", "additionalProperties", "not", "allOf", "anyOf", "oneOf"):
+            one = schema.get(keyword)
+            held.extend(one if isinstance(one, list) else [one])
+        if isinstance(schema.get("items"), list):
+            # beside an `items` that is one schema, Draft 4 never asks `additionalItems`
+            held.append(schema.get("additionalItems"))
+        pending.extend((each, references.inside(each, within)) for each in held if isinstance(each, dict))
+    return reached
+
+
+def _write_only(declared: object, resolver: Any, references: _References) -> bool:
+    """Whether the schema a property declares is marked ``writeOnly``, read through the references it is.
+
+    What stands beside a ``$ref`` is ignored, as OpenAPI 3.0 has it, so the mark is the one on the schema the
+    references lead to.
+    """
+    followed: set[int] = set()
+    while isinstance(declared, dict) and id(declared) not in followed:
+        followed.add(id(declared))
+        ref = declared.get("$ref")
+        if not isinstance(ref, str):
+            return declared.get("writeOnly") is True
+        declared, resolver = references.named(ref, resolver)
+    return False
+
+
+def _unrequire_write_only(schema: dict[str, Any], resolver: Any, references: _References) -> None:
+    """Take every ``writeOnly`` property of one Schema Object out of its ``required``, in place.
+
+    OpenAPI 3.0: "If the property is marked as writeOnly being true and is in the required list, the required
+    will take effect on the request only", and a response is what is validated here.  Asked before ``nullable``
+    is rewritten, so a mark is read off the schema as its author wrote it.
+
+    A limit of this reading, and not a conclusion of the text: the mark is looked for in the ``properties`` of
+    the Schema Object that holds the ``required``.  A ``required`` in one branch of an ``allOf`` and the marked
+    property in another are not brought together.
+
+    Asked of the validator instead, as a ``required`` keyword of its own, the class built per call cost a check
+    of twenty rows about 600 us, against 294 this way.
+    """
+    properties, required = schema.get("properties"), schema.get("required")
+    if isinstance(properties, dict) and isinstance(required, list):
+        schema["required"] = [
+            name
+            for name in required
+            if not (isinstance(name, str) and _write_only(properties.get(name), resolver, references))
+        ]
+
+
+def _unheard(schema: dict[str, Any]) -> list[str]:
+    """What one Schema Object holds that Draft 4 does not have: a keyword of `_UNHEARD`, which it passes over, or
+    an exclusive bound written as a number.  That one Draft 4 has as a flag beside ``minimum`` and ``maximum``:
+    it reads any number but zero as the flag set, whatever the number, and passes it over where neither stands.
+
+    What stands beside a ``$ref`` is ignored by 3.0 itself, so nothing there is lost.
+    """
+    if isinstance(schema.get("$ref"), str):
+        return []
+    found = sorted(_UNHEARD.intersection(schema))
+    for bound in ("exclusiveMaximum", "exclusiveMinimum"):
+        held = schema.get(bound)
+        if isinstance(held, (int, float)) and not isinstance(held, bool):
+            found.append(f"{bound} as a number")
+    return found
+
+
+def _pointer_to(document: Any, wanted: object) -> str:
+    """The JSON pointer of one node of *document*, found by identity.  Asked only on the way to a refusal."""
+    pending: list[tuple[str, Any]] = []
+    where, node = "#", document
+    while node is not wanted:
+        if isinstance(node, dict):
+            pending.extend((f"{where}/{key.replace('~', '~0').replace('/', '~1')}", held) for key, held in node.items())
+        elif isinstance(node, list):
+            pending.extend((f"{where}/{index}", held) for index, held in enumerate(node))
+        where, node = pending.pop()
+    return where
+
+
+def _read_as_json_schema(
+    document: dict[str, Any], reference: str, resolver: Any, references: _References, *, swagger: bool
+) -> None:
+    """Read the schemas a response reaches into the JSON Schema the validator knows, in the copy handed here.
+
+    Every mark is read before any ``nullable`` is rewritten: a schema one property names may be rewritten for
+    another first, and the union it becomes holds the mark a level down.
+
+    A ``$schema`` a schema declares is taken out.  jsonschema reads a schema by the dialect it names, and an
+    OpenAPI 3.0 or Swagger 2.0 document is one dialect, with no ``$schema`` in a Schema Object.  It goes before
+    ``nullable`` is rewritten, which may move what a schema holds a level down.
+    """
+    reached = _schemas_reached(reference, resolver, references)
+    for schema, _ in reached:
+        unheard = _unheard(schema)
+        if unheard:
+            dialect = "Swagger 2.0" if swagger else "OpenAPI 3.0"
+            raise ValueError(
+                f"Schema <{_pointer_to(document, schema)}> holds <{'>, <'.join(unheard)}>, which {dialect} does not"
+                " have, so the response would not be held to it as written."
+                " Leave it out, or move the spec to OpenAPI 3.1 as a whole: with the version line alone changed,"
+                " `nullable` and a boolean exclusive bound are what is not read."
+            )
+    for schema, within in () if swagger else reached:
+        _unrequire_write_only(schema, within, references)
+    for schema, _ in reached:
+        schema.pop("$schema", None)
+        _nullable_as_null(schema, "x-nullable" if swagger else "nullable")
 
 
 def _status_text(status: Any) -> str:
@@ -459,11 +763,15 @@ class JsonMixin(_MixinBase):
         ``oneOf``/``allOf``/``anyOf`` and ``enum`` all validate with full JSON-Schema semantics, and every
         violation is reported with its JSON path.
 
+        Under OpenAPI 3.0, ``nullable: true`` adds ``null`` to the ``type`` beside it and leaves an ``enum``
+        as written, so ``null`` passes an enum only where the enum lists it.  A property marked
+        ``writeOnly: true`` is not asked for by ``required``, since val is a response.
+
         A ``format`` is checked where there is a check for it: ``date``, ``time``, ``date-time``, ``email``,
-        ``ipv4``, ``ipv6``, ``uuid``, ``regex``, and OpenAPI's ``int32`` and ``int64``.  ``uri``,
-        ``hostname``, ``duration`` and the others jsonschema checks only beside a package of their own are
-        checked where that package is installed (``jsonschema[format-nongpl]`` brings them all), and pass
-        unchecked where it is not.
+        ``ipv4``, ``ipv6``, ``uuid``, ``regex``, ``uri``, ``hostname``, ``duration``, and OpenAPI's ``int32``
+        and ``int64``.  The others jsonschema checks only beside a package of their own, ``uri-reference``,
+        ``iri``, ``json-pointer`` and ``uri-template`` among them, are checked where that package is
+        installed (``jsonschema[format-nongpl]`` brings them all), and pass unchecked where it is not.
 
         Args:
             spec: a parsed OpenAPI document (dict); loading YAML/JSON is the caller's job.
@@ -487,10 +795,12 @@ class JsonMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does not conform to the response schema
-            ValueError: if the operation, status, or content type is not found in the spec
+            ValueError: if the operation, status, or content type is not found in the spec, or a schema of
+                OpenAPI 3.0 or Swagger 2.0 holds a keyword of later JSON Schema, which would be passed over
         """
         jsonschema_mod = _ensure_jsonschema()
         import referencing
+        from referencing.exceptions import Unresolvable
         from referencing.jsonschema import DRAFT4, DRAFT202012
 
         normalized = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
@@ -504,17 +814,21 @@ class JsonMixin(_MixinBase):
         # 3.2 keeps 3.1's dialect: the schema object is JSON Schema 2020-12 in both
         is_openapi_31 = read is not None and read.group(1) in ("1", "2")
         status_key, pointer = _openapi_resolve(normalized, path, method, status, content_type)
-        if is_openapi_31:
-            document = normalized  # 3.1 is JSON Schema 2020-12 already, no nullable rewrite
-        else:
-            document = _openapi_nullable_to_null(normalized, "x-nullable" if is_swagger_2 else "nullable")
+        document = normalized
         specification = DRAFT202012 if is_openapi_31 else DRAFT4
         validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
-
         base = "urn:assertpy2-openapi"
         registry = referencing.Registry().with_resource(
             uri=base, resource=referencing.Resource(contents=document, specification=specification)
         )
+        if not is_openapi_31:  # 3.1 is JSON Schema 2020-12 already
+            _read_as_json_schema(
+                document,
+                base + pointer,
+                registry.resolver(base_uri=base),
+                _References(Unresolvable, DRAFT4),
+                swagger=is_swagger_2,
+            )
         validator = validator_cls(
             {"$ref": base + pointer}, registry=registry, format_checker=_openapi_formats(jsonschema_mod)
         )

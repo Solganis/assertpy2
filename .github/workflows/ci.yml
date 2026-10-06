@@ -55,11 +55,16 @@ jobs:
 
       - name: Install dependencies (all integrations)
         if: matrix.full-deps
-        run: uv sync --locked --extra json --extra data --extra inline --group integrations --group docs-examples
+        run: uv sync --locked --extra json --extra data --extra inline --group integrations --group docs-examples --group oracle
 
       - name: Test with coverage
         if: '!matrix.full-deps'
         run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml --ignore=tests/test_docs_examples.py tests
+
+      - name: The oracle is installed
+        # its module skips where a package is absent, so an absence here would pass for a green run
+        if: matrix.full-deps
+        run: uv run python -c "import openapi_schema_validator, fqdn, isoduration, rfc3986_validator"
 
       - name: Test with coverage (enforce 100%)
         # Only the full-deps cell has every integration installed and 0 skips, so it is

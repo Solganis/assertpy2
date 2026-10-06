@@ -91,15 +91,55 @@ Three spec dialects are read:
 A spec declaring any other `openapi` version is refused. Read as one of these it would validate against
 the wrong dialect, which passes every keyword that dialect cannot spell.
 
+The same holds inside a spec. OpenAPI 3.0 and Swagger 2.0 carry an older JSON Schema, which passes over a
+keyword of a later one, or reads it another way: a 3.0 schema with `const: a` used to take `b`. A schema
+the response reaches that holds such a keyword is refused with a `ValueError` naming the schema and the
+keyword: `const`,
+`contains`, `propertyNames`, `if`, `dependentRequired`, `dependentSchemas`, `unevaluatedProperties`,
+`unevaluatedItems`, `prefixItems`, `$dynamicRef`, `exclusiveMinimum` or `exclusiveMaximum` written as
+a number, and `$recursiveRef`. The keyword is refused wherever it stands, whatever it would forbid
+there. Spell the constraint as 3.0 does, or move the spec to OpenAPI 3.1 as a whole: with the version
+line alone changed, `nullable` and a boolean `exclusiveMinimum` are what is not read. A `$schema` inside
+a 3.0 or 2.0 document changes nothing: the document is read as one dialect throughout.
+
 Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf` and `enum` validate with full JSON-Schema
-semantics. A `format` is checked where there is a check for it:
+semantics.
+
+Two keywords of OpenAPI 3.0 are read as 3.0.3 words them, since the value is a response:
+
+- `nullable: true` adds `null` to the `type` beside it and leaves every other keyword as written, so an
+  `enum` beside them lets `null` through only where it lists it. With no `type` beside it the keyword
+  does nothing, with the one exception below.
+- A property marked `writeOnly: true` is not asked for by `required`, which for such a property "will
+  take effect on the request only". One that did arrive is validated like any other. The mark is read
+  through a `$ref`, and what stands beside a `$ref` is ignored, as 3.0 has it.
+
+Both are read on the schemas the response reaches and never on a value: an `enum` member or an `example`
+that looks like a schema is left as it is.
+
+One reading is wider than the text on purpose. `nullable: true` on a schema that is a `$ref`, an `allOf`,
+an `anyOf` or a `oneOf`, with no `type` of its own, still allows `null`: that is how a nullable reference
+is usually written, and a spec written so would fail on every `null` otherwise.
+
+Three limits:
+
+- `required` in one branch of an `allOf` and the `writeOnly` property in another are not brought
+  together: the mark is looked for in the `properties` of the schema that holds the `required`.
+- Swagger 2.0's `x-nullable` is an extension with no text of its own. It allows `null` past an `enum`
+  and on any schema with no `type`, as it did.
+- In 3.1 and 3.2 `writeOnly` is an annotation, and `required` asks for the property.
+
+A `format` is checked where there is a check for it:
 
 | `format` | Checked |
 | --- | --- |
 | `date`, `time`, `email`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
 | `date-time` | always, by the grammar of RFC 3339: `"yesterday"` and `"2026-02-30T10:00:00Z"` fail. A second of `60` is taken in the last minute of a UTC month, where a leap second can fall. The check is the same one whether or not the package that gives jsonschema its own is installed |
 | `int32`, `int64` | always, as the signed range: `2**40` is no `int32` |
-| `uri`, `hostname`, `duration` and the others jsonschema checks beside a package of their own | where that package is installed, and not where it is missing. `jsonschema[format-nongpl]` brings them all |
+| `uri` | always, by the grammar of RFC 3986: a scheme is required, so `/orders/7` is no `uri` (it is a `uri-reference`), and neither is a text with a space or a non-ASCII letter in it |
+| `hostname` | always, as the syntax of RFC 1123: labels of ASCII letters, digits and hyphens, 63 characters each and 253 in all, with no dot after the last. The rules of IDNA are not applied: an `xn--` label passes whatever it decodes to |
+| `duration` | always, by the grammar RFC 3339 gives for it: `P1DT12H` and `P2W` pass. It is narrower than ISO 8601: `PT0.5S`, `P1Y2D` and `-P1D` fail |
+| `uri-reference`, `iri`, `idn-email`, `json-pointer`, `uri-template` and the others jsonschema checks beside a package of their own | where that package is installed, and not where it is missing. `jsonschema[format-nongpl]` brings them all |
 
 Pass the parsed spec plus the operation's path and method. Loading the YAML or JSON is your job:
 

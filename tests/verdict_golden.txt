@@ -103,7 +103,7 @@ responses/status differs	FAILED | Expected <404> to be equal to <200> on attribu
 responses/status holds	passed
 specs/openapi three ten	ValueError | openapi version <3.10.0> is not one this can validate (3.0, 3.1 and 3.2 are)
 specs/openapi three two	FAILED | Expected the value to conform to the OpenAPI schema for <GET /x> response <200>, but found 1 violation.
-specs/openapi three zero	passed
+specs/openapi three zero	ValueError | Schema <#/paths/~1x/get/responses/200/content/application~1json/schema> holds <const>, which OpenAPI 3.0 does not have, so the response would not be held to it as written. Leave it out, or move the spec to OpenAPI 3.1 as a whole: with the version line alone changed, `nullable` and a boolean exclusive bound are what is not read.
 text/a value holding the poll sentence	FAILED | Expected <condition not met after N seconds (value unchanged across N polls)> to be equal to <condition not met after N seconds (value unchanged across N polls)>, but was not.
 text/a value that looks like an address	FAILED | Expected <<thing at 0xADDR>> to be equal to <<thing at 0xADDR>>, but was not.
 text/a value that merely counts seconds	FAILED | Expected <1.25 seconds> to be equal to <2.50 seconds>, but was not.

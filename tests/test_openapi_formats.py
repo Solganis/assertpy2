@@ -7,11 +7,16 @@ moments here are the examples and the grammar of RFC 3339, and the bounds are th
 
 from __future__ import annotations
 
+import re
+import subprocess
+import sys
+import typing
 from typing import Any
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that
+from assertpy2 import AssertionFailure, assert_that, json_mixin
+from tests.format_corpus import uris
 
 jsonschema = pytest.importorskip("jsonschema", reason="jsonschema not installed")
 
@@ -225,3 +230,416 @@ class TestWhatJsonschemaCheckedAlreadyIsCheckedStill:
         schema = {"type": "string", "format": form}
         assert_that(_conforms(good, schema, "3.1.0")).is_true()
         assert_that(_conforms(bad, schema, "3.1.0")).is_false()
+
+
+def _text_of(form: str) -> dict[str, Any]:
+    return {"type": "string", "format": form}
+
+
+class TestAUriIsWrittenAsRfc3986WritesIt:
+    """The grammar is appendix A of RFC 3986, and the first eight texts are the examples of its section 1.1.2."""
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "ftp://ftp.is.co.za/rfc/rfc1808.txt",
+            "http://www.ietf.org/rfc/rfc2396.txt",
+            "ldap://[2001:db8::7]/c=GB?objectClass?one",
+            "mailto:John.Doe@example.com",
+            "news:comp.infosystems.www.servers.unix",
+            "tel:+1-816-555-1212",
+            "telnet://192.0.2.16:80/",
+            "urn:oasis:names:specification:docbook:dtd:xml:4.1.2",
+            "a:",
+            "a+b-c.d:x",
+            "http://",
+            "http:///path",
+            "http://example.com:",
+            "http://u:p@example.com:8080/a/b;c=1?q=1&r=/?#frag/?",
+            "http://[::1]",
+            "http://[::ffff:192.0.2.1]/",
+            "http://[v7.fe80::a+en1]/",
+            "http://999.999.999.999/",
+            "http://ex%41mple.com/%7Ea",
+            "file:///etc/hosts",
+            "x:/",
+            "x:/a",
+            "x:a/b",
+            "x:a:b@c",
+            "x:?q",
+            "x:#f",
+            "x:/%41",
+            "x:%41",
+            "x:?%41",
+            "x:#%41",
+            "http://u%41@example.com/",
+            "http://example.com/-._~!$&'()*+,;=:@",
+        ],
+    )
+    def test_a_uri_passes(self, uri):
+        assert_that(_conforms(uri, _text_of("uri"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "example.com",
+            "/orders/7",
+            "//example.com/x",
+            "1http://x",
+            "ht_tp://x",
+            ":x",
+            "http://exa mple.com",
+            "http://example.com/a b",
+            "http://example.com/\u00e9",
+            "http://example.com/%4",
+            "http://example.com/%zz",
+            "http://example.com/%",
+            "http://u%4@example.com/",
+            "http://ex%4/",
+            "x:/%4",
+            "x:%4",
+            "x:?%4",
+            "x:#%4",
+            "http://example.com:80a/",
+            "http://[::1",
+            "http://::1]/",
+            "http://[::1]x/",
+            "http://[fe80::1%25en0]/",
+            "http://[::ffff:01.2.3.4]/",
+            "http://[1]",
+            "http://[v.x]/",
+            "http://[vz.x]/",
+            "http://[v7.]/",
+            "http://u@v@example.com/",
+            "http://example.com/a\\b",
+            "http://example.com/<x>",
+            "http://example.com/a^b",
+            "http://example.com/\n",
+            "\nhttp://example.com/",
+            "x:[",
+            "http:/[::1]",
+            "x:a#b#c",
+            "x:?a#b[",
+            "x:?[",
+        ],
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(text, _text_of("uri"))).is_false()
+
+
+def _abnf_of_rfc_3986() -> str:
+    """Appendix A of RFC 3986 written out production by production: a second writing of the pattern checked.
+
+    The pattern of the library writes a path as one run and asks `ipaddress` for an address.  This one keeps
+    the segments, the percent-encoded triplet as an alternative of its own, and the nine forms of an
+    ``IPv6address``.
+    """
+    unreserved, sub_delims, pct_encoded = r"[A-Za-z0-9\-._~]", "[!$&'()*+,;=]", "%[0-9A-Fa-f]{2}"
+    pchar = f"(?:{unreserved}|{pct_encoded}|{sub_delims}|[:@])"
+    segment, segment_nz = f"{pchar}*", f"{pchar}+"
+    dec_octet = "(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])"
+    ipv4 = rf"{dec_octet}\.{dec_octet}\.{dec_octet}\.{dec_octet}"
+    h16 = "[0-9A-Fa-f]{1,4}"
+    ls32 = f"(?:{h16}:{h16}|{ipv4})"
+    ipv6 = "|".join(
+        [
+            f"(?:{h16}:){{6}}{ls32}",
+            f"::(?:{h16}:){{5}}{ls32}",
+            f"(?:{h16})?::(?:{h16}:){{4}}{ls32}",
+            f"(?:(?:{h16}:){{0,1}}{h16})?::(?:{h16}:){{3}}{ls32}",
+            f"(?:(?:{h16}:){{0,2}}{h16})?::(?:{h16}:){{2}}{ls32}",
+            f"(?:(?:{h16}:){{0,3}}{h16})?::{h16}:{ls32}",
+            f"(?:(?:{h16}:){{0,4}}{h16})?::{ls32}",
+            f"(?:(?:{h16}:){{0,5}}{h16})?::{h16}",
+            f"(?:(?:{h16}:){{0,6}}{h16})?::",
+        ]
+    )
+    ip_future = rf"[vV][0-9A-Fa-f]+\.(?:{unreserved}|{sub_delims}|:)+"
+    host = rf"(?:\[(?:{ipv6}|{ip_future})\]|{ipv4}|(?:{unreserved}|{pct_encoded}|{sub_delims})*)"
+    authority = f"(?:(?:{unreserved}|{pct_encoded}|{sub_delims}|:)*@)?{host}(?::[0-9]*)?"
+    hier_part = f"(?://{authority}(?:/{segment})*|/(?:{segment_nz}(?:/{segment})*)?|{segment_nz}(?:/{segment})*|)"
+    return rf"[A-Za-z][A-Za-z0-9+\-.]*:{hier_part}(?:\?(?:{pchar}|[/?])*)?(?:#(?:{pchar}|[/?])*)?"
+
+
+class TestTheUriCheckIsTheGrammarWrittenOut:
+    def test_over_every_text_of_the_corpus_the_two_writings_agree(self):
+        written_out = re.compile(_abnf_of_rfc_3986())
+        took = 0
+        for text in sorted(set(uris())):
+            by_the_grammar = written_out.fullmatch(text) is not None
+            took += by_the_grammar
+            assert_that(json_mixin._is_uri(text)).described_as(f"{text!r} against the ABNF").is_equal_to(by_the_grammar)
+        assert_that(took).is_greater_than(1000)
+
+
+class TestAnAddressInBracketsIsTheIPv6AddressOfRfc3986:
+    """The address is asked of `ipaddress`, whose reading is the interpreter's: held here on every one."""
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "::",
+            "::1",
+            "1::",
+            "1:2:3:4:5:6:7:8",
+            "1:2:3:4:5:6:7::",
+            "::2:3:4:5:6:7:8",
+            "1::3:4:5:6:7:8",
+            "2001:DB8::7",
+            "0001:0002::",
+            "::1.2.3.4",
+            "::ffff:255.255.255.255",
+            "1:2:3:4:5:6:1.2.3.4",
+            "1:2:3:4:5::1.2.3.4",
+        ],
+    )
+    def test_an_address_passes(self, address):
+        assert_that(_conforms(f"http://[{address}]/", _text_of("uri"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            ":",
+            ":::",
+            ":1",
+            "1:",
+            "1",
+            "1:2:3:4:5:6:7",
+            "1:2:3:4:5:6:7:8:9",
+            "1:2:3:4::5:6:7:8",
+            "1::2::3",
+            "12345::",
+            "::g",
+            "1.2.3.4",
+            "::1.2.3",
+            "::1.2.3.4.5",
+            "::256.1.1.1",
+            "::01.2.3.4",
+            "::1.2.3.04",
+            "::1.2.3.4:5",
+            "1:2:3:4:5:6:7:1.2.3.4",
+            "::1%25en0",
+            "::1 ",
+        ],
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(f"http://[{text}]/", _text_of("uri"))).is_false()
+
+
+class TestAHostnameIsWrittenAsRfc1123WritesIt:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "example.com",
+            "localhost",
+            "a",
+            "A1",
+            "1host",
+            "1.2.3.4",
+            "a-b.c-d",
+            "a--b",
+            "xn--nxasmq6b",
+            "x" * 63,
+            ".".join(["x" * 63, "x" * 63, "x" * 63, "x" * 61]),
+        ],
+        ids=lambda name: name if len(name) < 20 else f"{len(name)} characters",
+    )
+    def test_a_host_name_passes(self, name):
+        assert_that(_conforms(name, _text_of("hostname"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            ".",
+            "a.",
+            ".a",
+            "a..b",
+            "-a",
+            "a-",
+            "a.-b",
+            "a-.b",
+            "a.b-",
+            "a_b",
+            "a b",
+            "exa\u00e9mple",
+            "a\n",
+            "a/b",
+            "a:80",
+            "[::1]",
+            "x" * 64,
+            "a." + "x" * 64,
+            ".".join(["x" * 63, "x" * 63, "x" * 63, "x" * 62]),
+        ],
+        ids=lambda text: ascii(text) if len(text) < 20 else f"{len(text)} characters",
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(text, _text_of("hostname"))).is_false()
+
+    def test_the_length_is_the_texts_and_not_what_its_class_says(self):
+        class Short(str):
+            __slots__ = ()
+
+            def __len__(self) -> int:
+                return 1
+
+        assert_that(_conforms(Short(".".join(["x" * 59] * 5)), _text_of("hostname"))).is_false()
+        assert_that(_conforms(Short("example.com"), _text_of("hostname"))).is_true()
+
+    def test_what_a_punycode_label_decodes_to_is_not_judged(self):
+        """The limit of the check: a label is read by its letters, and ``xn--X`` decodes to nothing."""
+        assert_that(_conforms("xn--X", _text_of("hostname"))).is_true()
+
+
+class TestADurationIsWrittenAsRfc3339WritesIt:
+    """The grammar is appendix A of RFC 3339, which is what the format names, and is narrower than ISO 8601."""
+
+    @pytest.mark.parametrize(
+        "duration",
+        [
+            "P1Y",
+            "P1M",
+            "P1D",
+            "P1W",
+            "PT1H",
+            "PT1M",
+            "PT1S",
+            "P1Y2M",
+            "P1Y2M3D",
+            "P2M3D",
+            "P3DT4H",
+            "P1YT1S",
+            "P1MT1M",
+            "P1Y2M3DT4H5M6S",
+            "PT4H5M",
+            "PT5M6S",
+            "PT4H5M6S",
+            "P0D",
+            "PT0S",
+            "P001D",
+            "P99999999999999999999Y",
+        ],
+    )
+    def test_a_duration_passes(self, duration):
+        assert_that(_conforms(duration, _text_of("duration"), "3.1.0")).is_true()
+        assert_that(_conforms(duration, _text_of("duration"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "P",
+            "PT",
+            "P1",
+            "1D",
+            "p1d",
+            "P1YT",
+            "P1DT",
+            "PTT1S",
+            "PT1D",
+            "P1S",
+            "P1H",
+            "P1D1Y",
+            "P1M2M",
+            "P1Y1D",
+            "PT1H1S",
+            "P1DT1H1S",
+            "P1DT0.5S",
+            "P1W1D",
+            "P1D1W",
+            "P1WT1H",
+            "P1.5D",
+            "PT0.5S",
+            "PT0,5S",
+            "P1e2D",
+            "-P1D",
+            "+P1D",
+            "P-1D",
+            "P1D ",
+            " P1D",
+            "P1D\n",
+            "P\u0661D",
+        ],
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(text, _text_of("duration"), "3.1.0")).is_false()
+        assert_that(_conforms(text, _text_of("duration"))).is_false()
+
+
+class TestTheThreeAreCheckedAlikeEverywhere:
+    CASES: typing.ClassVar[dict[str, tuple[str, str]]] = {
+        "uri": ("http://example.com/a", "not a uri"),
+        "hostname": ("example.com", "not_a_host"),
+        "duration": ("P1D", "a day"),
+    }
+
+    @pytest.mark.parametrize("form", sorted(CASES))
+    @pytest.mark.parametrize("version", ["2.0", "3.0.3", "3.1.0", "3.2.0"])
+    def test_in_every_dialect_the_assertion_reads(self, form, version):
+        good, bad = self.CASES[form]
+        assert_that(_conforms(good, _text_of(form), version)).is_true()
+        assert_that(_conforms(bad, _text_of(form), version)).is_false()
+
+    @pytest.mark.parametrize("form", sorted(CASES))
+    def test_a_text_of_a_class_of_its_own_is_a_text(self, form):
+        good, bad = self.CASES[form]
+        named = type("Named", (str,), {})
+        assert_that(_conforms(named(good), _text_of(form))).is_true()
+        assert_that(_conforms(named(bad), _text_of(form))).is_false()
+
+    @pytest.mark.parametrize("form", sorted(CASES))
+    def test_what_is_no_text_is_the_type_keywords_to_judge(self, form):
+        assert_that(_conforms(5, {"format": form})).is_true()
+        assert_that(_conforms(None, {"format": form})).is_true()
+        assert_that(_conforms(5, _text_of(form))).is_false()
+
+    @pytest.mark.parametrize("form", sorted(CASES))
+    def test_a_check_jsonschema_brings_of_its_own_does_not_take_its_place(self, form, monkeypatch):
+        """Beside the package that gives jsonschema a check of its own, a text still gets the verdict it gets here."""
+        asked = []
+
+        def theirs(value: object) -> bool:
+            asked.append(value)
+            return True
+
+        monkeypatch.setitem(jsonschema.FormatChecker.checkers, form, (theirs, ()))
+        good, bad = self.CASES[form]
+        assert_that(_conforms(bad, _text_of(form))).is_false()
+        assert_that(_conforms(good, _text_of(form))).is_true()
+        assert_that(asked).is_empty()
+
+    def test_importing_the_library_compiles_none_of_them_and_loads_no_module_for_them(self):
+        """`pathlib` loads `urllib.parse`, and `ipaddress` with it, by itself below Python 3.13."""
+        asked = (
+            "import re, sys; compiled = []; whole = re.compile;"
+            "re.compile = lambda pattern, flags=0: compiled.append(pattern) or whole(pattern, flags);"
+            "import assertpy2; mixin = assertpy2.json_mixin; ours = (mixin._URI, mixin._HOSTNAME, mixin._DURATION);"
+            "print([pattern for pattern in compiled if pattern in ours],"
+            " sorted({'urllib.parse', 'ipaddress'} & set(sys.modules)) if sys.version_info >= (3, 13) else [])"
+        )
+        ran = subprocess.run([sys.executable, "-c", asked], capture_output=True, text=True, check=True)
+        assert_that(ran.stdout.strip()).is_equal_to("[] []")
+
+    def test_ipaddress_is_loaded_for_an_address_in_brackets_and_for_nothing_else(self):
+        asked = (
+            "import sys; from assertpy2 import json_mixin; loaded = lambda: 'ipaddress' in sys.modules;"
+            "before = loaded();"
+            "took = [json_mixin._is_uri(one) for one in ('http://example.com/a', 'not a uri', 5, 'http://[v1.x]/')];"
+            "between = loaded(); address = json_mixin._is_uri('http://[::1]/');"
+            "print(before, took, between, address, loaded())"
+        )
+        ran = subprocess.run([sys.executable, "-c", asked], capture_output=True, text=True, check=True)
+        early = sys.version_info < (3, 13)
+        assert_that(ran.stdout.strip()).is_equal_to(f"{early} [True, False, True, True] {early} True True")
+
+    def test_the_failure_names_the_place_and_the_format(self):
+        outcome = (
+            assert_that({"v": "/orders/7"})
+            .check()
+            .conforms_to_openapi(_spec("3.0.3", _text_of("uri")), "/orders", "get")
+        )
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in outcome.diff.entries]).is_equal_to(
+            [("$.v", "/orders/7", "uri format")]
+        )

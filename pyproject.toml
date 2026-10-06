@@ -123,6 +123,17 @@ typecheck = [
     "pyrefly>=1.3.1",
     "pyright>=1.1.414",
 ]
+# A validator written by other hands, which `conforms_to_openapi` is held to (the test skips where it is
+# absent).  Its own group: it needs jsonschema 4.19.1, above the floor the `json` extra declares, so in a
+# lowest-direct cell it would lift the very bound that cell is there to hold.  The three beside it are the
+# packages jsonschema asks for `hostname`, `duration` and `uri`, which the checks of this library are compared
+# with and deliberately not installed for.
+oracle = [
+    "fqdn>=1.6.0",
+    "isoduration>=20.11.0",
+    "openapi-schema-validator>=0.9.0",
+    "rfc3986-validator>=0.1.1",
+]
 # Mutation testing. Its own group because mutmut forks and calls os.wait: it does not run on
 # Windows at all, so it must not sit in the dev group every contributor installs.
 mutation = [

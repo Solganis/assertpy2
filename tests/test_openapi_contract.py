@@ -1,3 +1,4 @@
+import copy
 import http
 import typing
 
@@ -105,9 +106,11 @@ class TestConformant:
     def test_nullable_field_null_is_conformant(self):
         assert_that({**CONFORMANT, "customerEmail": None}).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
 
-    def test_nullable_enum_null_and_value_conformant(self):
-        assert_that({**CONFORMANT, "priority": None}).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
+    def test_nullable_enum_takes_a_value_and_refuses_the_null_it_does_not_list(self):
         assert_that({**CONFORMANT, "priority": "low"}).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({**CONFORMANT, "priority": None}).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
+        assert_that(_entries(exc_info.value)).contains_key("$.priority")
 
     def test_nullable_oneof_null_and_value_conformant(self):
         assert_that({**CONFORMANT, "refund": None}).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
@@ -531,6 +534,33 @@ class TestAResponseIsSelectedByItsCodeThenItsRangeThenTheDefault:
     def test_with_no_status_named_swagger_two_does_not_pick_a_range(self):
         assert_that(self._chosen(("2XX",), None, "2.0")).starts_with("refused: Specify status")
 
+    @pytest.mark.parametrize(
+        ("reference", "found"),
+        [
+            ("#/x-shared/0", True),
+            ("#/x-shared/-1", True),
+            ("#/x%2Dshared/0", True),
+            ("#/x-shared/1", False),
+            ("#/x-shared/first", False),
+            ("#/x-shared/0/content/application~1json/schema/type/0", False),
+        ],
+        ids=["by its index", "from the end", "percent-encoded", "past the list", "by a name", "into a text"],
+    )
+    def test_a_response_that_is_a_reference_into_a_list_is_read_as_a_pointer_is(self, reference, found):
+        shared = [{"content": {"application/json": {"schema": {"type": "integer"}}}}]
+        spec = {
+            "openapi": "3.0.3",
+            "x-shared": shared,
+            "paths": {"/x": {"get": {"responses": {"200": {"$ref": reference}}}}},
+        }
+        try:
+            said = "took" if assert_that("seven").check().conforms_to_openapi(spec, "/x", "get").passed else "failed"
+        except ValueError as refused:
+            said = str(refused)
+        assert_that(said).is_equal_to("failed" if found else "Response <200> of <GET /x> has an unresolvable $ref.")
+        if found:
+            assert_that(7).conforms_to_openapi(spec, "/x", "get")
+
     def test_a_response_under_a_range_may_be_a_reference(self):
         named = {"content": {"application/json": {"schema": {"type": "integer"}}}}
         spec = {
@@ -667,7 +697,7 @@ class TestTheRequirementNamesTheCallersSpec:
 
 
 class TestTheDialectFollowsTheVersion:
-    """Read as 3.0 a newer spec validates against Draft 4, which passes every keyword it cannot spell."""
+    """Read as 3.0 a newer spec validates against Draft 4, which has no word for a keyword of a later draft."""
 
     @staticmethod
     def _spec(version):
@@ -689,8 +719,273 @@ class TestTheDialectFollowsTheVersion:
         with pytest.raises(ValueError, match="is not one this can validate"):
             assert_that("other").conforms_to_openapi(self._spec("4.0.0"), "/x", "get", status=200)
 
-    def test_three_zero_still_validates_as_draft_four(self):
-        assert_that("other").conforms_to_openapi(self._spec("3.0.3"), "/x", "get", status=200)
+    def test_three_zero_refuses_the_keyword_it_would_pass_over(self):
+        asked = assert_that("other").conforms_to_openapi
+        said = assert_that(asked).raises(ValueError).when_called_with(self._spec("3.0.3"), "/x", "get", status=200)
+        said.is_equal_to(
+            "Schema <#/paths/~1x/get/responses/200/content/application~1json/schema> holds <const>, which OpenAPI"
+            " 3.0 does not have, so the response would not be held to it as written."
+            " Leave it out, or move the spec to OpenAPI 3.1 as a whole: with the version line alone changed,"
+            " `nullable` and a boolean exclusive bound are what is not read."
+        )
+
+
+class TestAKeywordTheDialectDoesNotHaveIsRefused:
+    """Draft 4 reads OpenAPI 3.0 and Swagger 2.0, and passes over a keyword of a later JSON Schema.  Each schema
+    here took a value its keyword forbids, in silence."""
+
+    LATER: typing.ClassVar[dict[str, tuple[dict, object]]] = {
+        "const": ({"const": "a"}, "b"),
+        "contains": ({"type": "array", "contains": {"type": "integer"}}, ["a"]),
+        "propertyNames": ({"type": "object", "propertyNames": {"maxLength": 1}}, {"long": 1}),
+        "if": ({"if": {"type": "integer"}, "then": {"minimum": 5}}, 1),
+        "dependentRequired": ({"type": "object", "dependentRequired": {"a": ["b"]}}, {"a": 1}),
+        "dependentSchemas": ({"type": "object", "dependentSchemas": {"a": {"required": ["b"]}}}, {"a": 1}),
+        "unevaluatedProperties": ({"type": "object", "unevaluatedProperties": False}, {"b": 2}),
+        "unevaluatedItems": ({"type": "array", "unevaluatedItems": False}, [1]),
+        "prefixItems": ({"type": "array", "prefixItems": [{"type": "integer"}]}, ["a"]),
+        "$dynamicRef": ({"$dynamicRef": "#/components/schemas/Text"}, 5),
+        "$recursiveRef": ({"type": "object", "properties": {"next": {"$recursiveRef": "#"}}}, {"next": 1}),
+        "exclusiveMinimum as a number": ({"type": "integer", "exclusiveMinimum": 5}, 1),
+        "exclusiveMaximum as a number": ({"type": "integer", "exclusiveMaximum": 5}, 9),
+    }
+
+    @staticmethod
+    def _spec(schema, dialect="3.0.3", components=None):
+        named = {"Text": {"type": "string"}, **(components or {})}
+        if dialect == "2.0":
+            return {
+                "swagger": "2.0",
+                "definitions": named,
+                "paths": {"/x": {"get": {"responses": {"200": {"schema": schema}}}}},
+            }
+        response = {"content": {"application/json": {"schema": schema}}}
+        return {
+            "openapi": dialect,
+            "components": {"schemas": named},
+            "paths": {"/x": {"get": {"responses": {"200": response}}}},
+        }
+
+    def _said(self, schema, dialect="3.0.3", value=None, components=None):
+        try:
+            assert_that(value).conforms_to_openapi(self._spec(schema, dialect, components), "/x", "get")
+        except AssertionError:
+            return "failed"
+        except ValueError as refusal:
+            return str(refusal)
+        return "passed"
+
+    @pytest.mark.parametrize("keyword", sorted(LATER))
+    def test_each_is_refused_by_name_whatever_the_value(self, keyword):
+        schema, forbidden = self.LATER[keyword]
+        for dialect, named in (("3.0.3", "OpenAPI 3.0"), ("3.0", "OpenAPI 3.0"), ("2.0", "Swagger 2.0")):
+            said = self._said(schema, dialect, forbidden)
+            assert_that(said).contains(f"holds <{keyword}>, which {named} does not have")
+            assert_that(self._said(schema, dialect, "anything else")).is_equal_to(said)
+
+    @pytest.mark.parametrize("keyword", sorted(set(LATER) - {"$recursiveRef"}))
+    def test_each_is_read_where_the_spec_declares_three_one(self, keyword):
+        schema, forbidden = self.LATER[keyword]
+        assert_that(self._said(schema, "3.1.0", forbidden)).is_equal_to("failed")
+
+    def test_the_one_that_three_one_gave_up_is_read_by_the_draft_that_had_it(self):
+        """``$recursiveRef`` is of 2019-09 alone: Draft 4 passes it over, and so does 2020-12, which renamed it."""
+        jsonschema = pytest.importorskip("jsonschema")
+        ring = {"$recursiveAnchor": True, "type": "object", "properties": {"next": {"$recursiveRef": "#"}}}
+        assert_that(jsonschema.Draft201909Validator(ring).is_valid({"next": 1})).is_false()
+        assert_that(jsonschema.Draft4Validator(ring).is_valid({"next": 1})).is_true()
+        assert_that(self._said(ring, value={"next": 1})).contains("holds <$recursiveRef>")
+
+    def test_the_version_line_alone_is_no_way_out(self):
+        """What the refusal says, held: read as 3.1 with nothing else changed, the bound of 3.0 forbids nothing."""
+        mixed = {"type": "integer", "minimum": 5, "exclusiveMinimum": True, "const": 5}
+        assert_that(self._said(mixed, value=5)).contains("holds <const>", "move the spec to OpenAPI 3.1 as a whole")
+        assert_that(self._said(mixed, "3.1.0", value=5)).is_equal_to("passed")
+        assert_that(self._said({"type": "integer", "minimum": 5, "exclusiveMinimum": True}, value=5)).is_equal_to(
+            "failed"
+        )
+
+    def test_the_refusal_names_where_the_schema_stands(self):
+        order = {"type": "object", "properties": {"status": {"allOf": [{"type": "string"}, {"const": "open"}]}}}
+        said = self._said(
+            {"type": "array", "items": {"$ref": "#/components/schemas/Order"}}, components={"Order": order}
+        )
+        assert_that(said).starts_with("Schema <#/components/schemas/Order/properties/status/allOf/1> holds <const>,")
+        named = self._said({"type": "object", "properties": {"a/b~c": {"const": 1}}})
+        assert_that(named).contains("/schema/properties/a~1b~0c> holds <const>")
+
+    def test_the_schema_named_is_the_one_reached_and_not_one_equal_to_it(self):
+        twin = {"const": 1}
+        said = self._said({"allOf": [{"type": "integer"}, {"const": 1}], "example": twin}, components={"Unused": twin})
+        assert_that(said).contains("/schema/allOf/1> holds <const>")
+
+    def test_every_keyword_of_one_schema_is_named(self):
+        said = self._said({"type": "integer", "exclusiveMinimum": 5, "const": 7, "if": {}})
+        assert_that(said).contains("holds <const>, <if>, <exclusiveMinimum as a number>, which OpenAPI 3.0")
+
+    @pytest.mark.parametrize(
+        ("schema", "value"),
+        [
+            ({"type": "object", "properties": {"const": {"type": "string"}, "if": {"type": "string"}}}, {"const": "x"}),
+            ({"then": {"minimum": 5}, "else": {"minimum": 5}, "minContains": 2, "maxContains": 3}, 1),
+            ({"type": "integer", "minimum": 1, "exclusiveMinimum": True, "maximum": 9, "exclusiveMaximum": False}, 9),
+            ({"type": "integer", "exclusiveMinimum": None, "exclusiveMaximum": "5"}, 9),
+            ({"$ref": "#/components/schemas/Text", "const": "ignored beside a reference"}, "a"),
+            ({"type": "string", "example": {"const": "a"}, "default": "a", "x-rule": {"if": {}}}, "a"),
+            ({"enum": [{"const": "a"}, "a"]}, {"const": "a"}),
+            (
+                {"type": "string", "contentMediaType": "text/plain", "$comment": "an annotation", "deprecated": True},
+                "a",
+            ),
+            (
+                {"type": "object", "patternProperties": {"^a": {"type": "string"}}, "dependencies": {"a": ["b"]}},
+                {"b": 1},
+            ),
+        ],
+        ids=[
+            "a property of that name",
+            "a keyword that forbids nothing alone",
+            "a bound as the flag it is",
+            "a bound that is no number",
+            "beside a reference",
+            "inside a value",
+            "inside an enum",
+            "an annotation",
+            "a keyword of draft four",
+        ],
+    )
+    def test_what_loses_nothing_is_not_refused(self, schema, value):
+        swagger = {**schema, "$ref": "#/definitions/Text"} if "$ref" in schema else schema
+        assert_that(self._said(schema, value=value)).is_equal_to("passed")
+        assert_that(self._said(swagger, "2.0", value=value)).is_equal_to("passed")
+
+    def test_a_schema_the_validator_never_asks_is_not_read(self):
+        """Beside an ``items`` that is one schema Draft 4 does not ask ``additionalItems``, so nothing is lost there."""
+        beside = {"type": "array", "items": {"type": "integer"}, "additionalItems": {"const": 0}}
+        assert_that(self._said(beside, value=[1, 2])).is_equal_to("passed")
+        assert_that(self._said({"type": "array", "additionalItems": {"const": 0}}, value=[1])).is_equal_to("passed")
+        listed = {"type": "array", "items": [{"type": "integer"}], "additionalItems": {"const": 0}}
+        assert_that(self._said(listed, value=[1, 5])).contains("/schema/additionalItems> holds <const>")
+
+    def test_a_schema_never_asked_for_what_stands_beside_it_is_read_all_the_same(self):
+        """The limit of that rule: the walk goes by the shape of a schema, not by what its patterns take."""
+        every_name = {"type": "object", "patternProperties": {"^": {}}, "additionalProperties": {"const": 0}}
+        assert_that(self._said(every_name, value={"a": 1})).contains("/schema/additionalProperties> holds <const>")
+
+    @pytest.mark.parametrize(
+        "reference",
+        [
+            "#/components/schemas/Rule",
+            "urn:assertpy2-openapi#/components/schemas/Rule",
+            "#/components/schemas/Both/allOf/0",
+        ],
+        ids=["by its pointer", "by the address of the document", "into a list"],
+    )
+    def test_a_keyword_behind_any_reference_the_validator_follows_is_refused(self, reference):
+        components = {"Rule": {"const": "a"}, "Both": {"allOf": [{"const": "a"}]}}
+        assert_that(self._said({"$ref": reference}, value="b", components=components)).contains("holds <const>")
+
+    @pytest.mark.parametrize("dialect", ["3.0.3", "2.0"])
+    def test_a_schema_out_of_the_document_is_read_in_the_dialect_it_names(self, dialect):
+        """A metaschema is no part of the spec: jsonschema reads it by its own ``$schema``, and nothing is refused."""
+        spec = self._spec({"$ref": "https://json-schema.org/draft/2020-12/schema"}, dialect)
+        assert_that({"type": "string"}).conforms_to_openapi(spec, "/x", "get")
+        outcome = assert_that({"additionalProperties": {"type": 5}}).check().conforms_to_openapi(spec, "/x", "get")
+        assert_that([entry.path for entry in outcome.diff.entries]).is_equal_to(["$.additionalProperties.type"])
+
+    def test_a_schema_that_names_a_dialect_of_its_own_is_read_as_the_document_is(self):
+        """jsonschema reads a schema by the ``$schema`` it declares.  OpenAPI 3.0 has none in a Schema Object,
+        so the document stays one dialect: the keyword is refused, and what 3.0 ignores is ignored there too."""
+        jsonschema = pytest.importorskip("jsonschema")
+        later = "https://json-schema.org/draft/2020-12/schema"
+        declared = {"$schema": later, "const": "a"}
+        assert_that(jsonschema.Draft4Validator({"properties": {"p": declared}}).is_valid({"p": "b"})).is_false()
+        assert_that(jsonschema.Draft4Validator({"properties": {"p": {"const": "a"}}}).is_valid({"p": "b"})).is_true()
+        said = self._said({"type": "object", "properties": {"p": declared}}, value={"p": "b"})
+        assert_that(said).contains("/schema/properties/p> holds <const>")
+
+        ignored = {"$ref": "#/components/schemas/Any", "properties": {"p": {"type": "integer"}}}
+        beside = {"$schema": later, "allOf": [ignored]}
+        flag = {"$schema": later, "type": "integer", "minimum": 0, "exclusiveMinimum": True}
+        assert_that(jsonschema.Draft202012Validator(flag).is_valid(1)).is_false()
+        spec = self._spec({"type": "object", "properties": {"held": beside, "count": flag}}, components={"Any": {}})
+        before = copy.deepcopy(spec)
+        assert_that({"held": {"p": "b"}, "count": 1}).conforms_to_openapi(spec, "/x", "get")
+        outcome = assert_that({"held": {"p": "b"}, "count": 0}).check().conforms_to_openapi(spec, "/x", "get")
+        assert_that([entry.path for entry in outcome.diff.entries]).is_equal_to(["$.count"])
+        assert_that(spec).is_equal_to(before)
+
+    @pytest.mark.parametrize("declared", [{}, {"$schema": "https://json-schema.org/draft/2020-12/schema"}])
+    def test_a_nullable_schema_that_names_a_dialect_is_read_as_one_that_names_none(self, declared):
+        """On a composition ``nullable`` moves the schema a level down, and the ``$schema`` must not go with it."""
+        flag = {"type": "integer", "minimum": 0, "exclusiveMinimum": True}
+        for schema in ({**declared, **flag, "nullable": True}, {**declared, "nullable": True, "allOf": [flag]}):
+            answers = [self._said(schema, value=value) for value in (1, None, 0)]
+            assert_that(answers).is_equal_to(["passed", "passed", "failed"])
+
+    def test_a_reference_under_a_schema_with_an_id_of_its_own_is_read_from_that_schema(self):
+        """The validator enters a child by its ``id``, so ``#/definitions/T`` under it names the child's own."""
+        held = {"id": "http://example.test/p", "allOf": [{"$ref": "#/definitions/T"}]}
+        order = {"type": "object", "properties": {"p": held}}
+
+        def spec(inner):
+            named = {
+                "T": {"type": "integer"},
+                "Order": {**order, "properties": {"p": {**held, "definitions": {"T": inner}}}},
+            }
+            return self._spec({"$ref": "#/definitions/Order"}, "2.0", named)
+
+        refused = assert_that(assert_that({"p": "b"}).conforms_to_openapi).raises(ValueError)
+        refused.when_called_with(spec({"const": "a"}), "/x", "get").contains(
+            "Schema <#/definitions/Order/properties/p/definitions/T> holds <const>"
+        )
+        maybe = spec({"type": "string", "x-nullable": True})
+        assert_that({"p": None}).conforms_to_openapi(maybe, "/x", "get")
+        assert_that({"p": "text"}).conforms_to_openapi(maybe, "/x", "get")
+        assert_that(assert_that({"p": 5}).check().conforms_to_openapi(maybe, "/x", "get").passed).is_false()
+
+    def test_a_reference_by_the_id_of_a_schema_is_followed_as_the_validator_follows_it(self):
+        named = {
+            "Rule": {"id": "http://example.test/rule", "const": "a"},
+            "Maybe": {"id": "http://example.test/maybe", "type": "string", "x-nullable": True},
+        }
+        spec = self._spec({"$ref": "http://example.test/rule"}, "2.0", named)
+        assert_that(assert_that("b").conforms_to_openapi).raises(ValueError).when_called_with(
+            spec, "/x", "get"
+        ).contains("Schema <#/definitions/Rule> holds <const>, which Swagger 2.0 does not have")
+        assert_that(None).conforms_to_openapi(
+            self._spec({"$ref": "http://example.test/maybe"}, "2.0", named), "/x", "get"
+        )
+
+    def test_a_bound_as_a_number_is_read_by_draft_four_as_a_flag_whatever_the_number(self):
+        """Why the number is refused beside a ``minimum`` as well: there it is not passed over, it is misread."""
+        jsonschema = pytest.importorskip("jsonschema")
+        apart = {"type": "integer", "minimum": 0, "exclusiveMinimum": 5}
+        assert_that(jsonschema.Draft4Validator(apart).is_valid(3)).is_true()
+        assert_that(jsonschema.Draft202012Validator(apart).is_valid(3)).is_false()
+        alike = {"type": "integer", "minimum": 5, "exclusiveMinimum": 5}
+        for value in (4, 5, 6):
+            assert_that(jsonschema.Draft4Validator(alike).is_valid(value)).is_equal_to(
+                jsonschema.Draft202012Validator(alike).is_valid(value)
+            )
+        for schema in (apart, alike):
+            assert_that(self._said(schema, value=6)).contains("holds <exclusiveMinimum as a number>")
+
+    def test_a_keyword_that_forbids_nothing_where_it_stands_is_refused_as_well(self):
+        for schema in ({"if": {}}, {"dependentRequired": {}}, {"unevaluatedProperties": True}):
+            assert_that(self._said(schema, value=1)).contains("does not have")
+
+    def test_a_schema_the_response_does_not_reach_is_not_read(self):
+        assert_that(self._said({"type": "string"}, value="a", components={"Unused": {"const": 1}})).is_equal_to(
+            "passed"
+        )
+
+    def test_the_spec_is_refused_before_the_value_is_read(self):
+        class Unread:
+            def __getattribute__(self, name):
+                raise AssertionError(f"the value was asked for {name}")
+
+        assert_that(self._said({"const": 1}, value=Unread())).contains("holds <const>")
 
 
 class TestTheVersionIsReadRatherThanPrefixed:
