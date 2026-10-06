@@ -182,6 +182,36 @@ class TestNullableAddsToTheTypeAndLeavesTheEnumAsWritten:
         assert_that(_violations(None, schema)).is_empty()
         assert_that(_violations(5, schema)).is_not_empty()
 
+    @pytest.mark.parametrize("keyword", ["allOf", "anyOf", "oneOf"])
+    def test_an_enum_beside_a_nullable_composition_is_kept(self, keyword):
+        """The wider reading lets ``null`` past the composition and no further: the enum is asked of it as
+        it is beside a ``type``."""
+        composed = {"nullable": True, keyword: [{"type": "string"}]}
+        assert_that(_violations(None, {**composed, "enum": ["a"]})).is_equal_to({"$": "one of ['a']"})
+        assert_that(_violations(None, {**composed, "enum": ["a", None]})).is_empty()
+        assert_that(_violations("a", {**composed, "enum": ["a"]})).is_empty()
+        assert_that(_violations("b", {**composed, "enum": ["a"]})).is_equal_to({"$": "one of ['a']"})
+        assert_that(_violations(5, {**composed, "enum": ["a", 5]})).is_not_empty()
+
+    def test_whatever_stands_beside_a_nullable_composition_is_still_asked_of_null(self):
+        """The union takes the place of the composition and of nothing else."""
+        refused = {"nullable": True, "allOf": [{"type": "string"}], "enum": ["a", None], "not": {"type": "null"}}
+        assert_that(_violations(None, refused)).is_not_empty()
+        assert_that(_violations("a", refused)).is_empty()
+        both = {"nullable": True, "allOf": [{"type": "string"}], "anyOf": [{"minLength": 2}], "minLength": 3}
+        assert_that(_violations(None, both)).is_empty()
+        assert_that(_violations("abc", both)).is_empty()
+        assert_that(_violations("ab", both)).is_not_empty()
+        assert_that(_violations("a", both)).is_not_empty()
+        assert_that(_violations(5, both)).is_not_empty()
+
+    def test_an_enum_beside_a_nullable_reference_is_ignored_with_the_rest(self):
+        """OpenAPI 3.0 ignores what stands beside a ``$ref``, so the enum there asks nothing of any value."""
+        named = {"nullable": True, **_ref("Plain"), "enum": ["a"]}
+        assert_that(_violations(None, named)).is_empty()
+        assert_that(_violations("b", named)).is_empty()
+        assert_that(_violations(5, named)).is_not_empty()
+
     def test_the_extension_of_swagger_two_keeps_the_reading_it_had(self):
         """``x-nullable`` has no text of its own: ``null`` passes its enum, with a type beside it or without."""
         assert_that(_violations(None, {"type": "string", "x-nullable": True, "enum": ["low"]}, "2.0")).is_empty()
@@ -189,6 +219,8 @@ class TestNullableAddsToTheTypeAndLeavesTheEnumAsWritten:
             _violations("urgent", {"type": "string", "x-nullable": True, "enum": ["low"]}, "2.0")
         ).is_not_empty()
         assert_that(_violations(None, {"x-nullable": True, "enum": ["low"]}, "2.0")).is_empty()
+        composed = {"x-nullable": True, "allOf": [{"type": "string"}], "enum": ["low"]}
+        assert_that(_violations(None, composed, "2.0")).is_empty()
         assert_that(_violations(None, {"type": "string", "nullable": True}, "2.0")).is_not_empty()
 
     def test_a_value_shaped_like_a_schema_is_left_a_value(self):

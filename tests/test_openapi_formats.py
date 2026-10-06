@@ -12,6 +12,7 @@ import subprocess
 import sys
 import typing
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -462,6 +463,8 @@ class TestAHostnameIsWrittenAsRfc1123WritesIt:
             "a.-b",
             "a-.b",
             "a.b-",
+            "xn--",
+            "xn--abc-",
             "a_b",
             "a b",
             "exa\u00e9mple",
@@ -488,9 +491,146 @@ class TestAHostnameIsWrittenAsRfc1123WritesIt:
         assert_that(_conforms(Short(".".join(["x" * 59] * 5)), _text_of("hostname"))).is_false()
         assert_that(_conforms(Short("example.com"), _text_of("hostname"))).is_true()
 
-    def test_what_a_punycode_label_decodes_to_is_not_judged(self):
-        """The limit of the check: a label is read by its letters, and ``xn--X`` decodes to nothing."""
-        assert_that(_conforms("xn--X", _text_of("hostname"))).is_true()
+    @pytest.mark.parametrize(
+        "name",
+        ["xn--nxasmq6b", "XN--NXASMQ6B", "Xn--NxAsMq6B", "www.xn--nxasmq6b.example", "axn--b.example", "a.xn-b"],
+    )
+    def test_a_label_that_opens_xn_is_an_a_label_of_idna(self, name):
+        pytest.importorskip("idna", reason="idna not installed")
+        assert_that(_conforms(name, _text_of("hostname"), "3.1.0")).is_true()
+        assert_that(_conforms(name, _text_of("hostname"), "3.2.0")).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "xn--X",
+            "xn--nxasmq6b0",
+            "xn--nxasmq6b.xn--X",
+            "a.xn--X.b",
+            "xn--" + "a" * 59,
+            "xn--l-fda",
+            "xn--hello-zed",
+        ],
+        ids=[
+            "no punycode",
+            "not the form its own text encodes to",
+            "the second of two",
+            "between plain labels",
+            "too long once decoded",
+            "a middle dot with nothing before it",
+            "opens with a combining mark",
+        ],
+    )
+    def test_a_label_that_opens_xn_and_is_no_a_label_fails_where_the_dialect_has_a_labels(self, text):
+        """JSON Schema took punycode into the format in 2019.  Before it, and so under OpenAPI 3.0 and Swagger
+        2.0, a host name is its syntax, which every one of these has."""
+        pytest.importorskip("idna", reason="idna not installed")
+        assert_that(_conforms(text, _text_of("hostname"), "3.1.0")).is_false()
+        assert_that(_conforms(text, _text_of("hostname"), "3.2.0")).is_false()
+        assert_that(_conforms(text, _text_of("hostname"), "3.0.3")).is_true()
+        assert_that(_conforms(text, _text_of("hostname"), "2.0")).is_true()
+
+    def test_without_the_package_such_a_label_is_refused_with_what_to_install(self):
+        with patch.dict(sys.modules, {"idna": None}):
+            asked = assert_that(_conforms).raises(ImportError)
+            asked.when_called_with("xn--nxasmq6b", _text_of("hostname"), "3.1.0").is_equal_to(
+                "idna is required to check an `xn--` label of a hostname. Install it with: pip install assertpy2[json]"
+            )
+            assert_that(_conforms("example.com", _text_of("hostname"), "3.1.0")).is_true()
+            assert_that(_conforms("xn--nxasmq6b", _text_of("hostname"), "3.0.3")).is_true()
+
+    def test_the_package_is_loaded_for_such_a_label_and_for_nothing_else(self):
+        pytest.importorskip("idna", reason="idna not installed")
+        asked = (
+            "import sys; from assertpy2 import json_mixin; loaded = lambda: 'idna' in sys.modules;"
+            "before = loaded(); plain = ('example.com', 'not_one', 5, 'axn--b');"
+            "took = [json_mixin._is_hostname(one) for one in plain];"
+            "between = loaded(); encoded = json_mixin._is_hostname('xn--nxasmq6b');"
+            "print(before, took, between, encoded, loaded())"
+        )
+        ran = subprocess.run([sys.executable, "-c", asked], capture_output=True, text=True, check=True)
+        assert_that(ran.stdout.strip()).is_equal_to("False [True, False, True, True] False True True")
+
+
+class TestATimeIsTheFullTimeOfRfc3339:
+    """jsonschema checks `time` by the rule of Draft 3, ``HH:MM:SS`` and no more, whatever is installed."""
+
+    @pytest.mark.parametrize(
+        "time",
+        [
+            "10:00:00Z",
+            "10:00:00z",
+            "10:00:00+02:00",
+            "10:00:00-08:00",
+            "10:00:00-00:00",
+            "00:00:00Z",
+            "23:59:59Z",
+            "23:59:59+23:59",
+            "23:20:50.52Z",
+            "10:00:00.123456789012345Z",
+            "23:59:60Z",
+            "23:59:60.5Z",
+            "01:29:60+01:30",
+            "15:59:60-08:00",
+            "12:00:60-11:59",
+            "23:29:60+23:30",
+            "00:29:60-23:30",
+        ],
+    )
+    def test_a_time_passes(self, time):
+        assert_that(_conforms(time, _text_of("time"), "3.1.0")).is_true()
+        assert_that(_conforms(time, _text_of("time"))).is_true()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "10:00:00",
+            "10:00:00.5",
+            "10:00Z",
+            "10Z",
+            "1:00:00Z",
+            "10:0:00Z",
+            "10:00:0Z",
+            "010:00:00Z",
+            "24:00:00Z",
+            "10:60:00Z",
+            "10:00:61Z",
+            "10:00:00.Z",
+            "10:00:00,5Z",
+            "10:00:00+2:00",
+            "10:00:00+0200",
+            "10:00:00+02",
+            "10:00:00+24:00",
+            "10:00:00+02:60",
+            "10:00:00 Z",
+            "10:00:00Z ",
+            " 10:00:00Z",
+            "10:00:00Z\n",
+            "10:00:00ZZ",
+            "10:00:00+02:00Z",
+            "T10:00:00Z",
+            "2026-10-06T10:00:00Z",
+            "10:00:00UTC",
+            "1\u0660:00:00Z",
+            "22:59:60Z",
+            "23:58:60Z",
+            "23:59:60+01:00",
+            "00:59:60+01:01",
+            "12:00:60-11:58",
+        ],
+    )
+    def test_a_text_that_is_none_fails(self, text):
+        assert_that(_conforms(text, _text_of("time"), "3.1.0")).is_false()
+        assert_that(_conforms(text, _text_of("time"))).is_false()
+
+    def test_a_time_and_the_time_of_a_moment_are_read_alike(self):
+        """One reading for both: what fails as a `time` fails inside a `date-time`, but for the leap second,
+        which a `date-time` holds to the last day of a month."""
+        for time in ("10:00:00Z", "10:00:00", "24:00:00Z", "10:00:00+24:00", "23:59:60Z"):
+            alone = _conforms(time, _text_of("time"))
+            assert_that(_conforms(f"2026-12-31T{time}", _text_of("date-time"))).is_equal_to(alone)
+        assert_that(_conforms("2026-12-30T23:59:60Z", _text_of("date-time"))).is_false()
 
 
 class TestADurationIsWrittenAsRfc3339WritesIt:
@@ -568,11 +708,12 @@ class TestADurationIsWrittenAsRfc3339WritesIt:
         assert_that(_conforms(text, _text_of("duration"))).is_false()
 
 
-class TestTheThreeAreCheckedAlikeEverywhere:
+class TestEachIsCheckedAlikeEverywhere:
     CASES: typing.ClassVar[dict[str, tuple[str, str]]] = {
         "uri": ("http://example.com/a", "not a uri"),
         "hostname": ("example.com", "not_a_host"),
         "duration": ("P1D", "a day"),
+        "time": ("10:00:00Z", "10:00:00"),
     }
 
     @pytest.mark.parametrize("form", sorted(CASES))

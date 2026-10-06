@@ -121,30 +121,30 @@ jobs:
           - python-version: "3.10"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev --group integrations"
-            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
           - python-version: "3.11"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev --group integrations"
-            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+            imports: "numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
           - python-version: "3.12"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev --group integrations"
-            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+            imports: "numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
           - python-version: "3.13"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev --group integrations"
-            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+            imports: "numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
           - python-version: "3.14"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev --group integrations"
-            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+            imports: "numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
           # The one dependency every user gets, at its own floor, and it needs a cell to itself: pydantic
           # 2.0 requires typing-extensions>=4.6.1, so every cell installing `integrations` resolves it
           # above the declared bound. Measured 4.0.0 here against 4.6.1 in each of those.
           - python-version: "3.10"
             extras: "allure,behave,data,inline,json,numpy,pandas,polars"
             groups: "--group dev"
-            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
+            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
             reduced: "no integrations, so pydantic cannot lift typing-extensions off its declared floor"
           # 3.15 carries what is installable there: no combination of the data libraries publishes a
           # wheel for it yet, and pydantic has no stable one either, which takes the whole `integrations`
@@ -152,7 +152,7 @@ jobs:
           - python-version: "3.15"
             extras: "allure,behave,inline,json"
             groups: "--group dev"
-            imports: "asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
+            imports: "asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
             reduced: "no data-library wheel for 3.15 yet, and pydantic has no stable one either"
     runs-on: ubuntu-latest
     steps:

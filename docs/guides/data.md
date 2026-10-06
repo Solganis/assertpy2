@@ -119,7 +119,9 @@ that looks like a schema is left as it is.
 
 One reading is wider than the text on purpose. `nullable: true` on a schema that is a `$ref`, an `allOf`,
 an `anyOf` or a `oneOf`, with no `type` of its own, still allows `null`: that is how a nullable reference
-is usually written, and a spec written so would fail on every `null` otherwise.
+is usually written, and a spec written so would fail on every `null` otherwise. What else stands beside
+an `allOf`, `anyOf` or `oneOf` is still asked of `null`: an `enum` there lets it through only where it
+lists it, as beside a `type`.
 
 Three limits:
 
@@ -133,11 +135,12 @@ A `format` is checked where there is a check for it:
 
 | `format` | Checked |
 | --- | --- |
-| `date`, `time`, `email`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
+| `date`, `email`, `ipv4`, `ipv6`, `uuid`, `regex` | always, by jsonschema |
+| `time` | always, as the `full-time` of RFC 3339, which needs its offset: `10:00:00Z` and `10:00:00+02:00` pass, `10:00:00` fails. A second of `60` is taken in the last minute of a UTC day |
 | `date-time` | always, by the grammar of RFC 3339: `"yesterday"` and `"2026-02-30T10:00:00Z"` fail. A second of `60` is taken in the last minute of a UTC month, where a leap second can fall. The check is the same one whether or not the package that gives jsonschema its own is installed |
 | `int32`, `int64` | always, as the signed range: `2**40` is no `int32` |
 | `uri` | always, by the grammar of RFC 3986: a scheme is required, so `/orders/7` is no `uri` (it is a `uri-reference`), and neither is a text with a space or a non-ASCII letter in it |
-| `hostname` | always, as the syntax of RFC 1123: labels of ASCII letters, digits and hyphens, 63 characters each and 253 in all, with no dot after the last. The rules of IDNA are not applied: an `xn--` label passes whatever it decodes to |
+| `hostname` | always, as the syntax of RFC 1123: labels of ASCII letters, digits and hyphens, 63 characters each and 253 in all, with no dot after the last. Under OpenAPI 3.1, whose JSON Schema takes punycode into the format, a label that opens `xn--` has to be a valid A-label of IDNA 2008 as well: `xn--nxasmq6b` passes, `xn--X` fails. The `idna` package of the `json` extra judges it by the Unicode tables of the release installed, so a newer release takes code points assigned since. Under 3.0 and Swagger 2.0 the format is the syntax alone |
 | `duration` | always, by the grammar RFC 3339 gives for it: `P1DT12H` and `P2W` pass. It is narrower than ISO 8601: `PT0.5S`, `P1Y2D` and `-P1D` fail |
 | `uri-reference`, `iri`, `idn-email`, `json-pointer`, `uri-template` and the others jsonschema checks beside a package of their own | where that package is installed, and not where it is missing. `jsonschema[format-nongpl]` brings them all |
 

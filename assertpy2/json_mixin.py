@@ -22,11 +22,11 @@ _OPENAPI_VERSION: Final = re.compile(r"3\.([012])(?:\.\d+)?")
 _SWAGGER_2: Final = re.compile(r"2\.0(?:\.\d+)?")
 """Swagger's one version, read the same way, so "20" is not it."""
 
-_RFC_3339_MOMENT: Final = re.compile(
-    r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?"
-    r"(?:[Zz]|([+-])([0-9]{2}):([0-9]{2}))"
-)
-"""A `date-time` as RFC 3339 writes it: a full date, a `T`, a time to the second, then `Z` or an offset."""
+_RFC_3339_TIME: Final = r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(?:[Zz]|([+-])([0-9]{2}):([0-9]{2}))"
+"""A `time` as RFC 3339 writes its ``full-time``: a time to the second, then `Z` or an offset."""
+
+_RFC_3339_MOMENT: Final = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]" + _RFC_3339_TIME)
+"""A `date-time` as RFC 3339 writes it: a full date, a `T`, then `_RFC_3339_TIME`."""
 
 # The three below are texts that `re` compiles at first use: compiled at import they cost 0.5 ms.
 _DURATION: Final = (
@@ -48,8 +48,8 @@ _HOSTNAME: Final = (
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
 )
 """A `hostname` by RFC 1123, section 2.1: labels of ASCII letters, digits and hyphens, a hyphen at neither end,
-63 characters at most, joined by dots with none after the last, and 253 characters in all.  The syntax and no
-more: the rules of IDNA for what an ``xn--`` label may decode to are not applied."""
+63 characters at most, joined by dots with none after the last, and 253 characters in all.  What an ``xn--``
+label may decode to is asked apart, where the dialect asks it (`_is_hostname`)."""
 
 
 def _uri_pattern() -> str:
@@ -103,6 +103,35 @@ they do nothing without ``if`` or ``contains``, which are here.
 """
 
 
+def _time_read(read: re.Match[str], first: int) -> tuple[int, int] | None:
+    """The minute of the day a time stands at counted in UTC, beside its second.
+
+    Read off the groups of `_RFC_3339_TIME`, which open at *first* in the match.  ``None`` where a field is
+    past its range.  A second of ``60`` is within it: whether a leap second may stand there is for the
+    caller, who knows the day.  The minute runs from -1439 to 2878, since an offset moves a time out of the
+    day it is written in.
+    """
+    hour, minute, second = int(read[first]), int(read[first + 1]), int(read[first + 2])
+    offset_hour, offset_minute = int(read[first + 4] or 0), int(read[first + 5] or 0)
+    if hour > 23 or minute > 59 or second > 60 or offset_hour > 23 or offset_minute > 59:
+        return None
+    offset = (offset_hour * 60 + offset_minute) * (-1 if read[first + 3] == "-" else 1)
+    return hour * 60 + minute - offset, second
+
+
+def _is_rfc_3339_time(value: object) -> bool:
+    """Whether a text is an RFC 3339 ``full-time``, which is what the format `time` names.
+
+    The offset is required, as it is in a `date-time`.  A second of ``60`` is taken in the last minute of a
+    day counted in UTC: with no date beside it, that is all that can be asked of a leap second.
+    """
+    if not issubclass(type(value), str):
+        return True
+    read = re.fullmatch(_RFC_3339_TIME, cast("str", value))
+    stands = None if read is None else _time_read(read, 1)
+    return stands is not None and (stands[1] < 60 or stands[0] in (1439, -1))
+
+
 def _is_rfc_3339_moment(value: object) -> bool:
     """Whether a text is an RFC 3339 `date-time`.  What is no text is not this format's to judge.
 
@@ -116,23 +145,15 @@ def _is_rfc_3339_moment(value: object) -> bool:
     read = _RFC_3339_MOMENT.fullmatch(cast("str", value))
     if read is None:
         return False
-    year, month, day, hour, minute, second = (int(part) for part in read.groups()[:6])
-    if not 1 <= month <= 12:
+    year, month, day = int(read[1]), int(read[2]), int(read[3])
+    stands = _time_read(read, 4)
+    if stands is None or not 1 <= month <= 12:
         return False
+    in_utc, second = stands
     leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
     last = _DAYS_IN[month - 1] + (month == 2 and leap)
-    offset_hour, offset_minute = int(read.group(8) or 0), int(read.group(9) or 0)
-    offset = (offset_hour * 60 + offset_minute) * (-1 if read.group(7) == "-" else 1)
-    in_utc = hour * 60 + minute - offset
     ends_a_month = (in_utc == 1439 and day == last) or (in_utc == -1 and day == 1)
-    return (
-        1 <= day <= last
-        and hour < 24
-        and minute < 60
-        and offset_hour < 24
-        and offset_minute < 60
-        and (second < 60 or (second == 60 and ends_a_month))
-    )
+    return 1 <= day <= last and (second < 60 or ends_a_month)
 
 
 def _written_as(pattern: str) -> Any:
@@ -148,7 +169,40 @@ def _written_as(pattern: str) -> Any:
 
 
 _is_duration: Final = _written_as(_DURATION)
-_is_hostname: Final = _written_as(_HOSTNAME)
+
+
+def _is_hostname(value: object) -> bool:
+    """Whether a text is a host name: `_HOSTNAME`, and each label that opens ``xn--`` an A-label of IDNA 2008.
+
+    The reading of JSON Schema since 2019, which has the format take in "host names produced using the
+    Punycode algorithm": such a label has to decode, and to what RFC 5891 allows in a label.  Before that
+    the format is the syntax alone, and so it is under OpenAPI 3.0 and Swagger 2.0 (`_openapi_formats`).
+
+    The rules need tables of Unicode, which the `idna` package carries, so the answer for a code point is the
+    one of the release installed.  A newer release takes what Unicode has assigned since: from 3.7 to 3.20
+    that is 21 407 code points more, and none fewer.
+    """
+    if not issubclass(type(value), str):
+        return True
+    text = cast("str", value)
+    if re.fullmatch(_HOSTNAME, text) is None:
+        return False
+    encoded = [] if str.find(text, "--") < 0 else re.findall(r"(?<![^.])[Xx][Nn]--[^.]*", text)
+    if not encoded:
+        return True
+    try:
+        import idna  # 2 ms at the first such label of a process, and nothing for a host name without one
+    except ImportError:
+        raise ImportError(
+            "idna is required to check an `xn--` label of a hostname. Install it with: pip install assertpy2[json]"
+        ) from None
+    try:
+        for label in encoded:
+            idna.decode(label)
+    except UnicodeError:
+        # every refusal of `idna` is one, and its releases before 3.3 let the codec's own out as it was
+        return False
+    return True
 
 
 def _is_uri(value: object) -> bool:
@@ -196,21 +250,28 @@ def _fits_in(bits: int) -> Any:
     return fits
 
 
-def _openapi_formats(jsonschema_mod: Any) -> Any:
+def _openapi_formats(jsonschema_mod: Any, *, a_labels: bool) -> Any:
     """jsonschema's format checker, with the formats it leaves unchecked that a contract most often declares.
 
     `int32` and `int64` are OpenAPI's own, and jsonschema knows neither: ``2**40`` passed for an `int32`.
     `date-time`, `uri`, `hostname` and `duration` it checks only beside a package each, none of which this
     library installs, so ``"yesterday"`` passed for a moment and ``"not a uri"`` for a URI.  The checks here
-    stand whether a package is there or not, so one text gets one verdict in every environment.  The rest
-    of what jsonschema checks beside a package of its own stays unchecked where that package is missing.
+    stand whether such a package is there or not, so a text is not judged by what else is installed.  The
+    rest of what jsonschema checks beside a package of its own stays unchecked where that package is missing.
+
+    `time` it checks everywhere, and by the rule of Draft 3: ``HH:MM:SS`` and no more, so ``10:00:00Z``
+    failed and ``10:00:00`` passed, where the format has been RFC 3339's ``full-time`` since Draft 7.
+
+    *a_labels* is whether a `hostname` holds its ``xn--`` labels to IDNA: the dialect of OpenAPI 3.1 does,
+    the one of 3.0 and Swagger 2.0 has the format as the syntax of a host name and no more.
     """
     checker = jsonschema_mod.FormatChecker()
     checker.checks("int32")(_fits_in(32))
     checker.checks("int64")(_fits_in(64))
     checker.checks("date-time")(_is_rfc_3339_moment)
+    checker.checks("time")(_is_rfc_3339_time)
     checker.checks("duration")(_is_duration)
-    checker.checks("hostname")(_is_hostname)
+    checker.checks("hostname")(_is_hostname if a_labels else _written_as(_HOSTNAME))
     checker.checks("uri")(_is_uri)
     return checker
 
@@ -270,7 +331,10 @@ def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
 
     With no ``type`` of its own the keyword does nothing by that text.  One reading is kept wider on purpose: a
     schema that is a ``$ref`` or an ``allOf``, ``anyOf`` or ``oneOf`` becomes a union with ``null``, which is how
-    a nullable reference is written in practice.
+    a nullable reference is written in practice.  Of a composition the union takes the place of ``allOf``,
+    ``anyOf`` and ``oneOf`` alone: what else the schema holds stays beside it and is asked of ``null`` too, so
+    an ``enum`` there allows ``null`` only where it lists it, and a ``not`` still refuses what it refuses.  A
+    ``$ref`` goes into the union with everything beside it: OpenAPI 3.0 ignores what stands beside a reference.
 
     Swagger 2.0 spells the idea ``x-nullable``.  It is an extension with no text of its own and keeps the
     reading it had: ``null`` passes its enum, and any schema with no ``type`` becomes the union.
@@ -288,10 +352,14 @@ def _nullable_as_null(schema: dict[str, Any], keyword: str) -> None:
         enum = schema.get("enum")
         if extension and isinstance(enum, list) and None not in enum:
             schema["enum"] = [*enum, None]
-    elif extension or any(key in schema for key in ("$ref", "allOf", "anyOf", "oneOf")):
+    elif extension or "$ref" in schema:
         inner = dict(schema)
         schema.clear()
         schema["anyOf"] = [inner, {"type": "null"}]
+    else:
+        composed = {key: schema.pop(key) for key in ("allOf", "anyOf", "oneOf") if key in schema}
+        if composed:
+            schema["anyOf"] = [composed, {"type": "null"}]
 
 
 def _stringify_keys(node: Any) -> Any:
@@ -769,7 +837,9 @@ class JsonMixin(_MixinBase):
 
         A ``format`` is checked where there is a check for it: ``date``, ``time``, ``date-time``, ``email``,
         ``ipv4``, ``ipv6``, ``uuid``, ``regex``, ``uri``, ``hostname``, ``duration``, and OpenAPI's ``int32``
-        and ``int64``.  The others jsonschema checks only beside a package of their own, ``uri-reference``,
+        and ``int64``.  A ``time`` is RFC 3339's, with its offset: ``10:00:00Z``, and not ``10:00:00``.  A
+        ``hostname`` under OpenAPI 3.1 has its ``xn--`` labels held to IDNA by the ``idna`` package.  The
+        others jsonschema checks only beside a package of their own, ``uri-reference``,
         ``iri``, ``json-pointer`` and ``uri-template`` among them, are checked where that package is
         installed (``jsonschema[format-nongpl]`` brings them all), and pass unchecked where it is not.
 
@@ -830,7 +900,9 @@ class JsonMixin(_MixinBase):
                 swagger=is_swagger_2,
             )
         validator = validator_cls(
-            {"$ref": base + pointer}, registry=registry, format_checker=_openapi_formats(jsonschema_mod)
+            {"$ref": base + pointer},
+            registry=registry,
+            format_checker=_openapi_formats(jsonschema_mod, a_labels=is_openapi_31),
         )
         errors = sorted(validator.iter_errors(self.val), key=lambda error: (error.json_path, str(error.validator)))
         if not errors:
