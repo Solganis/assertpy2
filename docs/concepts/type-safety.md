@@ -414,7 +414,10 @@ The details behind each row follow.
 
 #### What counts as drift
 
-- It is alias-aware: an aliased payload key is not mistaken for drift.
+- It is alias-aware: the key a field was read from is not mistaken for drift. Another spelling of that
+  field is, since pydantic drops it like any other key: its name sent beside the alias, the later of two
+  alias choices, a name the config does not read by, the key a path starts at where the path leads
+  nowhere. The failure names it and says where the field was read from.
 - It respects a model that opts into extras (`model_config = ConfigDict(extra="allow")`).
 - It reports only structural drift, undeclared fields, and not type coercions. A `datetime` field
   legitimately arrives as a JSON string, so flagging coercions would be noise.
@@ -521,9 +524,14 @@ how the dict is read:
 Ruling one out by its tag is done only in a model that runs no code of its own, since a validator can
 rewrite the tag after the fact.
 
+A `TypedDict` held in a `deque`, an `OrderedDict` or a named tuple, or declared beside a `deque`, is not
+guessed either: the check takes those for types that may build a dict.
+
 Where the check does not guess, a clean payload passes. A key the payload sent that the built dict lost
 fails with `<path> cannot be checked`, and so does a field two of them read from different keys when the
-payload sends both. A key read through an alias is not lost. What the dict holds is followed as whatever
+payload sends both. A key read through an alias is not lost. A field's name sent beside its alias is not
+named there, as it is where the check knows which `TypedDict` built the dict: the built dict holds that
+name either way. What the dict holds is followed as whatever
 each of the declared types says of it.
 
 ## Set up your type checker

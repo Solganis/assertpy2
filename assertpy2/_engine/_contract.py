@@ -53,15 +53,15 @@ def _alias_sources(alias: object) -> list[tuple[object, ...]]:
     return [tuple(path)] if path else []
 
 
-def _declared_keys(model: Any) -> set[str]:
-    """Field names plus the top-level key of every alias, so an aliased payload key is not mistaken for drift."""
-    keys: set[str] = set()
-    for name, info in model.model_fields.items():
-        keys.add(name)
-        for alias in (getattr(info, "alias", None), getattr(info, "validation_alias", None)):
-            if alias is not None:
-                keys.update(source[0] for source in _alias_sources(alias) if isinstance(source[0], str))
-    return keys
+def _spellings(name: str, info: Any) -> list[object]:
+    """Every key that spells a field: its name, the first key of each alias validation may read it by, and the alias
+    it is dumped under.  Which of them validation reads is the config's to say (`_field_sources`)."""
+    keys: list[object] = [name]
+    for alias in (getattr(info, "alias", None), getattr(info, "validation_alias", None)):
+        if alias is not None:
+            keys += [source[0] for source in _alias_sources(alias)]
+    shown = getattr(info, "serialization_alias", None)
+    return [*keys, shown] if isinstance(shown, str) else keys
 
 
 def _field_sources(name: str, info: Any, config: Any) -> tuple[tuple[object, ...], ...]:
@@ -216,8 +216,9 @@ and how it was taken (the keys followed for a field or a key, ``None`` for a pos
 collection that keeps no positions).  A hop into a mapping's key, and one into what JSON text decodes to, is named
 by nothing.  Read out only where something is found (`_placed`)."""
 
-_Found = tuple[_Hop, object]
-"""An undeclared field: where it stands and the value sent there."""
+_Found = tuple[_Hop, object] | tuple[_Hop, object, str]
+"""An undeclared field: where it stands and the value sent there, and, where the key spells a field of the model, why
+validation did not read it."""
 
 _DECLARED: dict[tuple[object, object], tuple[Any, Any]] = {}
 """What a declaration says a container built from it holds, per declaration and kind of container: worked out once,
@@ -737,8 +738,37 @@ def _adapter(declared: _Declared) -> Any:
 
 _FieldReads = tuple[tuple[str, tuple[tuple[object, ...], ...], _Declared], ...]
 
-_READS: dict[type, tuple[object, frozenset[str], _FieldReads, _Declared | None]] = {}
-"""Per model class, with the validator they were read beside: the keys it declares, where each field is read, and
+_Sources = tuple[tuple[object, ...], ...]
+_KeyReads = tuple[frozenset[object], tuple[_Sources, ...], dict[object, _Sources]]
+"""Which keys of a payload a model or a record reads: the keys it reads wherever they are sent, the sources of each
+field that may be read from another place, and every key that spells a field beside where validation reads that
+field."""
+
+
+def _key_reads(fields: collections.abc.Iterable[tuple[_Sources, collections.abc.Iterable[object]]]) -> _KeyReads:
+    """The keys the *fields* are read from, each given as its sources in the order validation tries them and the
+    keys that spell it.
+
+    A field is read from the first of its sources a payload holds whole.  The first of them, where it is a key and
+    no path, is read wherever it is sent.  A later one is read only where those before it are absent, and a path only
+    where it leads somewhere, so those are told per payload (`_unread`): of two spellings sent validation drops the
+    later, and the key a path starts at is dropped where the path leads nowhere.
+    """
+    sure: set[object] = set()
+    chosen: list[_Sources] = []
+    spelled: dict[object, _Sources] = {}
+    for sources, spellings in fields:
+        if sources and len(sources[0]) == 1:
+            sure.add(sources[0][0])
+        if len(sources) != 1 or len(sources[0]) != 1:
+            chosen.append(sources)
+        for key in (*(source[0] for source in sources), *spellings):
+            spelled.setdefault(key, sources)
+    return frozenset(sure), tuple(chosen), spelled
+
+
+_READS: dict[type, tuple[object, _KeyReads, _FieldReads, _Declared | None]] = {}
+"""Per model class, with the validator they were read beside: the keys it reads, where each field is read, and
 what a typed `__pydantic_extra__` declares its extra values as.
 
 Worked out per level of every payload, it was most of the walk: a list of 1000 nested models asked for it 1000 times.
@@ -747,7 +777,7 @@ A rebuild replaces the validator, and with it what the class reads, so an entry 
 was made with.  At most 256 classes are kept, so models made on the fly cannot grow it without bound."""
 
 
-def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads, _Declared | None]:
+def _reads_of(model: Any) -> tuple[_KeyReads, _FieldReads, _Declared | None]:
     validator = getattr(model, "__pydantic_validator__", None)
     known = _READS.get(model)
     if known is None or known[0] is not validator:
@@ -760,7 +790,10 @@ def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads, _Declared | None
             if _may_hold_model(getattr(info, "annotation", None)) or _keyed_under(nodes.get(name), model)
         )
         extras = _extra_values(model, nodes.get("__pydantic_extra__")) if config.get("extra") == "allow" else None
-        known = (validator, frozenset(_declared_keys(model)), fields, extras)
+        keyed = _key_reads(
+            (_field_sources(name, info, config), _spellings(name, info)) for name, info in model.model_fields.items()
+        )
+        known = (validator, keyed, fields, extras)
         if model in _READS or len(_READS) < 256:
             _READS[model] = known
     return known[1], known[2], known[3]
@@ -807,10 +840,10 @@ def _extra_values(model: Any, node: object) -> _Declared | None:
 
 
 _RecordReads = tuple[
-    frozenset[str], tuple[tuple[str, tuple[tuple[object, ...], ...], _Declared | None], ...], _Declared
+    _KeyReads, frozenset[str], bool, tuple[tuple[str, tuple[tuple[object, ...], ...], _Declared | None], ...], _Declared
 ]
-"""For a dataclass or a `TypedDict`: the payload keys it takes, the fields worth walking with where each is read and
-what it declares, and the class as a declaration of its own."""
+"""For a dataclass or a `TypedDict`: the payload keys it reads, the names of its fields, whether it keeps extras, the
+fields worth walking with where each is read and what it declares, and the class as a declaration of its own."""
 
 _RECORDS: dict[tuple[object, object], tuple[object, _RecordReads]] = {}
 """Per dataclass or `TypedDict`, by its schema or its class, and the class whose schema holds it, beside the schema or
@@ -822,9 +855,9 @@ def _record_reads(record: _Record, owner: object = None) -> _RecordReads:
 
     The keys it takes and where each field is read come from the schema pydantic built, the one the walk came to it
     by, the record's own, or the one of the class that declared it (*owner*).  It holds what no annotation tells: an
-    alias written as text, the one of several `Field`s that wins, a field ``init=False`` leaves out.  The name is read
-    after its aliases, since a config that allows it reaches a `TypedDict` from the model above.  Where no schema
-    holds the record, the annotations are read as written (`_written_fields`).
+    alias written as text, the one of several `Field`s that wins, a field ``init=False`` leaves out, and the config
+    that says whether a name is read, which reaches a `TypedDict` from the model above.  Where no schema holds the
+    record, the annotations are read as written (`_written_fields`), and a name counts as read after its aliases.
 
     What each field declares below it is the schema of that field, beside its annotation as pydantic resolved it or
     as written where that can be read.
@@ -842,29 +875,30 @@ def _record_reads(record: _Record, owner: object = None) -> _RecordReads:
     # only later pydantic names the class in the schema of a `TypedDict`
     told = _written_fields(kind) if isinstance(kind, type) else ()
     written = {name: (sources, annotation, held) for name, sources, annotation, held in told}
-    reads = _schema_fields(_Record(node, kind), holder)
-    reads = reads or [(name, sources, held, None) for name, (sources, _, held) in written.items()]
-    accepted, fields = set(), []
-    for name, sources, held, schema in reads:
-        accepted.add(name)
-        accepted.update(source[0] for source in sources if isinstance(source[0], str))
+    found = _record_node(_Record(node, kind), holder)
+    said = found if isinstance(found, dict) else {}
+    # an older pydantic says it in the config alone, and a `TypedDict` that declares its extras in the schema alone
+    keeps = said.get("extra_behavior", (said.get("config") or {}).get("extra_fields_behavior")) == "allow"
+    reads = _schema_fields(_Record(found, kind), holder)
+    reads = reads or [(name, sources, held, None, ()) for name, (sources, _, held) in written.items()]
+    keyed, fields = [], []
+    for name, sources, held, schema, spellings in reads:
+        keyed.append((sources, (name, *spellings)))
         annotation = written[name][1] if name in written else None
         if held and (annotation is None or _may_hold_model(annotation) or _keyed_under(schema, holder)):
             fields.append(
                 (name, sources, None if annotation is None and schema is None else (annotation, holder, schema))
             )
-    answer = (frozenset(accepted), tuple(fields), (kind, None, None))
+    names = frozenset(name for name, *_ in reads)
+    answer = (_key_reads(keyed), names, keeps, tuple(fields), (kind, None, None))
     _remember(_RECORDS, key, read_with, answer, 256)
     return answer
 
 
-def _schema_fields(record: _Record, holder: object) -> list[tuple[str, tuple[tuple[object, ...], ...], bool, Any]]:
-    """Each key the schema says a record takes: its name, where it is read (its alias paths, then its name), whether
-    the record holds it, which an `InitVar` is not, and the schema of its value.  The schema is the one the walk came
-    to the record by, else the one the schema of *holder* has for its class; empty where it has none.
-
-    A `TypedDict` is told by the id its ``ref`` ends in, since only later pydantic names its class there.
-    """
+def _record_node(record: _Record, holder: object) -> Any:
+    """The schema of a record: the one the walk came to it by, else the one the schema of *holder* has for its class,
+    or ``None``.  A `TypedDict` is told by the id its ``ref`` ends in, since only later pydantic names its class
+    there."""
     found, kind = record
     pending: list[Any] = [] if found is not None else [getattr(holder, "__pydantic_core_schema__", None)]
     while pending and found is None:
@@ -876,7 +910,20 @@ def _schema_fields(record: _Record, holder: object) -> list[tuple[str, tuple[tup
             pending.extend(value for key, value in node.items() if key not in ("serialization", "metadata", "default"))
         elif isinstance(node, (list, tuple)):
             pending.extend(node)
-    by_alias = isinstance(found, dict) and (found.get("config") or {}).get("validate_by_alias") is not False
+    return found
+
+
+def _schema_fields(
+    record: _Record, holder: object
+) -> list[tuple[str, tuple[tuple[object, ...], ...], bool, Any, tuple[object, ...]]]:
+    """Each key the schema says a record takes: its name, where it is read (its alias paths, then its name, each
+    where the record's config reads by it), whether the record holds it, which an `InitVar` is not, the schema of its
+    value, and the other keys that spell it.  Empty where no schema holds the record (`_record_node`).
+    """
+    found = _record_node(record, holder)
+    config = (found.get("config") or {}) if isinstance(found, dict) else {}
+    by_alias, by_name = config.get("validate_by_alias") is not False, config.get("validate_by_name")
+    by_name = by_name if by_name is not None else config.get("populate_by_name")
     while isinstance(found, dict) and found.get("type") not in ("typed-dict", "dataclass-args"):
         found = found.get("schema")
     if not isinstance(found, dict):
@@ -888,11 +935,11 @@ def _schema_fields(record: _Record, holder: object) -> list[tuple[str, tuple[tup
         if field.get("init") is not False:
             alias = field.get("validation_alias")
             paths = [alias] if isinstance(alias, str) or not alias or not isinstance(alias[0], list) else alias
-            sources = [(path,) if isinstance(path, str) else tuple(path) for path in paths if path and by_alias]
-            # counted as declared beside the alias validation reads, as a model's is
+            aliases = [(path,) if isinstance(path, str) else tuple(path) for path in paths if path]
+            read_at = (*(aliases if by_alias else ()), *([(name,)] if by_name or not aliases else ()))
             shown = field.get("serialization_alias")
-            read_at = (*sources, (name,), *([(shown,)] if isinstance(shown, str) else []))
-            reads.append((name, read_at, not field.get("init_only"), field.get("schema")))
+            spellings = (*(path[0] for path in aliases), *([shown] if isinstance(shown, str) else ()))
+            reads.append((name, read_at, not field.get("init_only"), field.get("schema"), spellings))
     return reads
 
 
@@ -970,6 +1017,33 @@ def _raw_field(
     return None, None
 
 
+def _unread(left: list[object], payload: collections.abc.Mapping, reads: _KeyReads) -> list[object]:
+    """Those of the keys *left*, which no field is sure to read, that no field was read from in *payload*: the ones
+    validation dropped, or kept as extras."""
+    read = {source[0] for sources in reads[1] for source in [_raw_field(payload, sources)[0]] if source}
+    return [key for key in left if key not in read]
+
+
+def _undeclared(payload: collections.abc.Mapping, key: object, path: _Hop, reads: _KeyReads) -> _Found:
+    """The find for a *key* of *payload* validation dropped, with the reason where the key spells a field: the
+    source its field was read from in its place, or the ones validation reads it from where the payload sent none."""
+    sources = reads[2].get(key)
+    if not sources:
+        return (path, key, (key,)), payload[key]
+    read, _ = _raw_field(payload, sources)
+    reason = (
+        f"its field was read from <{_spelt(read)}>"
+        if read is not None
+        else f"validation reads its field from {' or '.join(f'<{_spelt(source)}>' for source in sources)}"
+    )
+    return (path, key, (key,)), payload[key], reason
+
+
+def _spelt(source: tuple[object, ...]) -> str:
+    """A source as a failure names it: a key, and the keys and positions a path goes on by."""
+    return "".join(f"[{step}]" if isinstance(step, int) else f".{step}" for step in source).removeprefix(".")
+
+
 def _placed(hop: _Hop) -> tuple[str, tuple[Step, ...]]:
     """Where *hop* stands, as the text a failure names it by and as the steps that reach it in the payload."""
     hops = []
@@ -1041,7 +1115,7 @@ def contract_drift(
             reads those items by position.
     """
     model = type(instance)
-    declared, fields, extras = _reads_of(model)
+    reads, fields, extras = _reads_of(model)
     replayed = _REPLAYED in _seen
     if getattr(model, "__pydantic_root_model__", False):
         return _declared_drift(payload, instance.root, path, _seen, fields[0][2], replayed) if fields else []
@@ -1052,10 +1126,14 @@ def contract_drift(
         return []
     seen = _seen | {(id(payload), id(instance))}
     drift: list[_Found] = []
-    if getattr(model, "model_config", {}).get("extra") != "allow":
-        drift += [((path, key, (key,)), payload[key]) for key in payload if key not in declared]
-    else:
-        drift += _extras_drift(payload, instance, path, seen, extras, replayed, declared)
+    sure = reads[0]
+    left = [key for key in payload if key not in sure]
+    if left:
+        left = _unread(left, payload, reads)
+    if getattr(model, "model_config", {}).get("extra") == "allow":
+        drift += _extras_drift(payload, instance, path, seen, extras, replayed, left)
+    elif left:
+        drift += [_undeclared(payload, key, path, reads) for key in left]
     for name, sources, annotated in fields:
         source, raw = _raw_field(payload, sources)
         if source is None:
@@ -1078,15 +1156,15 @@ def _extras_drift(
     seen: frozenset[tuple[int, int]],
     declared: _Declared | None,
     replayed: bool,
-    own: frozenset[str],
+    left: list[object],
 ) -> list[_Found]:
     """Drift under the extras of a model that allows them: built through a typed `__pydantic_extra__` and walked as it
     *declared* them; untyped ones are the payload's own objects.
 
     An extra the payload sent that the model no longer holds was built as that type and removed afterwards, by a
     validator.  What it was built into is gone, so it is validated again as the declared type and walked beside what
-    that builds, or refused where that cannot tell (`_replayed`).  *own* are the keys the model declares, which are
-    no extras.
+    that builds, or refused where that cannot tell (`_replayed`).  *left* are the keys no field was read from, which
+    are the extras the model was sent.
     """
     held = getattr(instance, "__pydantic_extra__", None)
     # a validator can leave anything there: what is no dict holds no extra
@@ -1098,9 +1176,7 @@ def _extras_drift(
         for entry in _declared_drift(payload[key], value, (path, key, (key,)), seen, declared, replayed)
     ]
     if declared is not None:
-        gone: list[tuple[_Hop, object]] = [
-            ((path, key, (key,)), payload[key]) for key in payload if key not in own and key not in built
-        ]
+        gone: list[tuple[_Hop, object]] = [((path, key, (key,)), payload[key]) for key in left if key not in built]
         if any(_holds(part, _is_mapping, read_text=True) for _, part in gone):
             reason = f"the model no longer holds {len(gone)} of the extras it was sent"
             drift += _replayed(payload, gone, path, seen, reason, _listed(declared))
@@ -1172,10 +1248,11 @@ def exactness_failure(pairs: Any, *, carrier: str) -> tuple[str, list[DiffEntry]
         return f"<the payload> {reason}", [DiffEntry(path=where or ".", steps=steps, actual=payload, expected=reason)]
     if not drift:
         return None
-    placed = sorted(((*_placed(hop), sent) for hop, sent in drift), key=operator.itemgetter(0))
-    entries = [DiffEntry(path=where, steps=steps, actual=sent, absent="expected") for where, steps, sent in placed]
+    placed = sorted(((*_placed(hop), sent, why) for hop, sent, *why in drift), key=operator.itemgetter(0))
+    entries = [DiffEntry(path=where, steps=steps, actual=sent, absent="expected") for where, steps, sent, _ in placed]
     paths = [entry.path for entry in entries]
-    return f"{carrier}{len(entries)} undeclared field(s) the model does not declare: {paths}", entries
+    told = "".join(f"\n<{where}> is not read: {why[0]}" for where, _, _, why in placed if why)
+    return f"{carrier}{len(entries)} undeclared field(s) the model does not declare: {paths}{told}", entries
 
 
 def _value_drift(
@@ -1245,11 +1322,23 @@ def _record_drift(
     owner: object,
 ) -> list[_Found]:
     """Drift under a dataclass or a `TypedDict`, which drop an undeclared key as a model does: the keys *raw* holds
-    that the record neither takes nor keeps among its *extras*, where it allows them, and what lies under the
-    fields it *built*."""
-    accepted, fields, _ = _record_reads(record, owner)
+    that the record neither read a field from nor keeps among its *extras*, where it allows them, and what lies under
+    the fields it *built*.
+
+    A key that is the name of a field is no extra by being in what was built, where every field is: it is kept only
+    by a record that keeps extras, which puts what it was sent there over the field.
+    """
+    reads, names, keeps, fields, _ = _record_reads(record, owner)
     replayed = _REPLAYED in seen
-    drift: list[_Found] = [((path, key, (key,)), raw[key]) for key in raw if key not in accepted and key not in extras]
+    sure = reads[0]
+    left = [key for key in raw if key not in sure]
+    drift: list[_Found] = []
+    if left:
+        drift = [
+            _undeclared(raw, key, path, reads)
+            for key in _unread(left, raw, reads)
+            if (not keeps if key in names else key not in extras)
+        ]
     for name, sources, declared in fields:
         source, part = _raw_field(raw, sources)
         if source is not None and name in built:
@@ -1268,7 +1357,8 @@ def _unsure_drift(
     """Drift under a dict one of several declared `TypedDict`s may have built.
 
     One whose `Literal` fields do not hold what the dict holds did not build it, where no code of the owner's could
-    have rewritten them since.  Where that leaves one, and nothing declared beside them may build a dict, the dict is
+    have rewritten them since and no extra was put over them (`_put_over`).  Where that leaves one, and nothing
+    declared beside them may build a dict, the dict is
     read as that record.  Else nothing tells the rest apart, and the walk does not choose as validation did.  A key the
     payload sent that the dict holds neither under its name nor as the field one of them reads from it could have been
     dropped by any, so it refuses; so does a field two of them read from different parts of the payload.  What the
@@ -1276,12 +1366,7 @@ def _unsure_drift(
     """
     records = unsure.records
     if not runs_own_code(owner):
-        fitting = [
-            record
-            for record in records
-            if all(name not in built or built[name] in allowed for name, allowed in _literals(record, owner))
-        ]
-        records = tuple(fitting)
+        records = tuple(record for record in records if _may_have_built(raw, built, record, owner))
         if len(records) == 1 and not unsure.beside:
             return _record_drift(raw, built, built, path, seen, _Record(records[0], None), owner)
     read_as, fields, other = _shared_reads(records, unsure.beside, owner)
@@ -1306,6 +1391,31 @@ def _unsure_drift(
     return drift
 
 
+def _may_have_built(raw: collections.abc.Mapping, built: dict, record: Any, owner: object) -> bool:
+    """Whether the `TypedDict` schema *record* may have built the dict *built* from *raw*: each of its `Literal` fields
+    holds a value it takes, or one a key of the payload was put over."""
+    over = _put_over(raw, record, owner)
+    return all(
+        name not in built or name in over or built[name] in allowed for name, allowed in _literals(record, owner)
+    )
+
+
+def _put_over(raw: collections.abc.Mapping, record: Any, owner: object) -> collections.abc.Collection[object]:
+    """The fields of the `TypedDict` schema *record* that a key of *raw* was put over, if it built the dict.
+
+    One that keeps extras keeps a key it read no field from, and where that key is the name of a field, as beside the
+    alias the field was read from, it lands on what validation built there.  What the dict holds under that name is
+    then what was sent, and does not say that this one did not build it.  One that drops extras had nothing put over
+    its fields, so what another would have kept is nothing to it.
+    """
+    reads, names, keeps, _, _ = _record_reads(_Record(record, None), owner)
+    if not keeps:
+        return ()
+    sure = reads[0]
+    left = [key for key in raw if key in names and key not in sure]
+    return _unread(left, raw, reads) if left else left
+
+
 def _literals(record: Any, owner: object) -> list[tuple[str, list[object]]]:
     """The fields of the `TypedDict` schema *record* that take nothing but the values a `Literal` lists, with those
     values, ``None`` among them where the field takes it too."""
@@ -1314,7 +1424,7 @@ def _literals(record: Any, owner: object) -> list[tuple[str, list[object]]]:
     if known is not None and known[0] is record:
         return known[1]
     found = []
-    for name, _, _, schema in _schema_fields(_Record(record, None), owner):
+    for name, _, _, schema, _ in _schema_fields(_Record(record, None), owner):
         allowed: list[object] = []
         while _schema_kind(schema) == "nullable":
             allowed.append(None)
@@ -1344,7 +1454,7 @@ def _shared_reads(records: tuple[Any, ...], beside: tuple[Any, ...], owner: obje
     read_at: dict[str, list[tuple[tuple[object, ...], ...]]] = {}
     schemas: dict[str, list[Any]] = {}
     for record in records:
-        for name, sources, _, schema in _schema_fields(_Record(record, None), owner):
+        for name, sources, _, schema, _ in _schema_fields(_Record(record, None), owner):
             for source in sources:
                 read_as.setdefault(source[0], []).append(name)
             read_at.setdefault(name, []).append(sources)
@@ -1597,7 +1707,7 @@ def _revalidated(
     validate = getattr(model, "model_validate", None)
     validate_json = getattr(model, "model_validate_json", None)
     if validate is None and hasattr(model, "__dataclass_fields__"):
-        adapter = _adapter(_record_reads(_Record(None, model))[2])
+        adapter = _adapter(_record_reads(_Record(None, model))[4])
         validate, validate_json = getattr(adapter, "validate_python", None), getattr(adapter, "validate_json", None)
     if validate is None or validate_json is None:
         raise UncheckableDriftError(path, reason, raw)

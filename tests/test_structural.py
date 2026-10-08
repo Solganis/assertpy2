@@ -15,7 +15,6 @@ from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, sof
 from assertpy2._engine import _contract
 from assertpy2._engine._contract import (
     UncheckableDriftError,
-    _declared_keys,
     _placed,
     contract_drift,
     shape,
@@ -807,7 +806,7 @@ def _drift(payload, model):
 
 
 def _paths(found):
-    return [_placed(place)[0] for place, _ in found]
+    return [_placed(place)[0] for place, *_ in found]
 
 
 def _is_text(value):
@@ -1076,7 +1075,8 @@ class TestAliasResolution:
         class Model(BaseModel):
             user_id: int = Field(serialization_alias="userId")
 
-        assert_that(_declared_keys(Model)).is_equal_to({"user_id"})
+        assert_that(_drift({"user_id": 1}, Model)).is_empty()
+        assert_that(_drift({"user_id": 1, "userId": 2}, Model)).is_equal_to(["userId"])
 
     def test_a_validation_only_alias_is_declared(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -1085,7 +1085,7 @@ class TestAliasResolution:
         class Model(BaseModel):
             user_id: int = Field(validation_alias="incoming_id")
 
-        assert_that(_declared_keys(Model)).contains("incoming_id")
+        assert_that(_drift({"incoming_id": 1}, Model)).is_empty()
 
     def test_every_choice_of_an_alias_choices_is_declared(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -1094,7 +1094,8 @@ class TestAliasResolution:
         class Model(BaseModel):
             user_id: int = Field(validation_alias=AliasChoices("userId", "user-id", "uid"))
 
-        assert_that(_declared_keys(Model)).contains("userId", "user-id", "uid")
+        for choice in ("userId", "user-id", "uid"):
+            assert_that(_drift({choice: 1}, Model)).described_as(choice).is_empty()
 
     def test_an_alias_path_declares_the_key_it_consumes(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -1103,7 +1104,6 @@ class TestAliasResolution:
         class Model(BaseModel):
             user_id: int = Field(validation_alias=AliasPath("meta", "id"))
 
-        assert_that(_declared_keys(Model)).contains("meta")
         assert_that(_drift({"meta": {"id": 1}}, Model)).is_empty()
 
 
@@ -1240,7 +1240,7 @@ class TestDriftFollowsWhatPydanticBuilt:
             ),
             "alias path through a bare getitem": (Indexed, {"items": _Indexed([{"x": 1}, extra])}, ["last.extra"]),
             "alias path by key through a bare getitem": (Wrapped, {"wrap": _Indexed({"inner": extra})}, ["sub.extra"]),
-            "a name the config refuses over populate_by_name": (AliasOnly, {"sub": extra}, []),
+            "a name the config refuses over populate_by_name": (AliasOnly, {"sub": extra}, ["sub"]),
             "a sequence kept as a deque": (
                 holding(collections.abc.Sequence[A]),
                 {"f": collections.deque([extra])},
@@ -1252,8 +1252,8 @@ class TestDriftFollowsWhatPydanticBuilt:
                 {"f": [{"k": extra}]},
                 ["f[0].k.extra"],
             ),
-            "alias paths reaching nothing": (Unreached, {"items": [extra]}, []),
-            "alias paths into text": (Unreached, {"items": "text"}, []),
+            "alias paths reaching nothing": (Unreached, {"items": [extra]}, ["items"]),
+            "alias paths into text": (Unreached, {"items": "text"}, ["items"]),
             "alias path through a bytes subclass": (Wrapped, {"wrap": _ByteItems(b"x")}, ["sub.extra"]),
             "a typed extra": (Extras, {"added": extra}, ["added.extra"]),
             "an extra a validator set": (Stamped, {"x": 1}, []),
@@ -1268,7 +1268,7 @@ class TestDriftFollowsWhatPydanticBuilt:
         found = {label: sorted(_drift(payload, model)) for label, (model, payload, _) in self._cases().items()}
         assert_that(found).is_equal_to({label: expected for label, (_, _, expected) in self._cases().items()})
 
-    def test_a_name_the_config_does_not_read_is_not_followed(self):
+    def test_a_name_the_config_does_not_read_is_named_and_not_followed(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
         from pydantic import BaseModel, Field
 
@@ -1278,8 +1278,71 @@ class TestDriftFollowsWhatPydanticBuilt:
         class Outer(BaseModel):
             sub: Inner = Field(alias="theSub")
 
-        # pydantic read `theSub` and ignored `sub`, so what `sub` holds is not the model that was built
-        assert_that(_drift({"theSub": {"x": 1}, "sub": {"x": 1, "extra": 2}}, Outer)).is_empty()
+        # pydantic read `theSub` and dropped `sub`, so the key is named and what it holds is not the model built
+        assert_that(_drift({"theSub": {"x": 1}, "sub": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["sub"])
+
+    def test_a_key_that_spells_a_field_says_where_the_field_was_read(self):
+        """A key the model knows and validation did not read is dropped like any other, and named with the reason: the
+        key its field was read from in its place, or the keys validation reads it from where the payload sent none."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasChoices, AliasPath, BaseModel, Field
+
+        class Named(BaseModel):
+            user_id: int = Field(default=0, alias="userId")
+
+        class Chosen(BaseModel):
+            user_id: int = Field(default=0, validation_alias=AliasChoices("uid", "userId"))
+
+        class Reached(BaseModel):
+            user_id: int = Field(default=0, validation_alias=AliasPath("meta", "id"))
+            first: int = Field(default=0, validation_alias=AliasPath("items", 0))
+
+        class Dumped(BaseModel):
+            user_id: int = Field(default=0, serialization_alias="userId")
+
+        def said(payload, model):
+            try:
+                assert_conforms(payload, model, exact=True)
+            except AssertionFailure as failure:
+                return str(failure).split(", but it carries ")[1]
+            return "passes"
+
+        carries = "1 undeclared field(s) the model does not declare: "
+        assert_that(
+            {
+                "both spellings": said({"userId": 1, "user_id": 2}, Named),
+                "the name alone": said({"user_id": 2}, Named),
+                "the later of two choices": said({"uid": 1, "userId": 2}, Chosen),
+                "neither choice": said({"user_id": 2}, Chosen),
+                "a path that leads nowhere": said({"meta": {"other": 1}}, Reached),
+                "a position that is not there": said({"items": []}, Reached),
+                "the alias a field is dumped under": said({"user_id": 1, "userId": 2}, Dumped),
+                "a key that spells no field": said({"userId": 1, "more": 2}, Named),
+                "paths that are followed": said({"meta": {"id": 1}, "items": [2]}, Reached),
+            }
+        ).is_equal_to(
+            {
+                "both spellings": f"{carries}['user_id']\n<user_id> is not read: its field was read from <userId>",
+                "the name alone": (
+                    f"{carries}['user_id']\n<user_id> is not read: validation reads its field from <userId>"
+                ),
+                "the later of two choices": f"{carries}['userId']\n<userId> is not read: its field was read from <uid>",
+                "neither choice": (
+                    f"{carries}['user_id']\n<user_id> is not read: validation reads its field from <uid> or <userId>"
+                ),
+                "a path that leads nowhere": (
+                    f"{carries}['meta']\n<meta> is not read: validation reads its field from <meta.id>"
+                ),
+                "a position that is not there": (
+                    f"{carries}['items']\n<items> is not read: validation reads its field from <items[0]>"
+                ),
+                "the alias a field is dumped under": (
+                    f"{carries}['userId']\n<userId> is not read: its field was read from <user_id>"
+                ),
+                "a key that spells no field": f"{carries}['more']",
+                "paths that are followed": "passes",
+            }
+        )
 
     def test_a_config_reading_names_only_is_followed_by_name(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -1296,8 +1359,20 @@ class TestDriftFollowsWhatPydanticBuilt:
             model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
             sub: Inner | None = Field(alias="theSub")
 
-        # pydantic read the `None` under the name, so what the ignored alias holds is not the model that was built
-        assert_that(_drift({"sub": None, "theSub": {"x": 1, "extra": 2}}, Outer)).is_empty()
+        # pydantic read the `None` under the name and dropped the alias, whose model is not the one that was built
+        assert_that(_drift({"sub": None, "theSub": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["theSub"])
+        with pytest.raises(AssertionFailure) as dropped:
+            assert_conforms({"sub": None, "theSub": {"x": 1}}, Outer, exact=True)
+        assert_that(str(dropped.value)).ends_with("<theSub> is not read: its field was read from <sub>")
+
+        class Incoming(BaseModel):
+            model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
+            user_id: int = Field(validation_alias="incoming_id")
+
+        # an alias no dump shows either: it is known for a spelling of the field by being its validation alias
+        with pytest.raises(AssertionFailure) as dropped:
+            assert_conforms({"user_id": 1, "incoming_id": 2}, Incoming, exact=True)
+        assert_that(str(dropped.value)).ends_with("<incoming_id> is not read: its field was read from <user_id>")
         assert_that(_drift({"sub": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["sub.extra"])
 
     def test_the_assertion_reports_what_the_walk_finds(self):
@@ -1335,7 +1410,7 @@ class TestDriftFollowsWhatPydanticBuilt:
             sub: Inner | None = Field(default=None, alias="theSub")
 
         payload = {"sub": {"x": 1, "extra": 2}}
-        assert_that(_drift(payload, Outer)).is_empty()
+        assert_that(_drift(payload, Outer)).is_equal_to(["sub"])
         Outer.model_config["validate_by_alias"] = False
         Outer.model_config["validate_by_name"] = True
         Outer.model_rebuild(force=True)
@@ -2982,6 +3057,7 @@ class TestExactnessReachesDataclassesAndTypedDicts:
     read neither their own keys nor the models inside a dataclass."""
 
     CARRIES = "undeclared field(s) the model does not declare: "
+    READ_FROM_X = "\n<f.x> is not read: its field was read from <X>"
 
     @staticmethod
     def _found(payload, model):
@@ -2996,6 +3072,209 @@ class TestExactnessReachesDataclassesAndTypedDicts:
         from pydantic import BaseModel
 
         return type("Holding", (BaseModel,), {"__annotations__": {"f": annotation}, **validators})
+
+    def test_a_record_that_keeps_extras_drops_no_key(self):
+        """Sent beside the alias its field is read from, a field's name is dropped by a record, and kept by one that
+        allows extras, which puts what it was sent there over the field."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import ConfigDict, Field
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+        from typing_extensions import TypedDict
+
+        def typed_dict(**config):
+            class Record(TypedDict):
+                first: typing.Annotated[int, Field(alias="firstName")]
+
+            Record.__pydantic_config__ = ConfigDict(**config)
+            return Record
+
+        def dataclass(**config):
+            plain = type(
+                "Record", (), {"__annotations__": {"first": int}, "first": Field(default=0, alias="firstName")}
+            )
+            return pydantic_dataclass(config=ConfigDict(**config))(plain)
+
+        dropped = f"2 {self.CARRIES}['f.first', 'f.more']\n<f.first> is not read: its field was read from <firstName>"
+        sent = {"first": 1, "firstName": 2, "more": 3}
+        found = {
+            (build.__name__, kept): self._found({"f": sent}, self._holding(build(**{"extra": kept} if kept else {})))
+            for build in (typed_dict, dataclass)
+            for kept in ("", "allow")
+        }
+        assert_that(found).is_equal_to(
+            {
+                ("typed_dict", ""): dropped,
+                ("typed_dict", "allow"): "passes",
+                ("dataclass", ""): dropped,
+                ("dataclass", "allow"): "passes",
+            }
+        )
+        try:
+
+            class Declaring(TypedDict, extra_items=int):
+                first: typing.Annotated[int, Field(alias="firstName")]
+
+            declaring = self._holding(Declaring)
+        # an older `TypedDict` takes no such argument, and an older pydantic builds no schema for one that does
+        except TypeError:
+            return
+        assert_that(self._found({"f": sent}, declaring)).is_equal_to("passes")
+
+    def test_a_tag_an_extra_was_put_over_tells_no_typed_dict_apart(self):
+        """Of two `TypedDict`s that read their tag through an alias, one keeps extras: sent beside the alias, the tag's
+        own name is kept by it, over the tag it validated, so what the dict holds there says nothing of which built
+        it.  A tag nothing was put over still tells them apart."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import ConfigDict, Field
+        from typing_extensions import TypedDict
+
+        class Keeping(TypedDict):
+            tag: typing.Annotated[typing.Literal["a"], Field(alias="kind")]
+
+        Keeping.__pydantic_config__ = ConfigDict(extra="allow")
+
+        class Dropping(TypedDict):
+            tag: typing.Annotated[typing.Literal["b"], Field(alias="kind")]
+
+        holding = self._holding(Keeping | Dropping)
+        put_over = {"kind": "a", "tag": "b"}
+        assert_that(holding.model_validate({"f": put_over}).f).is_equal_to({"tag": "b"})
+        assert_that(self._found({"f": put_over}, holding)).is_equal_to("passes")
+        assert_that(self._found({"f": {"kind": "b", "grown": 1}}, holding)).is_equal_to(f"1 {self.CARRIES}['f.grown']")
+
+        class Plain(TypedDict):
+            tag: typing.Annotated[typing.Literal["a"], Field(alias="kind")]
+
+        # neither keeps extras, so nothing was put over the tag: it tells which built the dict, and the name is named
+        assert_that(self._found({"f": {"kind": "b", "tag": "a"}}, self._holding(Plain | Dropping))).is_equal_to(
+            f"1 {self.CARRIES}['f.tag']\n<f.tag> is not read: its field was read from <kind>"
+        )
+
+        class KeepingByName(TypedDict):
+            kind: typing.Literal["a"]
+
+        KeepingByName.__pydantic_config__ = ConfigDict(extra="allow")
+
+        class DroppingByName(TypedDict):
+            kind: typing.Literal["b"]
+
+        # a tag sent under its own name is the key validation read, whoever keeps extras: nothing was put over it
+        by_name = self._holding(KeepingByName | DroppingByName)
+        assert_that(self._found({"f": {"kind": "b", "grown": 1}}, by_name)).is_equal_to(f"1 {self.CARRIES}['f.grown']")
+
+        class KeepingEither(TypedDict):
+            tag: typing.Annotated[typing.Literal["a"], Field(alias="kind")]
+
+        KeepingEither.__pydantic_config__ = ConfigDict(extra="allow", populate_by_name=True)
+
+        class DroppingEither(TypedDict):
+            tag: typing.Annotated[typing.Literal["b"], Field(alias="kind")]
+
+        DroppingEither.__pydantic_config__ = ConfigDict(populate_by_name=True)
+
+        # read by its name where no alias was sent, the name is the key validation read, and nothing was put over it
+        either = self._holding(KeepingEither | DroppingEither)
+        assert_that(self._found({"f": {"tag": "b", "grown": 1}}, either)).is_equal_to(f"1 {self.CARRIES}['f.grown']")
+
+    def test_a_typed_dict_that_keeps_extras_lends_no_other_its_exemption(self):
+        """One that keeps extras is ruled out by another tag.  The two left drop extras, read the name of the tag as
+        another field, and are told apart by the tag itself, whichever the union names first."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import ConfigDict, Field
+        from typing_extensions import TypedDict
+
+        class Keeping(TypedDict):
+            tag: typing.Annotated[typing.Literal["a"], Field(alias="kind")]
+            mode: typing.Literal["keep"]
+
+        Keeping.__pydantic_config__ = ConfigDict(extra="allow")
+
+        class First(TypedDict):
+            tag: typing.Annotated[typing.Literal["b"], Field(alias="kind")]
+            other: typing.Annotated[str, Field(alias="tag")]
+            spare: typing.Annotated[str, Field(alias="alt")]
+            mode: typing.Literal["drop"]
+
+        class Second(TypedDict):
+            tag: typing.Annotated[typing.Literal["a"], Field(alias="alt")]
+            other: typing.Annotated[str, Field(alias="tag")]
+            spare: typing.Annotated[str, Field(alias="kind")]
+            mode: typing.Literal["drop"]
+
+        sent = {"kind": "b", "tag": "a", "alt": "a", "mode": "drop"}
+        built_by = {
+            "the first": {"tag": "b", "other": "a", "spare": "a", "mode": "drop"},
+            "the second": {"tag": "a", "other": "a", "spare": "b", "mode": "drop"},
+        }
+        for union in (Keeping | First | Second, Second | First | Keeping):
+            holding = self._holding(union)
+            assert_that(built_by.values()).contains(holding.model_validate({"f": sent}).f)
+            assert_that(self._found({"f": sent}, holding)).is_equal_to("passes")
+
+    def test_a_name_beside_its_alias_is_not_named_where_two_typed_dicts_are_not_told_apart(self):
+        """Where the check knows which `TypedDict` built a dict it names a field's name sent beside the alias.  Where
+        it does not, the dict holds that name whichever built it, and nothing is seen to be dropped."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import Field
+        from typing_extensions import TypedDict
+
+        class One(TypedDict):
+            x: typing.Annotated[int, Field(alias="X")]
+
+        class Other(TypedDict):
+            x: typing.Annotated[int, Field(alias="X")]
+
+        both = {"f": {"x": 1, "X": 2}}
+        assert_that(self._found(both, self._holding(One))).is_equal_to(f"1 {self.CARRIES}['f.x']{self.READ_FROM_X}")
+        assert_that(self._found(both, self._holding(One | Other))).is_equal_to("passes")
+
+    def test_a_typed_dict_under_a_container_the_walk_does_not_name_is_not_guessed(self):
+        """A deque, an `OrderedDict` and a named tuple are no container the walk reads a `TypedDict` out of, nor a type
+        it knows to build no dict.  A clean payload passes, and a key that grew refuses: read as building no dict, a
+        named tuple hid the `TypedDict` in its field, and the grown key passed."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        class Pair(typing.NamedTuple):
+            point: Point
+
+        grown = {"x": 1, "grown": 2}
+        shapes = {
+            "in a deque": (collections.deque[Point], [{"x": 1}], [grown]),
+            "in an OrderedDict": (collections.OrderedDict[str, Point], {"k": {"x": 1}}, {"k": grown}),
+            "in a named tuple": (Pair, [{"x": 1}], [grown]),
+            "beside a deque": (Point | collections.deque[int], {"x": 1}, grown),
+        }
+        found = {
+            label: (self._found({"f": clean}, self._holding(kind)), self._found({"f": drifting}, self._holding(kind)))
+            for label, (kind, clean, drifting) in shapes.items()
+        }
+        refused = "cannot be checked: it holds a key the dict built from it does not, and its declared types do not say"
+        assert_that(
+            {label: (clean, drifting.split("> ")[-1][:100]) for label, (clean, drifting) in found.items()}
+        ).is_equal_to(dict.fromkeys(shapes, ("passes", refused)))
+
+    def test_a_field_read_from_a_later_source_is_no_extra_a_model_lost(self):
+        """A model that keeps typed extras is asked which of them it no longer holds, and a key a field was read
+        from is none of them, whichever of the field's sources it is."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field
+
+        class Row(BaseModel):
+            x: int
+
+        class Open(BaseModel):
+            model_config = ConfigDict(extra="allow", populate_by_name=True)
+            __pydantic_extra__: dict[str, Row]
+            sub: Row = Field(alias="theSub")
+
+        assert_that(self._found({"sub": {"x": 1}}, Open)).is_equal_to("passes")
+        assert_that(self._found({"sub": {"x": 1}, "more": {"x": 1, "extra": 2}}, Open)).is_equal_to(
+            f"1 {self.CARRIES}['more.extra']"
+        )
 
     def test_a_typed_dict_is_checked_for_its_own_keys_and_walked(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -3048,7 +3327,7 @@ class TestExactnessReachesDataclassesAndTypedDicts:
                 "a clean one": "passes",
                 "one that allows extras": "passes",
                 "an alias": "passes",
-                "an alias and an undeclared key": f"1 {self.CARRIES}['f.extra']",
+                "an alias and an undeclared key": f"2 {self.CARRIES}['f.extra', 'f.x']{self.READ_FROM_X}",
                 "a model inside": f"1 {self.CARRIES}['f.row.extra']",
                 "a list of them inside": f"2 {self.CARRIES}['f.more', 'f.points[1].extra']",
                 "one inside another": f"1 {self.CARRIES}['f.inner.extra']",
@@ -3119,7 +3398,7 @@ class TestExactnessReachesDataclassesAndTypedDicts:
                 f"1 {self.CARRIES}['f.extra']",
                 f"1 {self.CARRIES}['f.inner.extra']",
                 "passes",
-                f"1 {self.CARRIES}['f.extra']",
+                f"2 {self.CARRIES}['f.extra', 'f.x']{self.READ_FROM_X}",
                 f"1 {self.CARRIES}['f[0].extra']",
                 "passes",
                 f"1 {self.CARRIES}['f.extra']",
@@ -3180,7 +3459,7 @@ class TestExactnessReachesDataclassesAndTypedDicts:
                 f"1 {self.CARRIES}['f.row.extra']",
                 f"1 {self.CARRIES}['f.row.extra']",
                 "passes",
-                "passes",
+                f"1 {self.CARRIES}['f.A']\n<f.A> is not read: its field was read from <V>",
                 f"1 {self.CARRIES}['f.extra']",
             ]
         )
@@ -3197,9 +3476,20 @@ class TestExactnessReachesDataclassesAndTypedDicts:
                 __pydantic_config__ = ConfigDict(validate_by_alias=False, validate_by_name=True)  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
                 row: typing.Annotated[Row, Field(alias="R")]
 
-            # the alias still counts as declared, as a model's does; what matters is which mapping is walked
+            # read by name alone, the alias is dropped, and the mapping under the name is the one walked
             both = {"f": {"R": {"x": 1}, "row": extra}}
-            assert_that(self._found(both, self._holding(ByNameOnly))).is_equal_to(f"1 {self.CARRIES}['f.row.extra']")
+            assert_that(self._found(both, self._holding(ByNameOnly))).is_equal_to(
+                f"2 {self.CARRIES}['f.R', 'f.row.extra']\n<f.R> is not read: its field was read from <row>"
+            )
+
+            class Incoming(TypedDict):
+                __pydantic_config__ = ConfigDict(validate_by_alias=False, validate_by_name=True)  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
+                x: typing.Annotated[int, Field(validation_alias="X")]
+
+            # an alias no dump shows: it is known for a spelling of the field by being its validation alias
+            assert_that(self._found({"f": {"x": 1, "X": 2}}, self._holding(Incoming))).is_equal_to(
+                f"1 {self.CARRIES}['f.X']\n<f.X> is not read: its field was read from <x>"
+            )
         # which alias pydantic reads here differs by its version; whichever it takes is declared, the rest are not
         for kind, aliases in ((PlainAliased, ("X", "x")), (Several, ("B", "A"))):
             holding = self._holding(kind)
@@ -3252,7 +3542,7 @@ class TestExactnessReachesDataclassesAndTypedDicts:
         except TypeError:
             lone = plain(aliased=0)
             either, trimmed = self._holding(list[lone] | tuple[int, ...]), self._holding(list[lone], **cut)
-        sent = [{"x": 1, "extra": 2}, {"row": {"x": 1, "extra": 2}}, {"x": 1, "derived": 7}]
+        sent = [{"extra": 2}, {"row": {"x": 1, "extra": 2}}, {"derived": 7}]
         expected = [f"1 {self.CARRIES}['f[0].{name}']" for name in ("extra", "row.extra", "derived")]
         # pydantic 2.0 reads neither alias off a plain dataclass, and drops both keys
         built = either.model_validate({"f": [{"X": 5, "Y": 6}]}).f[0]
@@ -4947,16 +5237,18 @@ class TestAliasesOnDuckTypedModels:
         info = type("DuckField", (), {"annotation": int, **field_attrs})()
         return type("DuckModel", (), {"model_fields": {"id": info}})
 
-    def test_a_serialization_alias_alone_is_declared(self):
+    def test_an_alias_alone_is_where_the_field_is_read(self):
         model = self._model(alias="ID", validation_alias=None)
-        assert_that(_declared_keys(model)).is_equal_to({"id", "ID"})
+        assert_that(_paths(contract_drift({"ID": 1, "more": 2}, model()))).is_equal_to(["more"])
+        assert_that(_paths(contract_drift({"ID": 1, "id": 2}, model()))).is_equal_to(["id"])
 
-    def test_a_validation_alias_alone_is_declared(self):
+    def test_a_validation_alias_alone_is_where_the_field_is_read(self):
         model = self._model(alias=None, validation_alias="incoming")
-        assert_that(_declared_keys(model)).is_equal_to({"id", "incoming"})
+        assert_that(_paths(contract_drift({"incoming": 1, "more": 2}, model()))).is_equal_to(["more"])
+        assert_that(_paths(contract_drift({"incoming": 1, "id": 2}, model()))).is_equal_to(["id"])
 
-    def test_a_field_carrying_neither_attribute_is_accepted(self):
-        assert_that(_declared_keys(self._model())).is_equal_to({"id"})
+    def test_a_field_carrying_neither_attribute_is_read_by_its_name(self):
+        assert_that(_paths(contract_drift({"id": 1, "more": 2}, self._model()()))).is_equal_to(["more"])
 
 
 class TestDriftOnDuckTypedModels:

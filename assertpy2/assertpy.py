@@ -735,7 +735,9 @@ def assert_conforms(
 
     ``exact`` catches that drift in the models, dataclasses and ``TypedDict`` values the payload became inside
     lists, tuples, sets, dicts, unions and root models, and reports the exact paths.  It is alias-aware, and
-    respects a model that opts into extras (``extra="allow"``).
+    respects a model that opts into extras (``extra="allow"``).  A key that spells a field and was not read,
+    a name sent beside its alias, is dropped by pydantic like any other, and is named with where the field
+    was read from.
 
     Raw items that no longer pair one by one with what they became are still checked where they can be:
 
