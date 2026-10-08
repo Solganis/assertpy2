@@ -819,8 +819,9 @@ if TYPE_CHECKING:
     assert_type(assert_that([1, 2]).first().check().not_.val, int)
     assert_type(assert_that([1, 2]).first().check().value, int)
     assert_type(assert_that([1, 2]).first().check().not_.value, int)
-    assert_type(assert_that(cast("list[Callable[[], int]]", [])).first().check().val, Callable[[], int])
-    assert_type(assert_that(cast("list[Callable[[], int]]", [])).first().check().not_.value, Callable[[], int])
+    counters: list[Callable[[], int]] = []
+    assert_type(assert_that(counters).first().check().val, Callable[[], int])
+    assert_type(assert_that(counters).first().check().not_.value, Callable[[], int])
     assert_type(assert_that(_Countable()).value, _Countable)
     assert_type(assert_that(_Countable()).first(), _CapableAssertion[_Countable])
     assert_type(assert_that(_Countable()).last(), _CapableAssertion[_Countable])

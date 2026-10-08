@@ -5,8 +5,8 @@ each run, and each checker's diagnostics on it have to be the recorded ones, in 
 included.  A declaration rewritten to say the same thing leaves this green, and one that says anything
 else, better or worse, has to be recorded on purpose.
 
-Most of what is recorded is a pin the library does not meet yet: a polled callable after an expectation
-reads `Any`, and ty loses the element after a polled pivot.
+What is recorded is a pin the library does not meet yet: `is_not_none()` over `None`, a polled
+`is_instance_of()` over a container and, under pyrefly alone, a polled `extracting()` followed by `filtered_on()`.
 
 Skipped where the checkers are absent, like the other typing gates: the lint job runs it.
 """

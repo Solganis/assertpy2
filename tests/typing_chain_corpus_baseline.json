@@ -209,232 +209,34 @@
    "type-assertion-failure"
   ]
  },
- "c0886-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0886-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0887-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0887-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0888-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0888-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0889-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0889-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0890-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0890-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0891-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0891-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0892-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0892-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0893-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0893-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0894-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0894-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0895-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0895-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0896-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0896-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0897-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0897-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0976-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0976-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0977-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0977-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0978-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0978-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1258-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1258-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1259-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1259-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1260-await": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c1260-poll": {
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c1261-await": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "c1261-poll": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "c1262-await": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "c1262-poll": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "c1263-await": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "c1263-poll": {
   "pyrefly": [
    "assert-type"
-  ],
-  "ty": [
-   "type-assertion-failure"
   ]
  },
  "witness": {

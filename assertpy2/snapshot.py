@@ -20,7 +20,7 @@ from .outcome import MISSING
 
 if TYPE_CHECKING:
     import types
-    from collections.abc import Callable, Iterator, Mapping
+    from collections.abc import Callable, Generator, Mapping
 
     from ._engine._compat import Self
     from .matchers import Matcher
@@ -370,7 +370,7 @@ def _prune_sub_key_orphans(sub_orphans):
 
 
 @contextlib.contextmanager
-def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Iterator[None]:
+def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Generator[None]:
     """Serialize snapshot read-modify-write across processes via an ``O_EXCL`` lock file.
 
     Not crash-safe: a process that dies while holding the lock leaves a stale lock file and other

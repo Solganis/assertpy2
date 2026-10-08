@@ -146,14 +146,16 @@ jobs:
             groups: "--group dev"
             imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
             reduced: "no integrations, so pydantic cannot lift typing-extensions off its declared floor"
-          # 3.15 carries what is installable there: no combination of the data libraries publishes a
-          # wheel for it yet, and pydantic has no stable one either, which takes the whole `integrations`
-          # group with it. Move this cell up to the others when those wheels land.
+          # 3.15 carries what is installable and green there. No combination of the data libraries
+          # publishes a wheel for it yet. The `integrations` group installs since pydantic 2.14, and stays
+          # out for one test: this cell resolves anyio 4.15.1 on 3.15 where the cells below resolve
+          # 4.14.2, and starlette at its floor 0.46.0 imports a name that anyio deprecates, which the
+          # suite's `-W error` refuses. Move this cell up to the others when both are settled.
           - python-version: "3.15"
             extras: "allure,behave,inline,json"
             groups: "--group dev"
             imports: "asttokens, executing, idna, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
-            reduced: "no data-library wheel for 3.15 yet, and pydantic has no stable one either"
+            reduced: "no data-library wheel for 3.15 yet, and starlette at its floor warns under the anyio resolved here"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
