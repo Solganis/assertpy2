@@ -2738,6 +2738,126 @@ class TestExactnessReadsThePayloadAsItWasSent:
             assert_conforms({"x": 1}, self._stripping(), exact=True)
         assert_conforms({"x": 1}, self._stripping())
 
+    @pytest.mark.parametrize("through", ["the class of a named tuple", "the _missing_ of an enum"])
+    def test_a_dict_emptied_by_code_validation_calls_is_read_as_sent(self, through):
+        """Neither is a validator: pydantic calls the class of a named tuple, and the constructor of an enum calls its
+        `_missing_`.  The dict is held twice, so what either took out of it is gone from the model beside it."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Inner(BaseModel):
+            a: int
+
+        class Pair(typing.NamedTuple):
+            held: typing.Any
+
+        class Emptying(Pair):
+            def __new__(cls, held):
+                held.pop("grown", None)
+                return super().__new__(cls, held)
+
+        class Shade(enum.Enum):
+            DARK = "dark"
+
+            @classmethod
+            def _missing_(cls, value):
+                value.pop("grown", None)
+                return cls.DARK
+
+        shared = {"a": 1, "grown": 2}
+        emptying, sent = {
+            "the class of a named tuple": (Emptying, [shared]),
+            "the _missing_ of an enum": (Shade, shared),
+        }[through]
+        holding = type("Holding", (BaseModel,), {"__annotations__": {"emptied": emptying, "inner": Inner}})
+        try:
+            assert_conforms({"emptied": sent, "inner": shared}, holding, exact=True)
+            found = "passes"
+        except AssertionFailure as failure:
+            found = str(failure).split(", but ")[1]
+        assert_that(found).is_equal_to("it carries 1 undeclared field(s) the model does not declare: ['inner.grown']")
+        assert_that(shared).is_equal_to({"a": 1})
+
+    def test_a_schema_says_which_code_runs_whatever_pydantic_wrote_it(self):
+        """Schemas written out by hand: a named tuple was a called class, and an enum's schema named its `_missing_`,
+        before pydantic gave the first a schema of its own and left the second to the enum's constructor."""
+
+        class Forgiving(enum.Enum):
+            @classmethod
+            def _missing_(cls, value):
+                return next(iter(cls))
+
+        class Shade(Forgiving):
+            DARK = "dark"
+
+        class Plain(enum.Enum):
+            DARK = "dark"
+
+        class Counted(enum.IntEnum):
+            ONE = 1
+
+        class Flagged(enum.Flag):
+            ONE = 1
+
+        shut = []
+
+        class Closed(enum.EnumMeta):
+            def __getattribute__(cls, name):
+                if shut and name in ("__mro__", "__dict__"):
+                    raise RuntimeError(f"{name} is not to be read")
+                return super().__getattribute__(name)
+
+        class Shut(enum.Enum, metaclass=Closed):
+            DARK = "dark"
+
+        class ShutForgiving(Forgiving, metaclass=Closed):
+            DARK = "dark"
+
+        shut.append("from here on")
+
+        def asked(schema):
+            # the tree is read off the slots of `type`: asked of the class itself, this one raises
+            try:
+                return _contract.runs_own_code(type("Held", (), {"__pydantic_core_schema__": schema}))
+            except RuntimeError as refusal:
+                return str(refusal)
+
+        assert_that(
+            {
+                "a called class": asked({"type": "call"}),
+                "a named tuple": asked({"type": "named-tuple"}),
+                "a named tuple under a list": asked({"type": "list", "items_schema": {"type": "named-tuple"}}),
+                "an enum with a _missing_ of its own": asked({"type": "enum", "cls": Forgiving}),
+                "an enum that inherits one": asked({"type": "enum", "cls": Shade}),
+                "a flag": asked({"type": "enum", "cls": Flagged}),
+                "an enum the schema names a _missing_ for": asked({"type": "enum", "cls": Plain, "missing": len}),
+                "an enum whose class the schema does not name": asked({"type": "enum"}),
+                "a plain enum": asked({"type": "enum", "cls": Plain}),
+                "an int enum": asked({"type": "enum", "cls": Counted}),
+                "a schema that is no enum": asked({"type": "int"}),
+                "an enum schema over a class that is none": asked({"type": "enum", "cls": int}),
+                "a plain enum whose metaclass refuses to be read": asked({"type": "enum", "cls": Shut}),
+                "one with a _missing_ whose metaclass refuses": asked({"type": "enum", "cls": ShutForgiving}),
+            }
+        ).is_equal_to(
+            {
+                "a called class": True,
+                "a named tuple": True,
+                "a named tuple under a list": True,
+                "an enum with a _missing_ of its own": True,
+                "an enum that inherits one": True,
+                "a flag": True,
+                "an enum the schema names a _missing_ for": True,
+                "an enum whose class the schema does not name": True,
+                "a plain enum": False,
+                "an int enum": False,
+                "a schema that is no enum": False,
+                "an enum schema over a class that is none": True,
+                "a plain enum whose metaclass refuses to be read": False,
+                "one with a _missing_ whose metaclass refuses": True,
+            }
+        )
+
     def test_which_models_run_code_of_their_own(self, monkeypatch):
         pytest.importorskip("pydantic", reason="pydantic not installed")
         import pydantic
@@ -2824,8 +2944,14 @@ class TestExactnessReadsThePayloadAsItWasSent:
             x: int
             held: typing.Any = ring
 
+        class Listed(BaseModel):
+            x: int
+            rows: list[int] = pydantic.Field(default_factory=list)
+
         monkeypatch.setattr(_contract, "_OWN_CODE", dict.fromkeys(range(256)))
         assert_that(_contract.runs_own_code(Defaulted)).is_false()
+        # a factory that takes no data is handed nothing of the payload
+        assert_that(_contract.runs_own_code(Listed)).is_false()
         own = [Checked, PostInit, Private, OwnInit, Annotated, Holding, Dataclassed, Unbuilt, Called, Shaded]
         if hasattr(pydantic, "Discriminator"):
             tagged = typing.Annotated[

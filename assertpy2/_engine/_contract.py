@@ -36,6 +36,7 @@ from typing import (
 )
 
 from ..errors import DiffEntry, Step
+from ._introspection import definition_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -348,6 +349,20 @@ def _item_nodes(node: object, owner: object) -> tuple[tuple[Any, ...] | None, An
     return None, _either([*every, *unknown])
 
 
+def _missing_is_its_own(cls: Any) -> bool:
+    """Whether the enum *cls* answers a value it does not name by a `_missing_` other than `Enum`'s.
+
+    Its constructor calls that method, and a schema names it only where pydantic calls it in the constructor's
+    place.  A class that cannot be read says yes.
+    """
+    try:
+        found = definition_of(cls, "_missing_")
+    # no class: its tree is read off the slots of `type`, so nothing the class or its metaclass says is asked
+    except TypeError:
+        return True
+    return found is None or found[0] is not enum.Enum
+
+
 _OWN_CODE: dict[type, tuple[object, bool]] = {}
 """Per model class, beside the validator it was read with: whether validating by it runs code that is not pydantic's.
 At most 256 classes (`_remember`)."""
@@ -355,10 +370,12 @@ At most 256 classes (`_remember`)."""
 
 def runs_own_code(model: Any) -> bool:
     """Whether validation by *model* runs code of its own anywhere in its schema: a validator, a `model_post_init`
-    (private attributes bring one), a custom `__init__`, a dataclass `__post_init__`, a called class.
+    (private attributes bring one), a custom `__init__`, a dataclass `__post_init__`, a called class, a named tuple,
+    whose class is called as well, an enum's own `_missing_`.
 
     Pydantic's own validation never changes the payload it is given, so only such a model can leave it other than
-    it was sent.  A schema that cannot be read says yes.
+    it was sent.  A default factory that takes no data is not counted: validation hands it nothing of the payload.
+    A schema that cannot be read says yes.
     """
     validator = getattr(model, "__pydantic_validator__", None)
     known = _OWN_CODE.get(model)
@@ -374,11 +391,12 @@ def runs_own_code(model: Any) -> bool:
                 kind = node.get("type")
                 answer = isinstance(kind, str) and bool(
                     kind.startswith("function-")
-                    or kind == "call"
+                    or kind in ("call", "named-tuple")
                     or node.get("post_init")
                     or node.get("custom_init")
                     or node.get("default_factory_takes_data")
                     or node.get("missing")
+                    or (kind == "enum" and _missing_is_its_own(node.get("cls")))
                     or callable(node.get("discriminator"))
                 )
                 # a serialiser runs at dump time, metadata is never validated, a default may hold itself
