@@ -279,11 +279,12 @@ def _save(name, val):
     # end.  A value the encoder refuses now leaves no file behind either
     text = json.dumps(_prepare(val), indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
     tmp = f"{name}.{os.getpid()}.tmp"
-    with open(tmp, "w") as file_handle:
+    with open(tmp, "w", encoding="utf-8") as file_handle:
         file_handle.write(text)
     os.replace(tmp, name)
 
 
 def _load(name):
-    with open(name) as file_handle:
+    # as UTF-8 and not as the platform's default: a file a formatter left unescaped read as mojibake under cp1252
+    with open(name, encoding="utf-8") as file_handle:
         return json.load(file_handle, cls=_Decoder)

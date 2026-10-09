@@ -1631,7 +1631,7 @@ class TestSnapshotOrphans:
 
     def test_the_prune_locks_the_file_it_rewrites(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         locked = []
         real_lock = snapshot_module._file_lock
@@ -1663,7 +1663,7 @@ class TestSnapshotOrphans:
 
     def test_sessionfinish_no_orphans_is_quiet(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         reporter = MagicMock()
@@ -1672,7 +1672,7 @@ class TestSnapshotOrphans:
 
     def test_reports_sub_key_orphan_without_pruning(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", False)
@@ -1685,7 +1685,7 @@ class TestSnapshotOrphans:
 
     def test_prunes_sub_key_under_update_full_run(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
@@ -1697,7 +1697,7 @@ class TestSnapshotOrphans:
 
     def test_no_prune_on_filtered_run(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
@@ -1707,7 +1707,7 @@ class TestSnapshotOrphans:
 
     def test_no_prune_on_nodeid_selected_run(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
@@ -1724,7 +1724,7 @@ class TestSnapshotOrphans:
         live = str(tmp_path / "snap-live.json")
         dead = str(tmp_path / "snap-dead.json")
         for target in (live, dead):
-            with open(target, "w") as handle:
+            with open(target, "w", encoding="utf-8") as handle:
                 json.dump({"10": 1}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(live, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
@@ -2977,7 +2977,7 @@ class TestTheSnapshotReportNamesItself:
 
     def test_the_orphan_report_carries_its_own_heading(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
-        with open(snapname, "w") as handle:
+        with open(snapname, "w", encoding="utf-8") as handle:
             json.dump({"10": 1, "30": 3}, handle)
         monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", False)

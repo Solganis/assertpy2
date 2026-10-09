@@ -7,7 +7,9 @@ import functools
 import json
 import os
 import shutil
+import subprocess
 import sys
+import textwrap
 import threading
 import time
 import uuid
@@ -1116,18 +1118,64 @@ class TestALockFileBeingDeleted:
         assert_that(calls).is_length(1)
 
 
+def test_a_snapshot_file_is_utf8_whatever_the_default_text_encoding_is(tmp_path):
+    """A file a formatter left unescaped, `jq .` or an editor, holds raw UTF-8.  Read in the default encoding it
+    compared unequal under cp1252.
+
+    The child is held two ways.  An `open` that names no encoding is an error in it, whatever the platform.  And it
+    asks for a default that is not UTF-8, which it gets wherever the platform has one to give: the code page on
+    most of Windows, ASCII elsewhere.  What the library wrote is read back as UTF-8 before the file is replaced.
+    """
+    script = textwrap.dedent(
+        """
+        import json, pathlib, sys, warnings
+        from assertpy2 import assert_that
+
+        warnings.simplefilter("ignore")
+        warnings.simplefilter("error", EncodingWarning)
+        folder = pathlib.Path(sys.argv[1])
+        value = {"name": "Zo\\u00eb"}
+        assert_that(value).snapshot(id="names", path=str(folder))
+        written = folder / "snap-names.json"
+        assert json.loads(written.read_bytes().decode("utf-8")) == value, written.read_bytes()
+        written.write_bytes(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+        assert_that(value).snapshot(id="names", path=str(folder))
+        print("read back equal")
+        """
+    )
+    pinned = {
+        **os.environ,
+        "PYTHONUTF8": "0",
+        "PYTHONCOERCECLOCALE": "0",
+        "LC_ALL": "C",
+        "ASSERTPY2_SNAPSHOT_CI": "0",
+        "ASSERTPY2_SNAPSHOT_UPDATE": "",
+    }
+    ran = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-X", "warn_default_encoding", "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=pinned,
+        check=False,
+    )
+    assert_that(ran.returncode).described_as(ran.stderr).is_zero()
+    assert_that(ran.stdout.strip()).is_equal_to("read back equal")
+
+
 def test_file_lock_serializes_concurrent_writes(tmp_path):
     target = str(tmp_path / "shared.json")
-    with open(target, "w") as fp:
+    with open(target, "w", encoding="utf-8") as fp:
         json.dump({}, fp)
 
     def worker(index):
         with _file_lock(target):
-            with open(target) as fp:
+            with open(target, encoding="utf-8") as fp:
                 data = json.load(fp)
             data[str(index)] = index
             time.sleep(0.005)
-            with open(target, "w") as fp:
+            with open(target, "w", encoding="utf-8") as fp:
                 json.dump(data, fp)
 
     threads = [threading.Thread(target=worker, args=(index,)) for index in range(15)]
@@ -1136,7 +1184,7 @@ def test_file_lock_serializes_concurrent_writes(tmp_path):
     for thread in threads:
         thread.join()
 
-    with open(target) as fp:
+    with open(target, encoding="utf-8") as fp:
         final = json.load(fp)
     assert_that(final).is_length(15)
 

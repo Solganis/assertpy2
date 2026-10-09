@@ -344,6 +344,8 @@ select = [
     "RSE",   # flake8-raise - no empty parens on a bare `raise SomeError()`
     "PGH",   # pygrep-hooks - forbid blanket `noqa`/`type: ignore` (must name a rule code)
     "PLE",   # Pylint errors - real-error subset (not style)
+    "PLW1514",  # Pylint, preview-gated: `open()` in text mode names its encoding. Without one a snapshot
+                # file holding raw UTF-8 was read as cp1252 on Windows below 3.15 and compared unequal
     "SIM",   # flake8-simplify - collapse redundant constructs
     "T10",   # flake8-debugger - no committed breakpoint()/pdb calls
     "RUF",   # Ruff-specific rules
@@ -387,3 +389,8 @@ max-complexity = 32
 # Suppressions must be ty-native `# ty: ignore[rule]`. Make ty disregard mypy's
 # generic `# type: ignore` so a stray mypy-style comment can't silently mask a ty error.
 respect-type-ignore-comments = false
+
+[tool.ty.rules]
+# Off by default in ty. A `# ty: ignore` that names no rule silences every diagnostic on its line, the
+# ones nobody has seen yet among them.
+blanket-ignore-comment = "error"

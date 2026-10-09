@@ -4,6 +4,7 @@ import decimal
 import fractions
 import functools
 import json
+import operator
 import re
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -423,7 +424,8 @@ def _dividing_as_written(validator_cls: Any, *, redeclared: bool = False) -> Any
         type_checker=validator_cls.TYPE_CHECKER,
         format_checker=validator_cls.FORMAT_CHECKER,
         id_of=validator_cls.ID_OF,
-        **({"applicable_validators": _a_reference_alone} if validator_cls in alone else {}),
+        # named in either case, the later drafts with what jsonschema itself defaults to: every keyword
+        applicable_validators=_a_reference_alone if validator_cls in alone else operator.methodcaller("items"),
     )
     as_jsonschema_evolves = made.evolve
 
