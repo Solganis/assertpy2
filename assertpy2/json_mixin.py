@@ -456,10 +456,10 @@ def _parsed_json_path(path: str):
 def _compiled_json_path(path: str):
     """The compiled form of a JSON path expression, kept across calls.
 
-    Parsing is the whole cost of a path assertion and the lookup is a rounding error: on a twenty-record
-    document a parse measures 5.8 ms against 0.002 ms for the search, because ``jsonpath_ng`` builds a
-    fresh PLY lexer and parser every time it is asked.  Expressions are immutable and ``find()`` does
-    not mutate them, so one compiled expression serves every call with that path.
+    Parsing is most of the cost of a path assertion and the lookup is a rounding error: on a twenty-record
+    document a parse measures 0.15 ms against 0.002 ms for the search, and 5.8 ms under a ``jsonpath_ng``
+    old enough to build a fresh PLY lexer and parser every time it is asked.  Expressions are immutable
+    and ``find()`` does not mutate them, so one compiled expression serves every call with that path.
 
     Bounded rather than unbounded: a path built from test data (``$.users[7].name``) is a fresh string
     each time, and an unbounded cache would grow with the suite.
@@ -469,12 +469,12 @@ def _compiled_json_path(path: str):
 
 def _ensure_jsonpath_ng():
     try:
-        import jsonpath_ng.ext  # optional dependency
+        import jsonpath_ng.ext.parser  # optional dependency
     except ImportError:
         raise ImportError(
             "jsonpath-ng is required for JSON path assertions. Install it with: pip install assertpy2[json]"
         ) from None
-    return jsonpath_ng.ext
+    return jsonpath_ng.ext.parser
 
 
 def _ensure_jsonschema():
