@@ -1,10 +1,14 @@
 import pytest
+from hypothesis import HealthCheck, settings
 
 from assertpy2 import errors as _errors
 from assertpy2 import snapshot as _snapshot
 from assertpy2.assertpy import AssertionBuilder
 
 _UNINSTALLED: pytest.StashKey[str] = pytest.StashKey()
+
+# for a runner that calls pytest twice in one process: a `@given` method then meets a second instance of its class
+settings.register_profile("one_process_twice", suppress_health_check=[HealthCheck.differing_executors])
 
 
 @pytest.fixture(autouse=True)

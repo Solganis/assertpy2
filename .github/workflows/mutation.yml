@@ -29,10 +29,11 @@ concurrency:
 jobs:
   mutation:
     runs-on: ubuntu-latest
-    # 10 060 mutants over the whole package. Measured on four pinned cores with `--max-children 4`,
-    # which is this runner's shape: 41m15s. Slower runner cores put the real figure somewhere
-    # around an hour, so this leaves comfortable headroom without letting a hang burn two hours.
-    timeout-minutes: 120
+    # 30 407 mutants over the whole package. Measured through the first 14 375 of them: 1.8 seconds of
+    # one worker a mutant, which is near 900 worker-minutes for them all and 230 minutes on the four
+    # cores of this runner, before its cores being slower is counted. `json_mixin.py` alone costs 17
+    # seconds a mutant. A hosted job is stopped at 360 minutes whatever is written here.
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

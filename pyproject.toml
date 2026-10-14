@@ -183,6 +183,7 @@ pytest_add_cli_args = [
     and not TestAForgottenAwaitUnderErrorFilters \
     and not TestTheProfileFromAConfigFile \
     and not TestTheDiffTravelsWithTheFailure \
+    and not TestTheHandoffInARealRun \
     and not test_the_warning_points_at_the_line_that_reused_the_key \
     and not test_no_vararg_assertion_passes_with_nothing_to_assert \
     and not snapshot_roundtrip_all_types \
@@ -244,8 +245,12 @@ pytest_add_cli_args = [
     # the builder's public members, which the trampoline's renamed functions join
     "--deselect=tests/test_capable_protocol.py::TestNothingTheBuilderOffersIsMissing::test_every_public_member_of_the_builder_is_declared",
     "--deselect=tests/test_refusals.py::test_the_sweep_covers_every_public_assertion",
-    # mutmut runs it from more than one executor, which hypothesis refuses as `differing_executors`
-    "--deselect=tests/test_errors.py::TestFindingTheFirstDifference::test_it_agrees_with_the_character_walk",
+    # mutmut runs pytest again in one process, which hypothesis refuses of a `@given` method as `differing_executors`.
+    # The profile from `tests/conftest.py` lifts that one check, and the three below name health checks of their own.
+    "--hypothesis-profile=one_process_twice",
+    "--deselect=tests/test_diff_laws.py::TestAPairingAsksWhetherTwoGraphsDiffer::test_an_asking_answers_by_index_what_it_answered_choosing_a_pairing",
+    "--deselect=tests/test_diff_laws.py::TestASequenceUnderAKeyOptionFailsOnce::test_the_entries_name_the_elements_that_differ_on_their_own",
+    "--deselect=tests/test_pytest_plugin.py::TestAFailedEqualityKeepsWhatItCompared::test_whatever_is_left_out_the_pair_kept_is_the_pair_the_diff_is_of",
     # a failure's `requirement` is found on the stack by function name, which the trampoline renames
     "--deselect=tests/test_openapi_contract.py::TestTheRequirementNamesTheCallersSpec",
     "--deselect=tests/test_public_surface.py::TestWhatAFailureLetsYouRead::test_a_plain_failure_names_what_was_asked",
@@ -254,6 +259,30 @@ pytest_add_cli_args = [
     "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_that_named_only_an_expected_still_attaches_it",
     "--deselect=tests/test_snapshots.py::TestSharedKeyHint::test_a_mismatch_still_says_what_was_asked",
     "--deselect=tests/test_chain_machine.py::TestChains::runTest",
+    "--deselect=tests/test_prerequisites.py::TestNegationKeepsThePrerequisite::test_check_answers_the_positive_failure_asked_through_not",
+    "--deselect=tests/test_expected_exception.py::TestNegationKeepsTheGroupRequirement::test_check_answers_the_positive_failure_asked_through_not",
+    # the line that asked is read off the stack, where the trampoline's own frames now stand
+    "--deselect=tests/test_prerequisites.py::TestNegationKeepsThePrerequisite::test_a_soft_block_collects_it_once_either_way",
+    "--deselect=tests/test_expected_exception.py::TestNegationKeepsTheGroupRequirement::test_a_soft_block_collects_it_either_way_where_the_positive_lands",
+    "--deselect=tests/test_refusal_frames.py::TestARefusalShowsNoFrameOfTheLibrary::test_only_the_line_that_wrote_it_is_shown",
+    "--deselect=tests/test_refusal_frames.py::TestARefusalShowsNoFrameOfTheLibrary::test_a_failed_assertion_shows_the_same",
+    # a depth counted in frames, of which the trampoline puts its own between every two of the library's
+    "--deselect=tests/test_deep_nesting.py::TestTheDepthOfAPair::test_a_field_filter_reaches_a_value_nested_under_a_field",
+    "--deselect=tests/test_dict_compare.py::TestAValueThatHoldsItselfUnderIgnoreAndInclude::test_where_the_plain_way_runs_out_of_frames_the_one_that_remembers_is_tried",
+    # a `StopIteration` of the value's own is let out with no frame between, and a wrapped generator is one
+    "--deselect=tests/test_deep_nesting.py::TestTheValuesOwnStopIterationGetsOut::test_from_a_field_read_by_the_diff",
+    "--deselect=tests/test_deep_nesting.py::TestTheValuesOwnStopIterationGetsOut::test_from_an_equality_asked_by_the_mapping_verdict",
+    "--deselect=tests/test_deep_nesting.py::TestTheValuesOwnStopIterationGetsOut::test_from_a_comparator_asked_about_an_aligned_pair",
+    # enumerate the package's assertions or parse its source, and meet the trampoline's renamed functions
+    "--deselect=tests/test_membership_family.py::TestEverySiblingSaysWhy::test_every_assertion_named_as_one_of_the_family_is_decided_about",
+    "--deselect=tests/test_moment_relations.py::TestEveryAssertionOfTwoMoments::test_every_assertion_of_the_date_mixin_is_entered",
+    "--deselect=tests/test_numeric_questions.py::test_no_special_number_question_is_asked_outside_the_helpers",
+    "--deselect=tests/test_one_shot_chains.py::TestNoAssertionReadsBesideTheBuilder::test_every_assertion_that_reads_answers_alike_when_asked_twice",
+    "--deselect=tests/test_one_shot_chains.py::test_no_assertion_walks_the_value_itself_but_the_ones_named",
+    # ask which modules importing the package loads, and every mutated module imports mutmut
+    "--deselect=tests/test_import_cost.py::test_importing_the_library_loads_none_of_them",
+    "--deselect=tests/test_openapi_formats.py::TestEachIsCheckedAlikeEverywhere::test_importing_the_library_compiles_none_of_them_and_loads_no_module_for_them",
+    "--deselect=tests/test_openapi_formats.py::TestEachIsCheckedAlikeEverywhere::test_ipaddress_is_loaded_for_an_address_in_brackets_and_for_nothing_else",
     # a child pytest starts from the mutants tree
     "--deselect=tests/test_skip_guard.py::test_a_skip_that_says_why_is_left_alone",
     "--ignore=tests/test_requirement.py",
