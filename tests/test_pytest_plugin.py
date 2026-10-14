@@ -40,10 +40,13 @@ from assertpy2._engine._diff import _sub_diff_entries
 from assertpy2._engine._introspection import TakenApart, laid_out
 from assertpy2._engine._path import _ROOT
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
+from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import (
+    _COLORED,
     _PROFILES,
     _diff_to_json,
     _escalate,
+    _format_diff,
     _format_trace,
     _is_full_run,
     _json_safe,
@@ -472,6 +475,735 @@ class TestEachFailureOfAGroupGetsItsOwn:
         _run_hook_with_allure(report, _make_call(exc=ExceptionGroup("tasks", [failure, failure])), mock)
         assert_that(self._titles(report)).is_equal_to(["Structured Diff (1 of 2)", "Structured Diff (2 of 2)"])
         assert_that(mock.attach.call_count).is_equal_to(2)
+
+
+def _collected_from(*asks):
+    """The failure a soft block raises once every ask in it has failed."""
+    with pytest.raises(AssertionFailure) as raised, soft_assertions():
+        for ask in asks:
+            ask()
+    return raised.value
+
+
+def _entry(failure, number):
+    """The numbered line of the summary for the failure collected at *number*, as the block printed it."""
+    file, line = failure.failures[number - 1].location
+    headline = failure.failures[number - 1].message.splitlines()[0]
+    return f"{number}. {headline}  [{os.path.basename(file)}:{line}]"
+
+
+def _wide(n):
+    """A failure whose sections run to 26 309 characters: fifty rows of 300 characters."""
+    return lambda: assert_that({f"k{i}": str(n) * 300 for i in range(50)}).is_equal_to(
+        {f"k{i}": "x" * 300 for i in range(50)}
+    )
+
+
+class _UnsplittableMessage(str):
+    def splitlines(self, keepends=False):
+        raise RuntimeError("a message that cannot be split")
+
+
+class _RefusesOnce(_FailureRepr):
+    def __init__(self):
+        super().__init__()
+        self.refused = False
+
+    def addsection(self, name, content, sep="-"):
+        if not self.refused:
+            self.refused = True
+            raise RuntimeError("refused once")
+        super().addsection(name, content, sep)
+
+
+class _UnrenderableDiff:
+    @property
+    def entries(self):
+        raise RuntimeError("a diff that cannot be read")
+
+
+class TestEachFailureASoftBlockCollectedGetsItsOwn:
+    """A soft block raises one failure for many, and each of the many gets the sections a raised failure gets."""
+
+    @staticmethod
+    def _titles(report):
+        return [title for title, _ in _sections(report)]
+
+    def test_each_is_numbered_and_opened_as_the_summary_numbers_it(self):
+        failure = _collected_from(
+            lambda: assert_that({2: 4}).is_equal_to({2: 3}),
+            lambda: assert_that([1, 2]).contains(3),
+        )
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        first, second = _entry(failure, 1), _entry(failure, 2)
+        assert_that(_sections(report)).is_equal_to(
+            [
+                ("AssertionFailure (failure 1 of 2)", f"{first}\n  actual:   {{2: 4}}\n  expected: {{2: 3}}"),
+                ("Structured Diff (failure 1 of 2)", f"{first}\ndiff (dict):\n  2:\n    - 4\n    + 3"),
+                ("Structured Diff (failure 2 of 2)", f"{second}\ndiff (contains):\n  missing: 3"),
+            ]
+        )
+        assert_that(str(failure).splitlines()).contains(first, second)
+
+    def test_a_grouped_failure_names_its_group(self):
+        def asks():
+            with soft_assertions() as block, block.group("billing"):
+                assert_that({2: 4}).is_equal_to({2: 3})
+
+        with pytest.raises(AssertionFailure) as raised:
+            asks()
+        report = _run_hook(_make_report(), _make_call(exc=raised.value))
+        file, line = raised.value.failures[0].location
+        where = f"[{os.path.basename(file)}:{line}]"
+        assert_that(_sections(report)[0][1].splitlines()[0]).is_equal_to(
+            f"1. [billing] Expected <{{2: 4}}> to be equal to <{{2: 3}}>, but was not.  {where}"
+        )
+
+    def test_an_expectation_of_none_is_shown_and_an_absent_one_is_not(self):
+        named = AssertionOutcome(message="named", actual=1, actual_provided=True, expected=None)
+        absent = AssertionOutcome(message="absent", actual=1, actual_provided=True)
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(named, absent))))
+        assert_that(_sections(report)).is_equal_to(
+            [
+                ("AssertionFailure (failure 1 of 2)", "1. named\n  actual:   1\n  expected: None"),
+                ("AssertionFailure (failure 2 of 2)", "2. absent\n  actual:   1"),
+            ]
+        )
+
+    def test_a_failure_with_nothing_to_show_gets_no_section_and_keeps_its_number(self):
+        failure = _collected_from(lambda: assert_that(False).is_true(), lambda: assert_that([1, 2]).contains(3))
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (failure 2 of 2)"])
+        assert_that(failure.failures[0].diff).is_none()
+
+    def test_a_failure_with_nothing_to_show_does_not_count_against_the_twenty(self):
+        failure = _collected_from(
+            lambda: assert_that(False).is_true(),
+            *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(20)],
+        )
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        titles = self._titles(report)
+        assert_that(titles).is_length(40)
+        assert_that(titles[-1]).is_equal_to("Structured Diff (failure 21 of 21)")
+
+    def test_a_failure_with_nothing_to_show_after_the_twenty_is_not_left_out(self):
+        failure = _collected_from(
+            *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(20)],
+            lambda: assert_that(False).is_true(),
+        )
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        titles = self._titles(report)
+        assert_that(titles).is_length(40)
+        assert_that(titles[-1]).is_equal_to("Structured Diff (failure 20 of 21)")
+
+    def test_a_timed_out_poll_gets_its_trace(self):
+        timed_out = AssertionOutcome(message="never settled", trace=_make_trace())
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(timed_out,))))
+        assert_that(_sections(report)).is_equal_to(
+            [("Polling Trace (failure 1 of 1)", f"1. never settled\n{_format_trace(_make_trace())}")]
+        )
+
+    def test_a_block_inside_a_group_names_its_leaf(self):
+        block = _collected_from(lambda: assert_that([1, 2]).contains(3))
+        alone = AssertionFailure(
+            "alone", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        )
+        report = _run_hook(_make_report(when="teardown"), _make_call(exc=ExceptionGroup("teardown", [block, alone])))
+        assert_that(self._titles(report)).is_equal_to(
+            ["Structured Diff (leaf 1 of 2, failure 1 of 1)", "Structured Diff (2 of 2)"]
+        )
+
+    def test_past_twenty_one_section_names_the_rest(self):
+        failure = _collected_from(*[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(25)])
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        titles = self._titles(report)
+        assert_that(failure.failures).is_length(25)
+        assert_that(str(failure.failures[24].diff).splitlines()).is_equal_to(
+            ["diff (dict):", "  k:", "    - 24", "    + -1"]
+        )
+        assert_that(titles).is_length(41)
+        assert_that(titles[-3:]).is_equal_to(
+            [
+                "AssertionFailure (failure 20 of 25)",
+                "Structured Diff (failure 20 of 25)",
+                "Left Out (failures 21 to 25)",
+            ]
+        )
+        assert_that(_sections(report)[-1][1]).is_equal_to(
+            "No section for lack of room: failures 21 to 25 of 25. The summary lists each, its diff in compact rows."
+        )
+
+    def test_past_the_budget_one_section_names_the_rest(self):
+        # fifty rows of 300 characters: 26 309 characters of sections a failure, so two fit the budget and three do not
+        wide = [
+            lambda n=n: assert_that({f"k{i}": str(n) * 300 for i in range(50)}).is_equal_to(
+                {f"k{i}": "x" * 300 for i in range(50)}
+            )
+            for n in range(1, 4)
+        ]
+        failure = _collected_from(*wide)
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        sizes = [len(content) for _, content in _sections(report)]
+        assert_that(self._titles(report)[-1]).is_equal_to("Left Out (failure 3)")
+        assert_that(sum(sizes[:-1])).is_less_than_or_equal_to(60_000)
+
+    def test_two_blocks_in_one_report_share_its_budget(self):
+        first = _collected_from(_wide(1), _wide(2))
+        second = _collected_from(_wide(3), _wide(4))
+        report = _run_hook(_make_report(when="teardown"), _make_call(exc=ExceptionGroup("teardown", [first, second])))
+        assert_that(self._titles(report)).is_equal_to(
+            [
+                "AssertionFailure (leaf 1 of 2, failure 1 of 2)",
+                "Structured Diff (leaf 1 of 2, failure 1 of 2)",
+                "AssertionFailure (leaf 1 of 2, failure 2 of 2)",
+                "Structured Diff (leaf 1 of 2, failure 2 of 2)",
+                "Left Out (leaf 2 of 2, failures 1 to 2)",
+            ]
+        )
+
+    def test_two_blocks_in_one_report_share_its_twenty(self):
+        def block(start):
+            return _collected_from(
+                *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(start, start + 15)]
+            )
+
+        report = _run_hook(
+            _make_report(when="teardown"), _make_call(exc=ExceptionGroup("teardown", [block(0), block(15)]))
+        )
+        titles = self._titles(report)
+        assert_that(titles).is_length(41)
+        assert_that(titles[-2:]).is_equal_to(
+            ["Structured Diff (leaf 2 of 2, failure 5 of 15)", "Left Out (leaf 2 of 2, failures 6 to 15)"]
+        )
+
+    def test_a_failure_whose_line_cannot_be_written_leaves_the_others(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        broken = AssertionOutcome(message=_UnsplittableMessage("broken"), diff=diff)
+        good = AssertionOutcome(message="good", diff=diff)
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(broken, good))))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (failure 2 of 2)"])
+
+    def test_a_failure_whose_sections_were_all_refused_was_still_drawn(self):
+        failure = _collected_from(*[lambda n=n: assert_that([n]).contains(-1) for n in range(21)])
+        report = _make_report()
+        report.longrepr = _RefusesOnce()
+        _run_hook(report, _make_call(exc=failure))
+        titles = self._titles(report)
+        assert_that(titles).is_length(20)
+        assert_that(titles[-2:]).is_equal_to(["Structured Diff (failure 20 of 21)", "Left Out (failure 21)"])
+
+    def test_a_failure_too_wide_for_what_is_left_takes_one_of_the_twenty(self):
+        failure = _collected_from(
+            _wide(1), _wide(2), *[_wide(3) for _ in range(18)], lambda: assert_that([1]).contains(3)
+        )
+        with patch("assertpy2.pytest_plugin._format_diff", wraps=_format_diff) as drawn:
+            report = _run_hook(_make_report(), _make_call(exc=failure))
+        assert_that(drawn.call_count).is_equal_to(2 * 20)
+        assert_that(self._titles(report)[-1]).is_equal_to("Left Out (failures 3 to 21)")
+
+    def test_a_representation_that_refuses_one_section_costs_that_section_alone(self):
+        failure = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}), lambda: assert_that([2]).contains(3))
+        report = _make_report()
+        report.longrepr = _RefusesOnce()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(self._titles(report)).is_equal_to(
+            ["Structured Diff (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]
+        )
+
+    def test_a_representation_that_refuses_one_section_costs_that_failure_alone(self):
+        failure = _collected_from(lambda: assert_that([1]).contains(3), lambda: assert_that([2]).contains(3))
+        report = _make_report()
+        report.longrepr = _RefusesOnce()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (failure 2 of 2)"])
+
+    def test_one_that_cannot_be_rendered_leaves_the_others(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        good = AssertionOutcome(message="good", diff=diff)
+        broken = AssertionOutcome(message="broken", diff=_UnrenderableDiff())
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(good, broken, good))))
+        assert_that(self._titles(report)).is_equal_to(
+            ["Structured Diff (failure 1 of 3)", "Structured Diff (failure 3 of 3)"]
+        )
+
+    def test_each_diff_keeps_a_coloured_copy_under_its_own_title(self):
+        failure = _collected_from(
+            lambda: assert_that({2: 4}).is_equal_to({2: 3}), lambda: assert_that({5: 6}).is_equal_to({5: 7})
+        )
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        colored = vars(report).get(_COLORED, {})
+        assert_that(sorted(colored)).is_equal_to(
+            ["Structured Diff (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]
+        )
+        assert_that(colored["Structured Diff (failure 2 of 2)"]).starts_with(
+            f"{_entry(failure, 2)}\n\x1b[36mdiff (dict):"
+        )
+
+    @pytest.mark.parametrize(
+        "failures",
+        [
+            RuntimeError("a property that raises"),
+            [AssertionOutcome(message="in a list", actual=1, actual_provided=True)],
+        ],
+        ids=["raises", "not-a-tuple"],
+    )
+    def test_failures_that_are_not_a_blocks_are_left_alone(self, failures):
+        class Odd(AssertionFailure):
+            @property
+            def failures(self):
+                if isinstance(failures, Exception):
+                    raise failures
+                return failures
+
+            @failures.setter
+            def failures(self, value):
+                pass
+
+        report = _make_report()
+        try:
+            _run_hook(report, _make_call(exc=Odd("odd")))
+            raised = None
+        except Exception as error:  # the report is built inside pytest's own hook, where this would end the run
+            raised = error
+        assert_that(raised).is_none()
+        assert_that(_sections(report)).is_empty()
+
+    def test_an_item_that_is_no_record_is_skipped(self):
+        named = AssertionOutcome(message="named", actual=1, actual_provided=True)
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(object(), named))))
+        assert_that(self._titles(report)).is_equal_to(["AssertionFailure (failure 1 of 1)"])
+
+    def test_allure_gets_each_under_its_number(self):
+        mock = _mock_allure()
+        failure = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}), lambda: assert_that([1]).contains(3))
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        assert_that([one.kwargs["name"] for one in mock.attach.call_args_list]).is_equal_to(
+            ["Structured Diff (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]
+        )
+
+    def test_allure_takes_the_first_twenty(self):
+        mock = _mock_allure()
+        failure = _collected_from(*[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(25)])
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        names = [one.kwargs["name"] for one in mock.attach.call_args_list]
+        assert_that(names).is_length(21)
+        assert_that(names[-2:]).is_equal_to(["Structured Diff (failure 20 of 25)", "Left Out (failures 21 to 25)"])
+        assert_that(mock.attach.call_args_list[-1].kwargs["body"]).is_equal_to(
+            "No attachment for lack of room: failures 21 to 25 of 25. The summary lists each, its diff in compact rows."
+        )
+
+    def test_an_attachment_refused_for_one_leaves_the_next_its_own(self):
+        mock = _mock_allure()
+        mock.attach.side_effect = [RuntimeError("refused"), None]
+        failure = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}), lambda: assert_that([1]).contains(3))
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        assert_that(mock.attach.call_args_list).is_length(2)
+        assert_that(mock.attach.call_args_list[1].kwargs["name"]).is_equal_to("Structured Diff (failure 2 of 2)")
+
+    def test_one_too_wide_for_what_is_left_costs_no_later_one_its_sections(self):
+        failure = _collected_from(_wide(1), _wide(2), _wide(3), lambda: assert_that([1]).contains(3))
+        report = _run_hook(_make_report(), _make_call(exc=failure))
+        assert_that(self._titles(report)).is_equal_to(
+            [
+                "AssertionFailure (failure 1 of 4)",
+                "Structured Diff (failure 1 of 4)",
+                "AssertionFailure (failure 2 of 4)",
+                "Structured Diff (failure 2 of 4)",
+                "Structured Diff (failure 4 of 4)",
+                "Left Out (failure 3)",
+            ]
+        )
+        assert_that(_sections(report)[-1][1]).is_equal_to(
+            "No section for lack of room: failure 3 of 4. The summary lists each, its diff in compact rows."
+        )
+
+    def test_past_twenty_the_rest_are_not_drawn(self):
+        failure = _collected_from(*[lambda n=n: assert_that([n]).contains(-1) for n in range(25)])
+        with patch("assertpy2.pytest_plugin._format_diff", wraps=_format_diff) as drawn:
+            report = _run_hook(_make_report(), _make_call(exc=failure))
+        assert_that(drawn.call_count).is_equal_to(40)
+        assert_that(self._titles(report)[-1]).is_equal_to("Left Out (failures 21 to 25)")
+
+    @pytest.mark.parametrize("escaping", [RuntimeError("boom"), AssertionError("plain")], ids=["error", "assert"])
+    def test_an_exception_that_escaped_the_block_brings_what_it_had_collected(self, escaping):
+        def asks():
+            with soft_assertions():
+                assert_that({2: 4}).is_equal_to({2: 3})
+                assert_that(lambda: 1).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(2)
+                raise escaping
+
+        with pytest.raises(type(escaping)) as raised:
+            asks()
+        report = _run_hook(_make_report(), _make_call(exc=raised.value))
+        titles = self._titles(report)
+        assert_that(titles).contains("Structured Diff (failure 1 of 2)", "Polling Trace (failure 2 of 2)")
+        assert_that(titles).does_not_contain("AssertionFailure", "Structured Diff")
+
+    def test_an_exception_that_refuses_attributes_still_brings_what_was_collected(self):
+        class FrozenError(Exception):
+            def __setattr__(self, name, value):
+                raise AttributeError(name)
+
+        def asks():
+            with soft_assertions():
+                assert_that([1]).contains(3)
+                raise FrozenError("frozen")
+
+        with pytest.raises(FrozenError) as raised:
+            asks()
+        report = _run_hook(_make_report(), _make_call(exc=raised.value))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (failure 1 of 1)"])
+
+    def test_with_the_diff_turned_off_a_diff_alone_is_not_left_out(self):
+        failure = _collected_from(
+            *[lambda n=n: assert_that(n).is_equal_to(-1) for n in range(20)], lambda: assert_that([1]).contains(3)
+        )
+        item = _make_item()
+        item.config._assertpy2_diff_enabled = False
+        report = _run_hook(_make_report(), _make_call(exc=failure), item=item)
+        titles = self._titles(report)
+        assert_that(titles).is_length(20)
+        assert_that(titles[-1]).is_equal_to("AssertionFailure (failure 20 of 21)")
+
+    def test_a_group_that_escaped_the_block_brings_what_it_had_collected(self):
+        def asks():
+            with soft_assertions():
+                assert_that([1]).contains(3)
+                raise ExceptionGroup("tasks", [RuntimeError("one"), RuntimeError("two")])
+
+        with pytest.raises(ExceptionGroup) as raised:
+            asks()
+        report = _run_hook(_make_report(), _make_call(exc=raised.value))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (group, failure 1 of 1)"])
+
+    def test_an_aggregate_that_escaped_another_block_shows_its_own_and_the_notes(self):
+        earlier = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}))
+
+        def asks():
+            with soft_assertions():
+                assert_that([1]).contains(3)
+                raise earlier
+
+        with pytest.raises(AssertionFailure):
+            asks()
+        report = _run_hook(_make_report(), _make_call(exc=earlier))
+        assert_that(self._titles(report)).is_equal_to(
+            [
+                "AssertionFailure (failure 1 of 1)",
+                "Structured Diff (failure 1 of 1)",
+                "Structured Diff (note, failure 1 of 1)",
+            ]
+        )
+
+    def test_a_group_whose_dictionary_cannot_be_read_costs_nothing(self):
+        class OpaqueGroup(ExceptionGroup):
+            @property
+            def __dict__(self):
+                raise RuntimeError("no dictionary")
+
+        report = _make_report()
+        try:
+            _run_hook(report, _make_call(exc=OpaqueGroup("tasks", [RuntimeError("one")])))
+            raised = None
+        except Exception as error:  # the report is built inside pytest's own hook, where this would end the run
+            raised = error
+        assert_that(raised).is_none()
+        assert_that(_sections(report)).is_empty()
+
+    def test_a_record_whose_class_cannot_be_asked_costs_nothing(self):
+        class Sly:
+            @property
+            def __class__(self):
+                raise RuntimeError("asked")
+
+        report = _make_report()
+        try:
+            _run_hook(report, _make_call(exc=AssertionFailure("block", failures=(Sly(),))))
+            raised = None
+        except Exception as error:  # the report is built inside pytest's own hook, where this would end the run
+            raised = error
+        assert_that(raised).is_none()
+        assert_that(_sections(report)).is_empty()
+
+    def test_allure_counts_a_failure_whose_later_attachment_was_refused(self):
+        mock = _mock_allure()
+
+        def refuses_diffs(*, body, name, attachment_type):
+            if name.startswith("Structured Diff"):
+                raise RuntimeError("refused")
+
+        mock.attach.side_effect = refuses_diffs
+        failure = _collected_from(*[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(25)])
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock, allure_mode="full")
+        names = [one.kwargs["name"] for one in mock.attach.call_args_list]
+        kept = [name for name in names if not name.startswith("Structured Diff")]
+        assert_that(kept).is_length(21)
+        assert_that(kept[-2:]).is_equal_to(["AssertionFailure (failure 20 of 25)", "Left Out (failures 21 to 25)"])
+
+    def test_allure_keeps_a_failures_diff_when_its_values_were_refused(self):
+        mock = _mock_allure()
+
+        def refuses_values(*, body, name, attachment_type):
+            if name.startswith("AssertionFailure"):
+                raise RuntimeError("refused")
+
+        mock.attach.side_effect = refuses_values
+        failure = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}))
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock, allure_mode="full")
+        assert_that([one.kwargs["name"] for one in mock.attach.call_args_list]).is_equal_to(
+            ["AssertionFailure (failure 1 of 1)", "Structured Diff (failure 1 of 1)"]
+        )
+
+    def test_allure_names_no_one_left_out_whose_diff_is_empty(self):
+        mock = _mock_allure()
+        empty = AssertionOutcome(message="empty", diff=DiffResult(kind="dict", entries=[]))
+        diffs = [
+            AssertionOutcome(
+                message=f"m{n}", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=n, expected=0)])
+            )
+            for n in range(20)
+        ]
+        _run_hook_with_allure(_make_report(), _make_call(exc=AssertionFailure("block", failures=(*diffs, empty))), mock)
+        assert_that(mock.attach.call_count).is_equal_to(20)
+
+    def test_allure_tries_twenty_when_every_attachment_is_refused(self):
+        mock = _mock_allure()
+        mock.attach.side_effect = RuntimeError("refused")
+        failure = _collected_from(*[lambda n=n: assert_that([n]).contains(-1) for n in range(25)])
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        assert_that(mock.attach.call_count).is_equal_to(21)
+
+    def test_allure_names_no_one_left_out_who_had_nothing_to_attach(self):
+        mock = _mock_allure()
+        failure = _collected_from(
+            *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(20)],
+            lambda: assert_that(False).is_true(),
+        )
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        names = [one.kwargs["name"] for one in mock.attach.call_args_list]
+        assert_that(names).is_length(20)
+        assert_that(names[-1]).is_equal_to("Structured Diff (failure 20 of 21)")
+
+    def test_an_exception_that_escaped_two_blocks_brings_both_collections(self):
+        error = RuntimeError("boom")
+
+        def first():
+            with soft_assertions():
+                assert_that([1]).contains(3)
+                raise error
+
+        def second():
+            with soft_assertions():
+                assert_that({2: 4}).is_equal_to({2: 3})
+                raise error
+
+        with pytest.raises(RuntimeError):
+            first()
+        with pytest.raises(RuntimeError):
+            second()
+        report = _run_hook(_make_report(), _make_call(exc=error))
+        assert_that(self._titles(report)).is_equal_to(
+            [
+                "Structured Diff (note 1 of 2, failure 1 of 1)",
+                "AssertionFailure (note 2 of 2, failure 1 of 1)",
+                "Structured Diff (note 2 of 2, failure 1 of 1)",
+            ]
+        )
+        assert_that(error.__notes__).is_length(2)
+
+    def test_a_broken_diff_costs_its_failure_neither_values_nor_trace_nor_the_next_failure(self):
+        broken = AssertionOutcome(
+            message="broken", actual=1, actual_provided=True, expected=2, diff=_UnrenderableDiff(), trace=_make_trace()
+        )
+        good = AssertionOutcome(
+            message="good", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        )
+        report = _run_hook(_make_report(), _make_call(exc=AssertionFailure("block", failures=(broken, good))))
+        assert_that(self._titles(report)).is_equal_to(
+            ["AssertionFailure (failure 1 of 2)", "Polling Trace (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]
+        )
+
+    @pytest.mark.parametrize(
+        ("mode", "names"),
+        [
+            ("diff", ["Polling Trace (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]),
+            (
+                "full",
+                [
+                    "AssertionFailure (failure 1 of 2)",
+                    "Polling Trace (failure 1 of 2)",
+                    "Structured Diff (failure 2 of 2)",
+                ],
+            ),
+        ],
+    )
+    def test_allure_keeps_a_broken_diffs_values_and_trace_and_the_next_failure(self, mode, names):
+        mock = _mock_allure()
+        broken = AssertionOutcome(
+            message="broken", actual=1, actual_provided=True, expected=2, diff=_UnrenderableDiff(), trace=_make_trace()
+        )
+        good = AssertionOutcome(
+            message="good", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        )
+        failure = AssertionFailure("block", failures=(broken, good))
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock, allure_mode=mode)
+        assert_that([one.kwargs["name"] for one in mock.attach.call_args_list]).is_equal_to(names)
+
+    def test_allure_skips_a_record_that_raises_when_read_and_attaches_the_next(self):
+        class Untold:
+            def __bool__(self):
+                raise RuntimeError("cannot be told")
+
+        mock = _mock_allure()
+        odd = AssertionOutcome(message="odd", actual=1, actual_provided=Untold())
+        good = AssertionOutcome(
+            message="good", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=0)])
+        )
+        failure = AssertionFailure("block", failures=(odd, good))
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock, allure_mode="full")
+        assert_that([one.kwargs["name"] for one in mock.attach.call_args_list]).is_equal_to(
+            ["Structured Diff (failure 2 of 2)"]
+        )
+
+    def test_a_raised_failure_keeps_its_values_and_trace_when_its_diff_cannot_be_drawn(self):
+        exc = AssertionFailure("fail", actual=1, expected=2, diff=_UnrenderableDiff(), trace=_make_trace())
+        report = _run_hook(_make_report(), _make_call(exc=exc))
+        assert_that(self._titles(report)).is_equal_to(["AssertionFailure", "Polling Trace"])
+
+    def test_values_that_cannot_be_drawn_cost_the_diff_nothing(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        with patch("assertpy2.pytest_plugin._value_rows", side_effect=RuntimeError("cannot draw")):
+            report = _run_hook(
+                _make_report(), _make_call(exc=AssertionFailure("fail", actual=1, expected=2, diff=diff))
+            )
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff"])
+
+    def test_a_raised_failure_keeps_its_trace_when_the_report_will_not_keep_a_colour(self):
+        class RefusesColour(dict):
+            def __setitem__(self, key, value):
+                raise RuntimeError("no colour here")
+
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        vars(report)[_COLORED] = RefusesColour()
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff, trace=_make_trace())))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff", "Polling Trace"])
+
+    def test_a_colour_that_cannot_be_drawn_costs_the_plain_diff_nothing(self):
+        def plain_only(diff, *, color=False, max_entries=50):
+            if color:
+                raise RuntimeError("no colour drawn")
+            return _format_diff(diff, max_entries=max_entries)
+
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        with patch("assertpy2.pytest_plugin._format_diff", side_effect=plain_only):
+            _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff)))
+        assert_that(_sections(report)).is_equal_to([("Structured Diff", "diff (dict):\n  k:\n    - 1\n    + 2")])
+        assert_that(vars(report).get(_COLORED, {})).is_empty()
+
+    def test_a_colour_the_report_will_not_keep_costs_no_section(self):
+        class RefusesColour(dict):
+            def __setitem__(self, key, value):
+                raise RuntimeError("no colour here")
+
+        failure = _collected_from(lambda: assert_that([1]).contains(3), lambda: assert_that([2]).contains(3))
+        report = _make_report()
+        vars(report)[_COLORED] = RefusesColour()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(self._titles(report)).is_equal_to(
+            ["Structured Diff (failure 1 of 2)", "Structured Diff (failure 2 of 2)"]
+        )
+
+    def test_a_carried_record_reads_as_a_raised_one(self):
+        def asks():
+            with soft_assertions():
+                assert_that({2: 4}).is_equal_to({2: 3})
+                raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError) as raised:
+            asks()
+        carried = _run_hook(_make_report(), _make_call(exc=raised.value))
+        aggregate = _collected_from(lambda: assert_that({2: 4}).is_equal_to({2: 3}))
+        collected = _run_hook(_make_report(), _make_call(exc=aggregate))
+        assert_that([body.split("\n", 1)[1] for _, body in _sections(carried)]).is_equal_to(
+            [body.split("\n", 1)[1] for _, body in _sections(collected)]
+        )
+
+    @pytest.mark.parametrize(
+        "carried", ["not a list", [("not a pair",)], [([object()], ())], [(("not a record",), ())]]
+    )
+    def test_something_else_under_the_carried_name_is_left_alone(self, carried):
+        escaping = RuntimeError("boom")
+        vars(escaping)["_assertpy2_collected"] = carried
+        report = _make_report()
+        try:
+            _run_hook(report, _make_call(exc=escaping))
+            raised = None
+        except Exception as error:  # the report is built inside pytest's own hook, where this would end the run
+            raised = error
+        assert_that(raised).is_none()
+        assert_that(_sections(report)).is_empty()
+
+    def test_a_failure_of_a_subclass_that_refuses_the_pairs_keeps_its_records(self):
+        class Odd(AssertionFailure):
+            @property
+            def _compared_pairs(self):
+                raise RuntimeError("a property that raises")
+
+            @_compared_pairs.setter
+            def _compared_pairs(self, value):
+                pass
+
+        named = AssertionOutcome(message="named", actual=1, actual_provided=True, expected=2)
+        report = _make_report()
+        try:
+            _run_hook(report, _make_call(exc=Odd("odd", failures=(named,))))
+            raised = None
+        except Exception as error:  # the report is built inside pytest's own hook, where this would end the run
+            raised = error
+        assert_that(raised).is_none()
+        assert_that(_sections(report)).is_equal_to(
+            [("AssertionFailure (failure 1 of 1)", "1. named\n  actual:   1\n  expected: 2")]
+        )
+
+    def test_under_ignore_the_values_shown_are_the_pair_compared(self):
+        def ask():
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3}, ignore="a")
+
+        with pytest.raises(AssertionFailure) as raised:
+            ask()
+        alone = dict(_sections(_run_hook(_make_report(), _make_call(exc=raised.value))))["AssertionFailure"]
+        failure = _collected_from(ask)
+        shown = dict(_sections(_run_hook(_make_report(), _make_call(exc=failure))))
+        assert_that(shown["AssertionFailure (failure 1 of 1)"]).is_equal_to(f"{_entry(failure, 1)}\n{alone}")
+        assert_that(alone).does_not_contain("'a'")
+
+    def test_allure_shares_the_reports_twenty_across_its_blocks(self):
+        def block(start):
+            return _collected_from(
+                *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(start, start + 15)]
+            )
+
+        mock = _mock_allure()
+        group = ExceptionGroup("teardown", [block(0), block(15)])
+        _run_hook_with_allure(_make_report(when="teardown"), _make_call(exc=group), mock)
+        names = [one.kwargs["name"] for one in mock.attach.call_args_list]
+        assert_that(names).is_length(21)
+        assert_that(names[-2:]).is_equal_to(
+            ["Structured Diff (leaf 2 of 2, failure 5 of 15)", "Left Out (leaf 2 of 2, failures 6 to 15)"]
+        )
+
+    def test_allure_takes_no_room_for_a_failure_that_attached_nothing(self):
+        mock = _mock_allure()
+        failure = _collected_from(
+            lambda: assert_that(False).is_true(),
+            *[lambda n=n: assert_that({"k": n}).is_equal_to({"k": -1}) for n in range(20)],
+        )
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure), mock)
+        names = [one.kwargs["name"] for one in mock.attach.call_args_list]
+        assert_that(names).is_length(20)
+        assert_that(names[-1]).is_equal_to("Structured Diff (failure 21 of 21)")
 
 
 class TestTheSectionsGoWhereEveryReaderLooks:
@@ -1890,6 +2622,48 @@ class TestTheDiffTravelsWithTheFailure:
         self._run(tmp_path, "-n", "2")
         bodies = self._junit_bodies(tmp_path)
         assert_that(bodies).is_length(5).all_satisfy(match.contains("diff (dict)"))
+
+
+class TestASoftBlocksSectionsReachEveryReader:
+    """The sections of a soft block's failures, read out of real runs: the terminal in colour, JUnit in plain text."""
+
+    _SUITE = (
+        "from assertpy2 import assert_that, soft_assertions\n\n\n"
+        "def test_block():\n"
+        "    with soft_assertions():\n"
+        "        assert_that({'k': 0}).is_equal_to({'k': 1})\n"
+        "        assert_that({'k': 2}).is_equal_to({'k': 3})\n"
+    )
+
+    def _run(self, tmp_path, *arguments):
+        (tmp_path / "test_block.py").write_text(self._SUITE, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                *(sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-p", "no:randomly"),
+                *("--junitxml", "junit.xml", *arguments),
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+            env={**os.environ, "PYTHONPATH": _CHECKOUT},
+        )
+        assert_that(result.returncode).described_as(f"the child run: {result.stdout}{result.stderr}").is_equal_to(1)
+        root = ET.parse(tmp_path / "junit.xml").getroot()
+        return result, [one.text or "" for one in root.iter() if one.tag == "failure"]
+
+    @pytest.mark.parametrize("workers", [(), ("-n", "2")], ids=["in-process", "distributed"])
+    def test_the_terminal_gets_each_diff_in_colour_and_junit_in_plain_text(self, tmp_path, workers):
+        if workers:
+            pytest.importorskip("xdist", reason="the integration cell installs xdist and this one may not")
+        result, bodies = self._run(tmp_path, "--color=yes", *workers)
+        assert_that(result.stdout.count("\x1b[36mdiff (dict):")).described_as("coloured diffs").is_equal_to(2)
+        assert_that(bodies).is_length(1)
+        assert_that(bodies[0]).contains(
+            "Structured Diff (failure 1 of 2)", "Structured Diff (failure 2 of 2)", "1. Expected <{'k': 0}>"
+        ).does_not_contain("\x1b")
 
 
 class TestAllureExceptionSafety:

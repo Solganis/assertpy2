@@ -10,14 +10,17 @@ import pytest
 
 from . import _clustering, _dangling, _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
+from ._engine._compat import BaseExceptionGroup
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import laid_out
 from ._engine._path import _ROOT
+from .assertpy import _located, _numbered, _Room
 from .errors import _diff_side, _diff_sides, _json_safe, _render_diff, _safe_repr, _told_apart
-from .exception import _leaves
+from .exception import _leaves, _nodes
+from .outcome import AssertionOutcome
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
     from pathlib import Path
 
 
@@ -895,15 +898,23 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
 
     # pytest groups two failing finalizers, and numbering follows the order the traceback prints them in
     leaves = _leaves(exc)
+    room, attachments = _Room(), _Room()
     for position, leaf in enumerate(leaves, 1):
-        if not isinstance(leaf, AssertionError):
-            continue
-        suffix = f" ({position} of {len(leaves)})" if len(leaves) > 1 else ""
-        # two barriers: a `diff` property that raised took the whole run down, and one refusal must not cost the other
-        with contextlib.suppress(Exception):
-            _attach_report_sections(item, report, leaf, suffix=suffix)
-        with contextlib.suppress(Exception):
-            _attach_to_allure(item, report, leaf)
+        if isinstance(leaf, AssertionError):
+            suffix = f" ({position} of {len(leaves)})" if len(leaves) > 1 else ""
+            # two barriers: a `diff` property that raised took the run down, and one refusal must not cost the other
+            with contextlib.suppress(Exception):
+                _attach_report_sections(item, report, leaf, suffix=suffix)
+            with contextlib.suppress(Exception):
+                _attach_to_allure(item, report, leaf)
+        # any leaf: an exception of the caller's that escaped a soft block carries what the block had collected
+        within = f"leaf {position} of {len(leaves)}, " if len(leaves) > 1 else ""
+        _attach_collected(item, report, leaf, room, attachments, within)
+    # and so does a group of the caller's, which no leaf is
+    carriers = [node for node in _nodes(exc) if isinstance(node, BaseExceptionGroup) and _carries(node)]
+    for position, node in enumerate(carriers, 1):
+        within = "group, " if len(carriers) == 1 else f"group {position} of {len(carriers)}, "
+        _attach_collected(item, report, node, room, attachments, within)
 
     # one pair is all a listener keeps, so a group of failures hands none
     if len(leaves) == 1 and getattr(item.config, "_assertpy2_comparison_enabled", True):
@@ -1059,33 +1070,260 @@ def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
     """
     actual = getattr(exc, "actual", None)
     expected = getattr(exc, "expected", None)
-    diff = getattr(exc, "diff", None)
-    trace = getattr(exc, "trace", None)
     named_actual, named_expected = _named(exc)
 
     # what decides is `actual` being named, a value other than the subject; no record is the older path
     named_values = named_actual if getattr(exc, "_outcome", None) is not None else (named_actual or named_expected)
 
+    # windowed over whole values, a row could show a key left out and cut away what the failure is about
+    compared = _compared_pair(exc) if named_values and named_actual and named_expected else None
+    if compared is not None:
+        actual, expected = compared
+    sections = _sections_of(
+        item,
+        actual,
+        expected,
+        getattr(exc, "diff", None),
+        getattr(exc, "trace", None),
+        named_values=named_values,
+        named_actual=named_actual,
+        named_expected=named_expected,
+        suffix=suffix,
+    )
+    _hang(report, sections)
+
+
+def _sections_of(
+    item, actual, expected, diff, trace, *, named_values: bool, named_actual: bool, named_expected: bool, suffix: str
+) -> list[tuple[str, str, str | None]]:
+    """The sections one failure gets, as ``(title, text, colored text or None)``, rendered and not yet attached.
+
+    Each is drawn behind a barrier of its own, so a diff or a trace that cannot be drawn costs the others nothing.
+    """
+    sections: list[tuple[str, str, str | None]] = []
     if named_values:
-        paired = named_actual and named_expected
-        # windowed over whole values, a row could show a key left out and cut away what the failure is about
-        compared = _compared_pair(exc) if paired else None
-        if compared is not None:
-            actual, expected = compared
-        rows = _value_rows(actual, expected, paired=paired, named_actual=named_actual)
-        _add_section(report, f"AssertionFailure{suffix}", "\n".join(rows))
+        with contextlib.suppress(Exception):
+            rows = _value_rows(actual, expected, paired=named_actual and named_expected, named_actual=named_actual)
+            sections.append((f"AssertionFailure{suffix}", "\n".join(rows), None))
 
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
         max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
-        title = f"Structured Diff{suffix}"
-        rendered = _format_diff(diff, max_entries=max_entries)
-        # a diff with no entries renders as nothing, and the section around it read as a diff that found nothing
-        if rendered:
-            _add_section(report, title, rendered)
-            vars(report).setdefault(_COLORED, {})[title] = _format_diff(diff, color=True, max_entries=max_entries)
+        with contextlib.suppress(Exception):
+            rendered = _format_diff(diff, max_entries=max_entries)
+            # a diff with no entries renders as nothing, and the section around it read as a diff that found nothing
+            if rendered:
+                colored = None
+                # the plain section stands without its coloured copy
+                with contextlib.suppress(Exception):
+                    colored = _format_diff(diff, color=True, max_entries=max_entries)
+                sections.append((f"Structured Diff{suffix}", rendered, colored))
 
     if trace is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
-        _add_section(report, f"Polling Trace{suffix}", _format_trace(trace))
+        with contextlib.suppress(Exception):
+            sections.append((f"Polling Trace{suffix}", _format_trace(trace), None))
+    return sections
+
+
+def _hang(report: pytest.TestReport, sections: list[tuple[str, str, str | None]]) -> None:
+    for title, text, colored in sections:
+        _add_section(report, title, text)
+        _keep_colour(report, title, colored)
+
+
+def _keep_colour(report: pytest.TestReport, title: str, colored: str | None) -> None:
+    """Store the coloured copy of a section already on, behind a barrier: it is a copy for the terminal."""
+    if colored is not None:
+        with contextlib.suppress(Exception):
+            vars(report).setdefault(_COLORED, {})[title] = colored
+
+
+def _hang_each(report: pytest.TestReport, sections: list[tuple[str, str, str | None]]) -> int:
+    """Attach a collected failure's *sections* in order, handing back how many characters went on.
+
+    A representation refusing a section costs that section alone: the next one still goes on.
+    """
+    attached = 0
+    for title, text, colored in sections:
+        try:
+            _add_section(report, title, text)
+        except Exception:  # the representation is another plugin's or an item's own, and may refuse
+            continue
+        attached += len(text)
+        _keep_colour(report, title, colored)
+    return attached
+
+
+_Pair = tuple[object, object] | None
+
+
+_LISTED = "The summary lists each, its diff in compact rows."
+
+
+def _carries(exc: BaseException) -> bool:
+    """Whether a soft block left what it had collected on *exc*, the exception that escaped it."""
+    try:
+        return "_assertpy2_collected" in vars(exc)
+    except Exception:  # an exception without a dictionary carries nothing
+        return False
+
+
+def _attach_collected(item, report, exc: BaseException, room: _Room, attachments: _Room, within: str) -> None:
+    """Hang the sections and the Allure attachments of every collection *exc* holds, behind one barrier each."""
+    try:
+        collections = _collections(exc)
+    except Exception:  # a record of anyone's may raise when its class is asked, which must not cost the report
+        return
+    for label, collected in collections:
+        with contextlib.suppress(Exception):
+            _attach_collected_sections(item, report, collected, room, within=within + label)
+        with contextlib.suppress(Exception):
+            _attach_collected_to_allure(item, collected, attachments, within=within + label)
+
+
+def _collections(exc: BaseException) -> list[tuple[str, tuple[tuple[AssertionOutcome, _Pair], ...]]]:
+    """The failures a soft block collected that *exc* holds, each with the pair its equality compared.
+
+    The failures a soft block raised as one, and those an exception of the caller's that escaped a block carries
+    beside its note, one collection per block it escaped.  Carried ones are labelled as a note's, which numbers them
+    on its own, wherever there is more than one collection to tell apart.
+    """
+    own: tuple[tuple[AssertionOutcome, _Pair], ...] = ()
+    if isinstance(exc, errors.AssertionFailure):
+        failures: object = ()
+        pairs: object = ()
+        # a subclass may answer the names with code of its own, which must not cost the report
+        with contextlib.suppress(Exception):
+            failures = exc.failures
+        with contextlib.suppress(Exception):
+            pairs = exc._compared_pairs
+        own = _paired(failures, pairs)
+    carried: list[tuple[tuple[AssertionOutcome, _Pair], ...]] = []
+    if _carries(exc):
+        with contextlib.suppress(Exception):
+            for records, pairs in vars(exc)["_assertpy2_collected"]:
+                found = _paired(records, pairs)
+                if found:
+                    carried.append(found)
+    collections = [("", own)] if own else []
+    alone = "note, " if own else ""
+    for position, found in enumerate(carried, 1):
+        collections.append((f"note {position} of {len(carried)}, " if len(carried) > 1 else alone, found))
+    return collections
+
+
+def _paired(failures: object, pairs: object) -> tuple[tuple[AssertionOutcome, _Pair], ...]:
+    """Each record of *failures* with its pair from *pairs*, or ``None`` where the two do not line up."""
+    if type(failures) is not tuple:
+        return ()
+    if type(pairs) is not tuple or len(pairs) != len(failures):
+        pairs = (None,) * len(failures)
+    return tuple(
+        (failure, pair if type(pair) is tuple and len(pair) == 2 else None)
+        for failure, pair in zip(failures, pairs, strict=True)
+        if isinstance(failure, AssertionOutcome)
+    )
+
+
+def _attach_collected_sections(
+    item, report, collected: tuple[tuple[AssertionOutcome, _Pair], ...], room: _Room, *, within: str = ""
+) -> None:
+    """Give each failure a soft block collected the sections a raised one gets, numbered as its summary numbers it.
+
+    Each section opens on the entry's line: its number, its group in brackets, its headline and its location, so a
+    diff is never read against the wrong one.
+    *within* names the leaf of an exception group the block's failure is.  *room* is the report's, so two blocks
+    failing in one teardown share it: twenty failures drawn, and 60 000 characters of the sections that went on.  A
+    failure with nothing to show takes none of it, and a section the representation refused takes no characters.
+    Whether a failure fits is judged on all its sections before any goes on, since a refusal cannot be told in
+    advance.  One that does not fit takes one of the twenty but no characters, so a smaller one after it still goes
+    on.  One section at the end names those left out.
+    """
+    total = len(collected)
+    left: list[int] = []
+    for number, (outcome, compared) in enumerate(collected, 1):
+        sections = _admitted(item, number, outcome, compared, room, f" ({within}failure {number} of {total})")
+        if sections is None:
+            left.append(number)
+            continue
+        room.characters -= _hang_each(report, sections)
+    if left:
+        notice = f"No section for lack of room: {_numbered(left)} of {total}. {_LISTED}"
+        with contextlib.suppress(Exception):
+            _add_section(report, f"Left Out ({within}{_numbered(left)})", notice)
+
+
+def _admitted(
+    item, number: int, outcome: AssertionOutcome, compared: _Pair, room: _Room, suffix: str
+) -> list[tuple[str, str, str | None]] | None:
+    """A collected failure's sections where the room takes them, ``[]`` where it has none to give, ``None`` where it
+    is left out.  The room is asked before any drawing, and a failure drawn takes one of the twenty whether or not
+    its sections fit."""
+    # a collected failure that raises when read or drawn costs its own sections, not the next one's
+    try:
+        if not _shows_anything(item, outcome):
+            return []
+        if room.failures == 0:
+            return None
+        room.failures -= 1
+        sections = _rendered(item, number, outcome, compared, suffix)
+    except Exception:
+        return []
+    return None if sum(len(text) for _, text, _ in sections) > room.characters else sections
+
+
+def _shows_anything(item, outcome: AssertionOutcome) -> bool:
+    """Whether a collected failure would get a section at all, told without drawing one: named values, or a diff
+    with entries or a poll's trace where the diff is not turned off."""
+    if outcome.actual_provided:
+        return True
+    shown = getattr(item.config, "_assertpy2_diff_enabled", True)
+    return bool(shown and (_has_entries(outcome.diff) or outcome.trace is not None))
+
+
+def _has_entries(diff: object) -> bool:
+    """Whether *diff* has entries to show, a diff whose entries cannot be read having none."""
+    try:
+        return bool(getattr(diff, "entries", None))
+    except Exception:  # a diff of anyone's, read where its failure's values and trace must still go on
+        return False
+
+
+def _rendered(
+    item, number: int, outcome: AssertionOutcome, compared: _Pair, suffix: str
+) -> list[tuple[str, str, str | None]]:
+    """One collected failure's sections, each opening on the failure's own line of the summary.
+
+    Its values are the pair its equality compared where one was kept, as for a raised failure: under ``ignore=`` or
+    ``include=`` the two copies without the keys left out.
+    """
+    named = outcome.actual_provided and outcome.has_expected
+    if named and compared is not None:
+        actual, expected = compared
+    else:
+        actual, expected = outcome.actual, outcome.expected if outcome.has_expected else None
+    sections = _sections_of(
+        item,
+        actual,
+        expected,
+        outcome.diff,
+        outcome.trace,
+        named_values=outcome.actual_provided,
+        named_actual=outcome.actual_provided,
+        named_expected=outcome.has_expected,
+        suffix=suffix,
+    )
+    line = _entry_line(number, outcome)
+    return [
+        (title, f"{line}\n{text}", None if colored is None else f"{line}\n{colored}")
+        for title, text, colored in sections
+    ]
+
+
+def _entry_line(number: int, outcome: AssertionOutcome) -> str:
+    """The label a section opens on: the entry's number, its group in brackets, its headline and its location."""
+    headline = outcome.message.splitlines()[0] if outcome.message else ""
+    group = f"[{outcome.group}] " if outcome.group is not None else ""
+    return f"{number}. {group}{_located(outcome.location, headline)}"
 
 
 def _attach_to_allure(item, report, exc) -> None:
@@ -1105,6 +1343,54 @@ def _attach_to_allure(item, report, exc) -> None:
         named_actual=named_actual,
         named_expected=named_expected,
     )
+
+
+def _attach_collected_to_allure(
+    item, collected: tuple[tuple[AssertionOutcome, _Pair], ...], room: _Room, *, within: str = ""
+) -> None:
+    """Attach the failures a soft block collected, each under its number, on the report's room, when Allure is there.
+
+    Twenty failures tried, shared by every block of the report as its sections share theirs: a failure with nothing
+    to attach takes none of them, one whose attachments were refused takes one.  One text attachment at the end
+    names the failures left out.  Each attachment is bounded on its own by the diff's rows.
+    """
+    if not _HAS_ALLURE:
+        return
+    total = len(collected)
+    left: list[int] = []
+    mode = getattr(item.config, "_assertpy2_allure_mode", "diff")
+    max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
+    for number, (outcome, _) in enumerate(collected, 1):
+        # a record of anyone's that raises when read costs its own attachments, not the next one's
+        try:
+            parts = _allure_parts(
+                outcome.actual,
+                outcome.expected if outcome.has_expected else None,
+                outcome.diff,
+                trace=outcome.trace,
+                mode=mode,
+                max_entries=max_entries,
+                requirement=outcome.requirement,
+                named_actual=outcome.actual_provided,
+                named_expected=outcome.has_expected,
+                suffix=f" ({within}failure {number} of {total})",
+            )
+        except Exception:
+            continue
+        if not parts:
+            continue
+        if room.failures == 0:
+            left.append(number)
+            continue
+        room.failures -= 1
+        _attach_parts(parts)
+    if left:
+        with contextlib.suppress(Exception):
+            allure.attach(
+                body=f"No attachment for lack of room: {_numbered(left)} of {total}. {_LISTED}",
+                name=f"Left Out ({within}{_numbered(left)})",
+                attachment_type=allure.attachment_type.TEXT,
+            )
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
@@ -1213,40 +1499,87 @@ def _diff_to_json(diff, max_entries=50):
 
 
 def _attach_allure(
-    actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50, requirement=None
-):
+    actual,
+    expected,
+    diff,
+    *,
+    named_actual,
+    named_expected,
+    trace=None,
+    mode="diff",
+    max_entries=50,
+    requirement=None,
+    suffix="",
+) -> None:
+    """Attach what a failure carries to the Allure report."""
+    _attach_parts(
+        _allure_parts(
+            actual,
+            expected,
+            diff,
+            named_actual=named_actual,
+            named_expected=named_expected,
+            trace=trace,
+            mode=mode,
+            max_entries=max_entries,
+            requirement=requirement,
+            suffix=suffix,
+        )
+    )
+
+
+def _allure_parts(
+    actual,
+    expected,
+    diff,
+    *,
+    named_actual,
+    named_expected,
+    trace=None,
+    mode="diff",
+    max_entries=50,
+    requirement=None,
+    suffix="",
+) -> list[tuple[str, Callable[[], str | None], object]]:
+    """The attachments a failure would get, as ``(name, its body when asked, type)``, none of them drawn yet."""
     # the flags say what the assertion named, not what the terminal shows, and are required rather than defaulted
     if mode == "off":
-        return
+        return []
+    parts: list[tuple[str, Callable[[], str | None], object]] = []
     if mode == "full" and (named_actual or named_expected or requirement is not None):
-        # format 3 adds `requirement`, so a consumer branching on the number keeps reading 2 as it did
-        data: dict[str, object] = {"format": 3}
-        if named_actual:
-            data["actual"] = _json_safe(actual)
-        if named_expected:
-            data["expected"] = _json_safe(expected)
-        if requirement is not None:
-            data["requirement"] = {
-                "operation": requirement.operation,
-                "parameters": {name: _json_safe(value) for name, value in requirement.parameters.items()},
-                "negated": requirement.negated,
-            }
-        allure.attach(
-            body=json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False),
-            name="AssertionFailure",
-            attachment_type=allure.attachment_type.JSON,
-        )
-    if diff is not None:
-        diff_json = _diff_to_json(diff, max_entries=max_entries)
-        if diff_json is not None:
-            allure.attach(
-                body=diff_json,
-                name="Structured Diff",
-                attachment_type=allure.attachment_type.JSON,
+
+        def values() -> str:
+            # format 3 adds `requirement`, so a consumer branching on the number keeps reading 2 as it did
+            data: dict[str, object] = {"format": 3}
+            if named_actual:
+                data["actual"] = _json_safe(actual)
+            if named_expected:
+                data["expected"] = _json_safe(expected)
+            if requirement is not None:
+                data["requirement"] = {
+                    "operation": requirement.operation,
+                    "parameters": {name: _json_safe(value) for name, value in requirement.parameters.items()},
+                    "negated": requirement.negated,
+                }
+            return json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
+
+        parts.append((f"AssertionFailure{suffix}", values, allure.attachment_type.JSON))
+    if _has_entries(diff):
+        parts.append(
+            (
+                f"Structured Diff{suffix}",
+                lambda: _diff_to_json(diff, max_entries=max_entries),
+                allure.attachment_type.JSON,
             )
-    if trace is not None:
-        allure.attach(
-            body=_trace_to_json(trace),
-            name="Polling Trace",
-            attachment_type=allure.attachment_type.JSON,
         )
+    if trace is not None:
+        parts.append((f"Polling Trace{suffix}", lambda: _trace_to_json(trace), allure.attachment_type.JSON))
+    return parts
+
+
+def _attach_parts(parts: list[tuple[str, Callable[[], str | None], object]]) -> None:
+    """Draw and attach each part, one refused or broken costing that part alone."""
+    for name, body, kind in parts:
+        # the writer is Allure's, and the values are anyone's
+        with contextlib.suppress(Exception):
+            allure.attach(body=body(), name=name, attachment_type=kind)

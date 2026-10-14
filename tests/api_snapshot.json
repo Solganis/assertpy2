@@ -3067,6 +3067,13 @@
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "logger",
      "required": false
+    },
+    {
+     "annotation": "Callable[[AssertionOutcome], object] | None",
+     "default": "None",
+     "kind": "KEYWORD_ONLY",
+     "name": "on_failure",
+     "required": false
     }
    ],
    "returns": "Any"

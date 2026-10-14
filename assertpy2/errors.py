@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 from ._engine._introspection import class_name, kind_of
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .outcome import AssertionOutcome, Requirement
 
 
@@ -717,6 +719,20 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         the pair ``==`` alone decided.  Read by the pytest plugin for a listener that shows two values side
         by side.
         """
+        self._compared_pairs: tuple[tuple[object, object] | None, ...] = ()
+        """Beside each of `failures`, the pair its equality held against each other, or ``None``.
+
+        Under ``ignore=`` or ``include=`` that is the two copies without the keys left out, which a raised failure
+        keeps as ``_compared``: the pytest plugin shows it, so a collected failure reads as the raised one does.
+        Kept here rather than on the record so the published record's fields stay what they were.
+        """
+        self._soft_summary: Callable[[], str] | None = None
+        """Draws a soft block's summary with each failure's diff in block form, for a message nobody else renders.
+
+        Set by the block that raises this, and called at each read with the switch on, so the text shows the diffs as
+        they are then, as a single failure's diff does.  Drawing it when raised cost a caught failure nobody printed
+        8 us for one failure and 100 us for twenty.
+        """
         self._outcome: AssertionOutcome | None = None
         """The record this failure was composed from, set by the delivery half of `error()`.
 
@@ -757,6 +773,8 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         return self.expected is not None
 
     def __str__(self) -> str:
+        if _RENDER_DIFF_IN_MESSAGE and self._soft_summary is not None:
+            return self._soft_summary()
         if _RENDER_DIFF_IN_MESSAGE and self.diff is not None:
             rendered = _render_diff(self.diff)
             if rendered:

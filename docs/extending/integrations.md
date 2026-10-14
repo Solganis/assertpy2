@@ -94,6 +94,10 @@ what the reader already has.
 An assertion comparing against `None` does name it, and there `"expected": null` is present rather than
 omitted. The pytest terminal section below follows the same rule.
 
+A `soft_assertions()` block's failure attaches each failure it collected under its number:
+`Structured Diff (failure 2 of 3)`. A report has room for twenty, shared by every block that fails in it,
+and each block with failures left out gets one more text attachment naming them.
+
 A **Polling Trace** attachment (modes `diff`, `full`) when an
 [`eventually()`](../guides/testing.md#polling-trace) assertion times out, with per-poll samples and diffs
 between consecutive distinct values:

@@ -168,7 +168,9 @@ Under pytest the plugin attaches this same diff to the failure as its own sectio
 message itself to a single line so the diff is never shown twice. The section travels with the failure,
 so the terminal, a JUnit report and an IDE runner such as PyCharm's all show it, and so does a failing
 fixture. When failures arrive as an exception group, as two fixtures failing in teardown do, each one
-gets its own section, numbered in the order the traceback prints them: `Structured Diff (2 of 3)`. The
+gets its own section, numbered in the order the traceback prints them: `Structured Diff (2 of 3)`. A
+soft block's failure gets the sections of each failure it collected, as
+[What a soft block hands back](#what-a-soft-block-hands-back) shows. The
 terminal colors it as it draws the failure, when it takes color at all, so a JUnit report, an IDE
 runner and a CI log without forced color all get plain text. The plugin is auto-registered through the
 `pytest11` entry point and needs no configuration.
@@ -1131,10 +1133,37 @@ Each record keeps what the text had flattened: the values, the diff, the `group`
 under, and the `(file, line)` the message renders in brackets. A polling assertion that times out inside
 a soft block keeps its [`trace`](testing.md#polling-trace) there too.
 
-Under each entry the rendering is one line per differing path, not the block form a single failure
-prints. A block that collected ten failures would otherwise repeat ten headers.
+Off pytest the message is the only place a reader finds the diffs, so each entry carries its diff in the
+block form a single failure prints. For the block above, `str(e)` reads:
 
-What each kind of value adds:
+```
+soft assertion failures:
+1. Expected <{'role': 'guest'}> to be equal to <{'role': 'admin'}>, but was not.  [test_app.py:6]
+   diff (dict):
+     role:
+       - 'guest'
+       + 'admin'
+2. Expected <foo> to be of length <4>, but was <3>.  [test_app.py:7]
+```
+
+One message has room for the blocks of twenty failures and 60 000 characters. A failure past that keeps
+the compact form, one line per differing path, and the last line of the message names it. A block too
+wide for what is left keeps the compact form too and takes one of the twenty, but none of the characters,
+so a smaller block after it still fits. Every block is a `print` away:
+`print(e.failures[20].diff)` renders it. `diff` is `None` on a failure that has none, such as
+`is_true()` on `False`. An exception of yours that escapes the block gets the same text as a note.
+
+Under pytest the message keeps the compact form, and the plugin hangs the blocks on the report. Each
+collected failure gets the sections a raised failure gets, numbered as the message numbers it,
+`Structured Diff (failure 2 of 3)`, and each section opens on that failure's line of the message, with its
+group in brackets.
+Under `ignore=` or `include=` a section shows the two copies the assertion compared, as it does for a
+raised failure. The room is the same, twenty failures and 60 000 characters, shared by every soft block
+that fails in one report. Each block with failures left out gets one more section naming them, and a
+failure with nothing to show takes no place among the twenty. An exception of yours that escapes the block brings along what
+the block had collected before it, and those failures get their sections too.
+
+In the compact form, what each kind of value adds:
 
 - a scalar, or a short line of text, adds no line at all, since the entry above already carries both
   values in full
@@ -1263,3 +1292,33 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
 
     That trade is yours to make: propagation is also how pytest's `caplog` fixture receives these
     records, so turning it off stops you asserting on them.
+
+#### Handing each failure to your own code
+
+`on_failure` takes a callable and hands it each failure as its
+[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] instead of logging it: the message, the values,
+the diff, the [`requirement`](#what-was-asked-as-data) and the `(file, line)` the assertion was written
+at. A logger that should carry the record, diff included, takes it from there:
+
+```python
+import logging
+
+from assertpy2 import assert_warn
+
+log = logging.getLogger("checks")
+
+
+def report(outcome):
+    text = outcome.message if outcome.diff is None else f"{outcome.message}\n{outcome.diff}"
+    log.warning(text, extra={"assertpy2_outcome": outcome})
+
+
+assert_warn({"status": 500}, on_failure=report).is_equal_to({"status": 200})
+```
+
+Every link of a chain is handed over, a pivot and `extracting()` included, and a polling timeout comes
+with its [`trace`](testing.md#polling-trace). The value is marked as unverified before your callable
+runs, as it is when a failure is logged. An exception your callable raises comes out of the assertion
+that failed, as one a logger raises does, an `AssertionError` included. `on_failure` takes the place of `logger`, and
+passing both is a `TypeError`. Through a `LoggerAdapter` the record keeps your `extra` only with
+`merge_extra=True`, which arrived in Python 3.13.

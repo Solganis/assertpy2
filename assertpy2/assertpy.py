@@ -60,6 +60,7 @@ if TYPE_CHECKING:
     from .matchers import Matcher
 
 from . import _hints
+from . import errors as _errors
 from ._engine._compat import _LoggerAdapter
 from ._engine._contract import exactness_failure, kept_apart, put_as_sent, put_back, runs_own_code, sent_record
 from ._engine._introspection import WarningLogger, is_same_implementation
@@ -93,6 +94,7 @@ from .errors import (
     _capped,
     _capped_repr,
     _diff_sides,
+    _render_diff,
     _safe_str,
     _truncated,
     _windowed,
@@ -300,11 +302,19 @@ class _SoftBlock:
     the test passed having checked nothing.
     """
 
-    __slots__ = ("active", "failures")
+    __slots__ = ("active", "compared", "failures")
 
     def __init__(self) -> None:
         self.failures: list[AssertionOutcome] = []
+        # by the identity of the record, which `failures` keeps alive, the pair its equality compared
+        self.compared: dict[int, tuple[object, object]] = {}
         self.active = True
+
+    def taken(self) -> tuple[list[AssertionOutcome], tuple[tuple[object, object] | None, ...]]:
+        """What was collected, with the pair beside each, the block left empty for whatever comes next."""
+        errs, compared = self.failures, self.compared
+        self.failures, self.compared = [], {}
+        return errs, tuple(compared.get(id(outcome)) for outcome in errs)
 
 
 def _collecting() -> _SoftBlock | None:
@@ -403,23 +413,138 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
     return lines
 
 
-def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
+class _Room:
+    """What is left of the room for the blocks of collected failures: twenty failures drawn and 60 000 characters.
+
+    One per message of a soft block where that message is the only place its diffs are read, and one per report
+    under pytest, shared there by every block that failed in it.  A failure drawn and then too wide for what is left
+    still takes one of the twenty: 200 wide failures each drawn and refused cost a report 0.49 s, against 0.05 s.
+    """
+
+    def __init__(self) -> None:
+        self.failures = 20
+        self.characters = 60_000
+
+
+def _numbered(numbers: list[int]) -> str:
+    """``[3, 21, 22, 23]`` as ``failures 3, 21 to 23``, and ``[3]`` as ``failure 3``: failures named by number."""
+    runs: list[list[int]] = []
+    for number in numbers:
+        if runs and number == runs[-1][-1] + 1:
+            runs[-1].append(number)
+        else:
+            runs.append([number])
+    spans = ", ".join(str(run[0]) if len(run) == 1 else f"{run[0]} to {run[-1]}" for run in runs)
+    return f"failure {spans}" if len(numbers) == 1 else f"failures {spans}"
+
+
+def _block_of(diff: object, indent: str, room: _Room) -> list[str] | None:
+    """*diff* in block form under an entry, or ``None`` where it has none, the room is spent or it does not fit.
+
+    A diff that cannot be drawn keeps the compact rows the summary has always printed, and a line saying why.
+    """
+    if diff is None or room.failures == 0:
+        return None
+    try:
+        rendered = _render_diff(diff)
+    except Exception as e:
+        room.failures -= 1
+        return [*_indented_diff(diff, indent), f"{indent}(no block: drawing it raised {type(e).__name__})"]
+    if not rendered:
+        return None
+    room.failures -= 1
+    block = [f"{indent}{line}" for line in rendered.splitlines()]
+    size = sum(len(line) + 1 for line in block)
+    if size > room.characters:
+        return None
+    room.characters -= size
+    return block
+
+
+def _format_soft_errors(errs: list[AssertionOutcome], *, blocks: bool = False, kept: bool = False) -> str:
+    """The numbered summary a soft block raises, each entry located, with each failure's diff under it.
+
+    The diff goes in compact rows, one per differing path, where the pytest plugin hangs each failure's block on
+    the report anyway.  With *blocks*, for a message that is the only place a reader finds them, each diff goes in
+    the block form a raised failure prints while a `_Room` lasts.  A block that does not fit keeps its compact rows
+    and takes one of the twenty but none of the characters, so a smaller block after it still fits.  The last line
+    names those failures, pointing at `failures` where *kept* says the summary is the message that carries them.
+    """
     has_groups = any(outcome.group is not None for outcome in errs)
     lines = ["soft assertion failures:"]
+    room = _Room() if blocks else None
+    compact: list[int] = []
     current_group: str | None = None
     for counter, outcome in enumerate(errs, 1):
-        group = outcome.group
-        if has_groups and group != current_group:
-            current_group = group
-            if group is not None:
-                lines.append(f"  [{group}]")
-        indent = ("    " if group is not None else "  ") if has_groups else ""
-        # written flat, the location landed on the last line and the next entry read as a new section
-        headline, *continuation = outcome.message.splitlines() or [""]
-        lines.append(f"{indent}{counter}. {_located(outcome.location, headline)}")
-        lines.extend(f"{indent}   {line}" for line in continuation)
-        lines.extend(_indented_diff(outcome.diff, indent + "   "))
+        indent = ""
+        # one failure that cannot be drawn, its group's label included, costs its own entry and not the summary
+        try:
+            group = outcome.group
+            indent = ("    " if group is not None else "  ") if has_groups else ""
+            if has_groups and not _same_label(group, current_group):
+                header = None if group is None else f"  [{group}]"
+                current_group = group
+                if header is not None:
+                    lines.append(header)
+            entry, squeezed = _entry_of(counter, outcome, indent, room)
+        except Exception as e:
+            entry, squeezed = [f"{indent}{counter}. (this failure could not be drawn: {type(e).__name__})"], False
+        lines.extend(entry)
+        if squeezed:
+            compact.append(counter)
+    if compact:
+        pointer = " The diff of each is on `failures`." if kept else ""
+        lines.append(f"Not drawn as a block for lack of room: {_numbered(compact)}.{pointer}")
     return "\n".join(lines)
+
+
+def _same_label(label: object, other: object) -> bool:
+    """Whether two group labels are one, a label whose ``==`` raises reading as another."""
+    if label is other:
+        return True
+    try:
+        return bool(label == other)
+    except Exception:  # a label is anyone's object, and the entries after it still have to be drawn
+        return False
+
+
+def _entry_of(counter: int, outcome: AssertionOutcome, indent: str, room: _Room | None) -> tuple[list[str], bool]:
+    """One entry of the summary, and whether its diff went in compact rows for lack of room."""
+    # written flat, the location landed on the last line and the next entry read as a new section
+    headline, *continuation = outcome.message.splitlines() or [""]
+    lines = [f"{indent}{counter}. {_located(outcome.location, headline)}"]
+    lines.extend(f"{indent}   {line}" for line in continuation)
+    block = None if room is None else _block_of(outcome.diff, indent + "   ", room)
+    if block is not None:
+        return [*lines, *block], False
+    lines.extend(_indented_diff(outcome.diff, indent + "   "))
+    return lines, room is not None and bool(getattr(outcome.diff, "entries", None))
+
+
+def _drawn(errs: list[AssertionOutcome], *, blocks: bool, kept: bool = False) -> str:
+    """`_format_soft_errors`, or a line saying how many were collected where drawing them raised.
+
+    The summary is a diagnostic: it must not take the place of the failure it describes, nor of an exception of the
+    caller's that it is a note on.
+    """
+    try:
+        return _format_soft_errors(errs, blocks=blocks, kept=kept)
+    except Exception as e:
+        return f"soft assertion failures: {len(errs)} collected, and drawing them raised {type(e).__name__}"
+
+
+def _carry(
+    exc: BaseException, collected: tuple[AssertionOutcome, ...], pairs: tuple[tuple[object, object] | None, ...]
+) -> None:
+    """Leave what a soft block collected on the exception that escaped it, where the pytest plugin reads it.
+
+    Through the instance's own dictionary and past any ``__setattr__`` of its own, best-effort as the note is: the
+    exception the caller raised is the one that has to come out of the block, whatever this manages.  Added to what
+    an earlier block left, as its note is added to the notes, since one exception can escape two blocks in turn.
+    """
+    # an instance without a dictionary keeps the note, which carries the text
+    with contextlib.suppress(Exception):
+        vars(exc).setdefault("_assertpy2_collected", []).append((collected, pairs))
 
 
 def _attach_soft_note(exc: BaseException, rendered: str) -> None:
@@ -473,20 +598,24 @@ class _SoftAssertions:
             # the escaping error still wins, and what was collected before it travels as a note
             if exc is not None and (block := _soft_err.get(None)) is not None and _soft_ctx.get() == 0:
                 block.active = False
-                errs, block.failures = block.failures, []
+                errs, pairs = block.taken()
                 if errs:
-                    _attach_soft_note(exc, _format_soft_errors(errs))
+                    _carry(exc, tuple(errs), pairs)
+                    _attach_soft_note(exc, _drawn(errs, blocks=_errors._RENDER_DIFF_IN_MESSAGE))
             return
         block = _soft_err.get(None)
-        errs = block.failures if block is not None else []
+        errs: list[AssertionOutcome] = block.failures if block is not None else []
+        pairs: tuple[tuple[object, object] | None, ...] = ()
         if _soft_ctx.get() == 0 and block is not None:
             # a task still running with this block in its own context copy stops collecting
             block.active = False
-            block.failures = []
+            errs, pairs = block.taken()
         if errs and _soft_ctx.get() == 0:
-            out = _format_soft_errors(errs)
             # the same class as a single failure, so one `except AssertionFailure` covers both
-            raise AssertionFailure(out, failures=tuple(errs))
+            failure = AssertionFailure(_drawn(errs, blocks=False), failures=tuple(errs))
+            failure._compared_pairs = pairs
+            failure._soft_summary = functools.partial(_drawn, list(errs), blocks=True, kept=True)
+            raise failure
 
 
 def soft_assertions() -> _SoftAssertions:
@@ -497,7 +626,7 @@ def soft_assertions() -> _SoftAssertions:
     raised all at once at the end, without halting your test.
 
     Uses `contextvars` internally, so each thread and each ``asyncio`` task gets its own
-    independent soft-assertion state.
+    soft-assertion state.  A task started inside an open block collects into that block while it is open.
 
     Examples:
         Create a soft assertion context, and some failing tests:
@@ -861,14 +990,21 @@ def assert_conforms(
     return builder.builder(validated, description, kind)
 
 
-def assert_warn(val: object, description: str = "", logger: WarningLogger | None = None) -> Any:
+def assert_warn(
+    val: object,
+    description: str = "",
+    logger: WarningLogger | None = None,
+    *,
+    on_failure: Callable[[AssertionOutcome], object] | None = None,
+) -> Any:
     """Set the value to be tested, and optional description and logger, and allow assertions to be
-    called, but never fail, only log warnings.
+    called, but never fail, only log warnings or hand each failure to ``on_failure``.
 
-    This is a factory method for the `AssertionBuilder`, but unlike [`assert_that()`][assertpy2.assertpy.assert_that] an
-    `AssertionError` is never raised, and execution is never halted.  Instead, any assertion failures
-    results in a warning message being logged. Uses the given logger, or defaults to a simple logger
-    that prints warnings to ``stdout``.
+    This is a factory method for the `AssertionBuilder`, but unlike [`assert_that()`][assertpy2.assertpy.assert_that] a
+    failed assertion raises no `AssertionError` and does not halt execution.  Instead, any assertion failures
+    results in a warning message being logged. Uses the given logger, or defaults to a simple logger that prints
+    warnings to ``stdout``.  An exception the logger or an ``on_failure`` callable raises does come out of the
+    assertion that failed, whatever its type.
 
 
     Args:
@@ -877,6 +1013,11 @@ def assert_warn(val: object, description: str = "", logger: WarningLogger | None
             (aka empty string)
         logger (Logger, optional): the logger for warning message on assertion failure. Defaults to ``None``
             (aka use the default simple logger that prints warnings to ``stdout``)
+        on_failure (Callable, optional): called with each failure's
+            [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] in place of logging it: the message, the
+            values, the diff and the ``(file, line)`` it was asked at, for every link of the chain.  An exception
+            it raises, an ``AssertionError`` included, comes out of the assertion that failed.  Not together with
+            ``logger``.
 
     Examples:
         Usage:
@@ -903,6 +1044,16 @@ def assert_warn(val: object, description: str = "", logger: WarningLogger | None
         Use `assert_warn()` if and only if you have a *really* good reason to log assertion
         failures instead of failing.
     """
+    if on_failure is not None:
+        if logger is not None:
+            refuse(
+                logger,
+                "None when on_failure is given, which takes each failure in its place",
+                subject=argument("logger"),
+            )
+        if not callable(on_failure):
+            refuse(on_failure, "callable", subject=argument("on_failure"))
+        logger = _Subscribed(on_failure)
     return _builder(val, description, "warn", logger=logger)
 
 
@@ -1200,6 +1351,23 @@ class WarningLoggingAdapter(_LoggerAdapter):
         return f"[{os.path.basename(filename)}:{lineno}]: {msg}", kwargs
 
 
+class _Subscribed:
+    """The callback `assert_warn(on_failure=...)` hands each failure to, carried where the logger is carried.
+
+    In the logger's place because every builder a chain goes on to is built with the logger the chain was given:
+    a pivot, `extracting()` and a poll's own builder carry this too, and six pivots once dropped the logger.
+    """
+
+    __slots__ = ("callback",)
+
+    def __init__(self, callback: Callable[[AssertionOutcome], object]) -> None:
+        self.callback = callback
+
+    def warning(self, msg: str) -> None:
+        """What a code of anyone's that logs through the chain's logger reaches: a record carrying its message."""
+        self.callback(AssertionOutcome(message=msg, location=_caller_location()))
+
+
 _logger = logging.getLogger("assertpy2")
 _handler = logging.StreamHandler(sys.stdout)
 _handler.setLevel(logging.WARNING)
@@ -1442,10 +1610,13 @@ class NegatedBuilder(Generic[_S]):
     ) -> AssertionBuilder:
         if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
-        msg = self._make_msg(name, *args, **kwargs)
-        if self._builder._value_taint_reason is None:
-            self._builder._value_taint_reason = msg
-        self._builder.logger.warning(msg)
+        self._builder._warned(
+            AssertionOutcome(
+                message=self._make_msg(name, *args, **kwargs),
+                actual=self._builder.val,
+                requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
+            )
+        )
         return self._builder
 
 
@@ -1816,7 +1987,8 @@ class AssertionBuilder(
         # taken ahead of anything that can raise, so a pair never outlives the failure it was set for
         compared, self._compared = self._compared, None
         failure = self._deliver(
-            self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace, requirement=requirement)
+            self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace, requirement=requirement),
+            compared,
         )
         if failure is None:
             return self
@@ -1904,17 +2076,17 @@ class AssertionBuilder(
             requirement=_what_was_asked(self, requirement),
         )
 
-    def _deliver(self, outcome: AssertionOutcome) -> AssertionFailure | None:
+    def _deliver(
+        self, outcome: AssertionOutcome, compared: tuple[object, object] | None = None
+    ) -> AssertionFailure | None:
         """Act on a composed failure according to the builder's mode.
 
         Returns the exception the caller should raise, or ``None`` when the failure was collected or
-        logged instead.  Raising is left to `error()` so the traceback keeps its shape.
+        logged instead.  Raising is left to `error()` so the traceback keeps its shape.  *compared* is the pair
+        an equality held against each other, kept on a failure a soft block collects as a raised one keeps it.
         """
         if self.kind == "warn":
-            if self._value_taint_reason is None:
-                self._value_taint_reason = outcome.message
-            detail = _indented_diff(outcome.diff, "   ")
-            self.logger.warning("\n".join([outcome.message, *detail]) if detail else outcome.message)
+            self._warned(outcome)
             return None
         if self.kind == "soft":
             block = _collecting()
@@ -1923,7 +2095,10 @@ class AssertionBuilder(
                 return self._failure(outcome)
             if self._value_taint_reason is None:
                 self._value_taint_reason = outcome.message
-            block.failures.append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
+            collected = replace(outcome, group=_soft_group.get(), location=_caller_location())
+            if compared is not None:
+                block.compared[id(collected)] = compared
+            block.failures.append(collected)
             return None
         if self.kind == "check":
             # no taint, as a verdict was asked for and not asserted, and the first failure is it: strict stops there
@@ -1932,6 +2107,21 @@ class AssertionBuilder(
                 holder._check_sink = outcome
             return None
         return self._failure(outcome)
+
+    def _warned(self, outcome: AssertionOutcome) -> None:
+        """Hand a warn-mode failure on: as its record to an `on_failure` callback, or as text to the logger.
+
+        The value is marked as unverified first, and the record is located first, so a callback that raises leaves
+        both as a logger that raises does.  Every warn-mode failure comes through here, negations included.
+        """
+        if self._value_taint_reason is None:
+            self._value_taint_reason = outcome.message
+        logger = self.logger
+        if isinstance(logger, _Subscribed):
+            logger.callback(replace(outcome, location=_caller_location()))
+            return
+        detail = _indented_diff(outcome.diff, "   ")
+        logger.warning("\n".join([outcome.message, *detail]) if detail else outcome.message)
 
     @staticmethod
     def _failure(outcome: AssertionOutcome) -> AssertionFailure:
