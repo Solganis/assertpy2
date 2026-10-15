@@ -412,6 +412,11 @@ def test_matches_failure():
     assert_that(str(exc_info.value)).is_equal_to("Expected <fred> to match pattern <\\d+>, but did not.")
 
 
+def test_matches_whole_string_is_anchored_by_a_and_z_not_by_caret_and_dollar():
+    assert_that("foo").matches(r"\A\w{3}\Z").does_not_match(r"\A\w{2}\Z")
+    assert_that("foo\n").matches(r"^foo$").does_not_match(r"\Afoo\Z")
+
+
 def test_matches_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).matches(12)
@@ -421,7 +426,9 @@ def test_matches_bad_value_type_failure():
 def test_matches_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").matches(123)
-    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string, but was <123> (int)")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given pattern arg must be a string or a pattern compiled from one, but was <123> (int)"
+    )
 
 
 def test_matches_bad_arg_empty_failure():
@@ -451,7 +458,9 @@ def test_does_not_match_bad_value_type_failure():
 def test_does_not_match_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").does_not_match(123)
-    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string, but was <123> (int)")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given pattern arg must be a string or a pattern compiled from one, but was <123> (int)"
+    )
 
 
 def test_does_not_match_bad_arg_empty_failure():

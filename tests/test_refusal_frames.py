@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import datetime
 import pathlib
+import re
 
 import pytest
 
@@ -135,6 +136,9 @@ class TestARefusalShowsNoFrameOfTheLibrary:
             pytest.param(lambda: match.starts_with(""), ValueError, id="an empty prefix"),
             pytest.param(lambda: match.ends_with(b""), ValueError, id="an empty suffix"),
             pytest.param(lambda: match.matches_regex(""), ValueError, id="an empty pattern"),
+            pytest.param(lambda: match.matches_regex(re.compile(b"x")), TypeError, id="a pattern of bytes"),
+            pytest.param(lambda: assert_that("a").matches(re.compile("")), ValueError, id="an empty compiled pattern"),
+            pytest.param(lambda: assert_that("a").matches(5), TypeError, id="a pattern that is no text"),
             pytest.param(lambda: assert_that(1).is_equal_to(1, tolerence=1), TypeError, id="an option misspelled"),
             pytest.param(lambda: assert_that(1).satisfies(_answers_later), TypeError, id="a verdict not awaited"),
             pytest.param(

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import collections.abc
 import decimal
-import re
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import broadcasts, equal_past
-from ._engine._require import argument, refuse, require_type, sized_len
+from ._engine._require import argument, refuse, require_pattern, require_type, sized_len
 from ._hints import but_for_case, but_for_whitespace, not_at_an_end, not_in_text, under
 from .errors import _capped, _capped_format, _capped_repr, _first_difference, _formatted, _parted, _safe_str
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Callable
 
     from ._engine._compat import Self
@@ -432,11 +432,12 @@ class StringMixin(_MixinBase):
             )
         return self
 
-    def matches(self, pattern: str) -> Self:
+    def matches(self, pattern: str | re.Pattern[str]) -> Self:
         """Asserts that val is string and matches the given regex pattern.
 
         Args:
-            pattern (str): the regular expression pattern, as raw string (aka prefixed with ``r``)
+            pattern: the regular expression pattern, as raw string (aka prefixed with ``r``) or compiled from one
+                with ``re.compile()``
 
         Examples:
             Usage:
@@ -450,14 +451,15 @@ class StringMixin(_MixinBase):
                 assert_that('foo').matches(r'oo')
                 assert_that('foo').matches(r'\\w{2}')
 
-            To match the entire string, just use an anchored regex pattern where ``^`` and ``$``
-            match the start and end of line and ``\\A`` and ``\\Z`` match the start and end of string:
+            To match the entire string, anchor the pattern with ``\\A`` and ``\\Z``, which match the start and
+            end of the string.  ``^`` and ``$`` match the start and end of a line, and ``$`` also matches before
+            a final newline, so ``^\\w{3}$`` passes on ``'foo\\n'`` too:
 
-                assert_that('foo').matches(r'^\\w{3}$')
                 assert_that('foo').matches(r'\\A\\w{3}\\Z')
+                assert_that('foo\\n').matches(r'^\\w{3}$')
 
-            And regex flags, such as ``re.MULTILINE`` and ``re.DOTALL``, can only be applied via
-            *inline modifiers*, such as ``(?m)`` and ``(?s)``:
+            Regex flags, such as ``re.MULTILINE`` and ``re.DOTALL``, go in as *inline modifiers*, such as
+            ``(?m)`` and ``(?s)``, or on a pattern compiled with them:
 
                 s = '''bar
                 foo
@@ -469,11 +471,16 @@ class StringMixin(_MixinBase):
                 # using dotall (?s)
                 assert_that(s).matches(r'(?s)b(.*)z')
 
+                # the same, compiled
+                assert_that(s).matches(re.compile(r'b(.*)z', re.DOTALL))
+
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
             AssertionError: if val does **not** match pattern
+            TypeError: if val is not a string, or pattern is neither a string nor a pattern compiled from one
+            ValueError: if pattern is empty
 
         Tip:
             Regular expressions are tricky.  Be sure to use raw strings (aka prefixed with ``r``).
@@ -482,21 +489,19 @@ class StringMixin(_MixinBase):
             to match the entire string, you must include anchors in the regex pattern.
         """
         require_type(self.val, str, "a string")
-        require_type(pattern, str, "a string", subject=argument("pattern"))
-        if len(pattern) == 0:
-            raise ValueError("given pattern arg must not be empty")
-        if re.search(pattern, self.val) is None:
+        if require_pattern(pattern).search(self.val) is None:
             return self.error(
                 f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",
                 expected=pattern,
             )
         return self
 
-    def does_not_match(self, pattern: str) -> Self:
+    def does_not_match(self, pattern: str | re.Pattern[str]) -> Self:
         """Asserts that val is string and does not match the given regex pattern.
 
         Args:
-            pattern (str): the regular expression pattern, as raw string (aka prefixed with ``r``)
+            pattern: the regular expression pattern, as raw string (aka prefixed with ``r``) or compiled from one
+                with ``re.compile()``
 
         Examples:
             Usage:
@@ -509,15 +514,14 @@ class StringMixin(_MixinBase):
 
         Raises:
             AssertionError: if val **does** match pattern
+            TypeError: if val is not a string, or pattern is neither a string nor a pattern compiled from one
+            ValueError: if pattern is empty
 
         See Also:
             [`matches()`][assertpy2.string.StringMixin.matches] - for more about regex patterns
         """
         require_type(self.val, str, "a string")
-        require_type(pattern, str, "a string", subject=argument("pattern"))
-        if len(pattern) == 0:
-            raise ValueError("given pattern arg must not be empty")
-        if re.search(pattern, self.val) is not None:
+        if require_pattern(pattern).search(self.val) is not None:
             return self.error(
                 f"Expected <{_capped(self.val)}> to not match pattern <{_capped_format(pattern)}>, but did."
             )
@@ -701,14 +705,14 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{_capped(self.val)}> to be unicode, but was <{type(self.val).__name__}>.")
         return self
 
-    def extracting_group(self, pattern: str, group: int | str = 0) -> Self:
+    def extracting_group(self, pattern: str | re.Pattern[str], group: int | str = 0) -> Self:
         """Search val for ``pattern`` and return a new builder whose val is the captured group.
 
         A group the pattern does not have fails it with or without ``not_``: that is a mistake in the call,
         found once the pattern matched, and not an answer about val.
 
         Args:
-            pattern: the regular expression pattern (must contain at least one group)
+            pattern: the regular expression pattern, as a string or compiled from one
             group: the group index (int) or name (str) to extract. Defaults to ``0``
                 (the entire match).
 
@@ -727,15 +731,12 @@ class StringMixin(_MixinBase):
             AssertionBuilder: a **new** builder whose val is the extracted group string
 
         Raises:
-            TypeError: if val is not a string or pattern is not a string
+            TypeError: if val is not a string, or pattern is neither a string nor a pattern compiled from one
             ValueError: if pattern is empty
             AssertionError: if the pattern does not match val or the group does not exist
         """
         require_type(self.val, str, "a string")
-        require_type(pattern, str, "a string", subject=argument("pattern"))
-        if len(pattern) == 0:
-            raise ValueError("given pattern arg must not be empty")
-        match_obj = re.search(pattern, self.val)
+        match_obj = require_pattern(pattern).search(self.val)
         if match_obj is None:
             return self.error(
                 f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",
@@ -759,15 +760,15 @@ class StringMixin(_MixinBase):
             )
         return self.builder(extracted, self.description, self.kind, logger=self.logger)
 
-    def matches_with_groups(self, pattern: str) -> Self:
+    def matches_with_groups(self, pattern: str | re.Pattern[str]) -> Self:
         """Search val for ``pattern`` and return a new builder whose val is the tuple of all groups.
 
         If the pattern contains **named** groups, the builder val is a ``dict``
         of ``{name: value}`` for all named groups.  Otherwise it is the
-        ``tuple`` returned by ``Match.groups()``.
+        ``tuple`` returned by ``Match.groups()``, empty for a pattern without groups.
 
         Args:
-            pattern: the regular expression pattern with one or more groups
+            pattern: the regular expression pattern, as a string or compiled from one
 
         Examples:
             Positional groups:
@@ -786,15 +787,12 @@ class StringMixin(_MixinBase):
             AssertionBuilder: a **new** builder whose val is the groups tuple or groupdict
 
         Raises:
-            TypeError: if val is not a string or pattern is not a string
+            TypeError: if val is not a string, or pattern is neither a string nor a pattern compiled from one
             ValueError: if pattern is empty
             AssertionError: if the pattern does not match val
         """
         require_type(self.val, str, "a string")
-        require_type(pattern, str, "a string", subject=argument("pattern"))
-        if len(pattern) == 0:
-            raise ValueError("given pattern arg must not be empty")
-        match_obj = re.search(pattern, self.val)
+        match_obj = require_pattern(pattern).search(self.val)
         if match_obj is None:
             return self.error(
                 f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",

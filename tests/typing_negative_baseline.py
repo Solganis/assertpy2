@@ -108,6 +108,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "mapping-subset-of-a-sequence": _ARGUMENT,
     # the chronological nine live on the datetime view, so a bad operand became a method the value has not got
     "zip-reads-the-wrong-side": _MISSING,
+    "text-matched-by-a-bytes-pattern": _ARGUMENT,
+    "regex-matcher-of-a-bytes-pattern": _ARGUMENT,
     "date-compared-to-number": _MISSING,
     "date-ordered-as-a-datetime": _MISSING,
     "date-taken-from-a-datetime": _MISSING,
@@ -518,6 +520,8 @@ VALID: frozenset[str] = frozenset(
         "valid-list-subclass",
         "valid-any-element",
         "valid-datetime-against-datetime",
+        "valid-compiled-text-pattern",
+        "valid-regex-matcher-of-a-compiled-pattern",
     }
 )
 """Ordinary usage, which must stay accepted by all four.

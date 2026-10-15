@@ -51,15 +51,20 @@ assert_that("foo").does_not_match(r"\d+")
 
 !!! note "Regex matching"
     Use raw strings (`r"..."`) for patterns. `matches()` passes when the pattern is found anywhere in
-    the string, as `re.search` finds it. Anchor the pattern (`^...$`) to match the whole string. Inline
-    flags such as `(?m)` and `(?s)` work, even though `matches()` takes no flags argument.
+    the string, as `re.search` finds it. Anchor the pattern with `\A` and `\Z` to match the whole string.
+    `^...$` is not quite that: `$` also matches before a final newline. Flags go inline, such as `(?m)` and
+    `(?s)`, or on a pattern compiled with `re.compile()`. `matches()`, `does_not_match()`,
+    `extracting_group()`, `matches_with_groups()` and `match.matches_regex()` take a compiled pattern wherever
+    they take its text.
 
     <!-- docs-guard: skip -->
     ```python
-    assert_that("foo").matches(r"\w{2}")     # partial, passes
-    assert_that("xfoo").matches(r"foo")      # not at the start, passes
-    assert_that("foo").matches(r"^\w{3}$")   # whole string, passes
-    assert_that("foo").matches(r"^\w{2}$")   # fails
+    assert_that("foo").matches(r"\w{2}")       # partial, passes
+    assert_that("xfoo").matches(r"foo")        # not at the start, passes
+    assert_that("foo").matches(r"\A\w{3}\Z")   # whole string, passes
+    assert_that("foo").matches(r"\A\w{2}\Z")   # fails
+    assert_that("foo\n").matches(r"^foo$")     # passes, $ matches before the final newline
+    assert_that("a\nb").matches(re.compile(r"a.b", re.DOTALL))   # the flag on the pattern, passes
     ```
 
 ## Numbers

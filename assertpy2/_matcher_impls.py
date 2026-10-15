@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-import re
 import sys
 import uuid as _uuid_mod
 from dataclasses import dataclass
@@ -86,6 +85,7 @@ from ._engine._require import (
     raised_on_purpose,
     refuse,
     reject_unknown_kwargs,
+    require_pattern,
     verdict,
 )
 from ._engine._size import length_of
@@ -96,6 +96,7 @@ from ._hints import matcher_for_a_class, type_beside_a_class
 from .errors import _capped, _capped_format, _capped_repr, _safe_repr, _told_apart, _type_expression_name
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Callable
     from typing import TypeAlias
 
@@ -1106,13 +1107,10 @@ _TEXTS = (str, bytes, bytearray)
 
 
 class MatchesRegexMatcher(BaseMatcher):
-    def __init__(self, pattern: str):
-        # asked here: through the helper a build cost 50% more
-        if (type(pattern) is str or issubclass(type(pattern), _TEXTS)) and len(pattern) == 0:
-            _refuse_empty("pattern")
+    def __init__(self, pattern: str | re.Pattern[str]):
         self.pattern = pattern
         # compiled eagerly so an invalid pattern raises at the call site, not inside `matches()` or a combinator
-        self._compiled = re.compile(pattern)
+        self._compiled = require_pattern(pattern)
 
     def matches(self, value: Any) -> bool:
         if not isinstance(value, str):

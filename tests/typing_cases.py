@@ -12,6 +12,7 @@ checkers.  A gap nobody wrote down is a gap nobody can close on purpose.
 from __future__ import annotations
 
 import datetime
+import re
 import warnings
 from collections.abc import Callable, Mapping
 from decimal import Decimal
@@ -180,6 +181,9 @@ def _incompatible_operands() -> None:
     assert_that(1).satisfies(match.is_sorted())  # case: sorted-matcher-for-a-scalar
     # the pairwise quantifier names both sides, so a character operation on the other element is refused
     assert_that("ab").zip_satisfies([1], lambda _character, number: number.isalpha())  # case: zip-reads-the-wrong-side
+    # a pattern compiled from bytes is never found in a string, and the runtime refuses it as well
+    assert_that("text").matches(re.compile(b"t"))  # case: text-matched-by-a-bytes-pattern
+    match.matches_regex(re.compile(b"t"))  # case: regex-matcher-of-a-bytes-pattern
 
 
 def _numbers_that_are_not_ordinary_numbers() -> None:
@@ -533,6 +537,8 @@ def _shapes_other_people_write(
     assert_that(subclassed).contains("row")  # case: valid-list-subclass
     assert_that(loose).contains("whatever")  # case: valid-any-element
     assert_that(stamp).is_before(stamp)  # case: valid-datetime-against-datetime
+    assert_that("text").matches(re.compile("t", re.IGNORECASE))  # case: valid-compiled-text-pattern
+    match.matches_regex(re.compile("t"))  # case: valid-regex-matcher-of-a-compiled-pattern
 
 
 def _relations_that_must_keep_working() -> None:

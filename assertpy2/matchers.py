@@ -69,6 +69,7 @@ from ._matcher_impls import (
 )
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Callable, Iterable
 
     # the element a membership matcher judges, so `match.contains("x")` is a matcher for collections of strings
@@ -460,8 +461,8 @@ class _MatchNamespace:
         return ContainsStringMatcher(substring)
 
     @staticmethod
-    def matches_regex(pattern: str) -> Matcher[str]:
-        """Matcher for a string in which ``pattern`` is found (``re.search``)."""
+    def matches_regex(pattern: str | re.Pattern[str]) -> Matcher[str]:
+        """Matcher for a string in which ``pattern`` (a string, or compiled from one) is found (``re.search``)."""
         return MatchesRegexMatcher(pattern)
 
     @staticmethod

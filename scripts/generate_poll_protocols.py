@@ -278,6 +278,7 @@ if TYPE_CHECKING:
 
 _IMPORTS = """    import datetime
     import pathlib
+    import re
 {abc}
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
@@ -1221,6 +1222,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     import logging
+    import re
     from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload

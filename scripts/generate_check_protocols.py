@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import datetime
+    import re
 {abc}
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload

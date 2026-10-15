@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     import fractions
     import logging
     import pathlib
+    import re
     import sys
     from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
     from typing import Any, cast
@@ -172,6 +173,16 @@ if TYPE_CHECKING:
     assert_type(assert_that("text").check().starts_with("x"), AssertionOutcome)
     assert_type(assert_that({"a": 1}).check().contains_key("a"), AssertionOutcome)
     assert_type(assert_that(42).check().not_.is_positive(), AssertionOutcome)
+
+    # a pattern compiled from text goes wherever its text goes
+    word = re.compile(r"\w+", re.IGNORECASE)
+    assert_type(assert_that("text").matches(word), _StringAssertion)
+    assert_type(assert_that("text").not_.does_not_match(word), _StringAssertion)
+    assert_type(assert_that("text").check().matches(word), AssertionOutcome)
+    assert_type(assert_that("text").extracting_group(word, 0), _StringAssertion)
+    assert_type(assert_that("text").matches_with_groups(word), AssertionBuilder[Any])
+    assert_type(assert_that(str).eventually_sync().matches(word), _SyncPoll[str])
+    assert_type(match.matches_regex(word), Matcher[str])
 
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
     assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion[int])

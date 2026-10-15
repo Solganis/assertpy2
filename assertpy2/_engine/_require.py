@@ -27,6 +27,7 @@ import decimal
 import difflib
 import functools
 import inspect
+import re
 import types
 from typing import Any, Final, NoReturn, TypeVar
 
@@ -171,6 +172,22 @@ def require_type(
 def argument(name: str) -> str:
     """The subject for an argument of the assertion, as opposed to the value under assertion."""
     return f"given {name} arg"
+
+
+def require_pattern(pattern: object) -> re.Pattern[str]:
+    """*pattern* compiled, refused unless it is a string or a pattern compiled from one, and not empty.
+
+    A pattern compiled from bytes is never found in a string, and an empty one is found in every string.  A
+    string goes through ``re.compile`` and its cache, as ``re.search`` would take it.  A compiled one comes back
+    as it is, flags and all.
+    """
+    text = pattern.pattern if isinstance(pattern, re.Pattern) else pattern
+    if not isinstance(text, str):
+        refuse(pattern, "a string or a pattern compiled from one", subject=argument("pattern"))
+    if len(text) == 0:
+        _assertpy2_refusal = True
+        raise ValueError("given pattern arg must not be empty")
+    return pattern if isinstance(pattern, re.Pattern) else re.compile(text)
 
 
 def sized_len(value: object, *, subject: str = "val") -> int:
