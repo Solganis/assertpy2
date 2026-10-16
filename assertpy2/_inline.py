@@ -7,6 +7,7 @@ the comparison path in ``snapshot.py`` is a plain equality check that needs none
 
 from __future__ import annotations
 
+import ast
 import math
 import pprint
 from typing import TYPE_CHECKING
@@ -69,7 +70,7 @@ def record_create(frame: FrameType, value: object) -> None:
     executing = _ensure_inline_tooling()
     source = executing.Source.for_frame(frame)
     node = source.executing(frame).node
-    if node is None:  # pragma: no cover - executing resolves the call under pytest; guard exotic runners
+    if not isinstance(node, ast.Call):  # pragma: no cover - executing finds the call under pytest
         raise RuntimeError("could not locate the matches_inline() call to record the inline snapshot")
     _start, end = source.asttokens().get_text_range(node)  # whole call, character offsets (non-ASCII safe)
     insert_at = end - 1  # just inside the closing paren
@@ -82,7 +83,7 @@ def record_update(frame: FrameType, value: object) -> None:
     executing = _ensure_inline_tooling()
     source = executing.Source.for_frame(frame)
     node = source.executing(frame).node
-    if node is None or not node.args:  # pragma: no cover - the caller only updates when a literal is present
+    if not isinstance(node, ast.Call) or not node.args:  # pragma: no cover - called only with a literal present
         raise RuntimeError("could not locate the matches_inline() literal to update")
     start, end = source.asttokens().get_text_range(node.args[0])
     column = start - source.text.rfind("\n", 0, start) - 1

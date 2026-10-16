@@ -421,6 +421,8 @@ max-complexity = 32
 # Suppressions must be ty-native `# ty: ignore[rule]`. Make ty disregard mypy's
 # generic `# type: ignore` so a stray mypy-style comment can't silently mask a ty error.
 respect-type-ignore-comments = false
+# Off by default in ty: the return of an unannotated function, a dependency's included, is read instead of left Unknown.
+return-type-inference = "always"
 
 [tool.ty.rules]
 # Off by default in ty. A `# ty: ignore` that names no rule silences every diagnostic on its line, the

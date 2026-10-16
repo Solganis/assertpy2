@@ -32,8 +32,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/behave_matchers.py", "reportMissingModuleSource"): 1,
     ("assertpy2/pytest_plugin.py", "reportMissingImports"): 1,
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
-    # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
-    ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
     # the twins mirror the protocols and their reports: the same suggestions, and one override for the same reason
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
