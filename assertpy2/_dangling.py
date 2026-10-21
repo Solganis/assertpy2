@@ -10,10 +10,9 @@ second shape is already reported by ruff's B018 (useless attribute access); the 
 by anything, because a call may have side effects and no linter can know this one does not.
 
 The check is static and runs at collection.  A runtime version was tried first and rejected: marking
-the builder from a wrapper adds a stack frame, and `snapshot()` / `matches_inline()` resolve their
-caller with a single `f_back` hop from inside the method body (see `_require_caller` in snapshot.py,
-whose docstring says exactly why the hop count must not move).  Reading the source costs nothing at
-runtime and cannot shift a frame.
+the builder from a wrapper adds a stack frame, which `snapshot()` / `matches_inline()` then had to
+walk past to find the line they key and rewrite (see `_require_caller` in snapshot.py).  Reading the
+source costs nothing at runtime and cannot shift a frame.
 
 What it deliberately does not flag:
 

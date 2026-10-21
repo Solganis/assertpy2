@@ -56,6 +56,7 @@ Run: `python scripts/generate_poll_protocols.py`
 from __future__ import annotations
 
 import ast
+import copy
 import pathlib
 import re
 import subprocess
@@ -174,7 +175,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPoll[_P_co]: ...
         def every(self, interval: float) -> _SyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPoll[_P_co]: ...
         @property
         def not_(self) -> _NegatedSyncPoll[_P_co]: ...
         @property
@@ -199,7 +200,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
         def every(self, interval: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPollExpecting[_P_co, _L_co]: ...
         @property
         def val(self) -> _P_co: ...
         check: _NoVerdictAfterAPoll
@@ -220,7 +221,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedSyncPoll[_P_co]: ...
         def every(self, interval: float) -> _NegatedSyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedSyncPoll[_P_co]: ...
         @property
         def val(self) -> _P_co: ...
         check: _NoVerdictAfterAPoll
@@ -237,7 +238,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPoll[_P_co]: ...
         def every(self, interval: float) -> _AsyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPoll[_P_co]: ...
         def close(self) -> None: ...
         @property
         def not_(self) -> _NegatedAsyncPoll[_P_co]: ...
@@ -253,7 +254,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
         def every(self, interval: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPollExpecting[_P_co, _L_co]: ...
         def close(self) -> None: ...
         @property
         def val(self) -> _P_co: ...
@@ -266,7 +267,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedAsyncPoll[_P_co]: ...
         def every(self, interval: float) -> _NegatedAsyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedAsyncPoll[_P_co]: ...
         def close(self) -> None: ...
         def __await__(self) -> Generator[Any, None, AssertionBuilder[_P_co]]: ...
         check: _NoVerdictAfterAPoll
@@ -285,7 +286,7 @@ _IMPORTS = """    import datetime
 
     from typing_extensions import TypeIs
 
-    from .._matcher_impls import ClassInfo
+    from .._matcher_impls import ClassInfo, ExceptionInfo, RetriedInfo, WarningInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
     from ._capable_typing import (
@@ -601,6 +602,38 @@ def _falls_back_to_a_bare_type(node: ast.FunctionDef, siblings: list[ast.Functio
     )
 
 
+def _past_a_bare_type(node: ast.FunctionDef, siblings: list[ast.FunctionDef]) -> ast.FunctionDef:
+    """*node* with a bare `type` taken out of a union it is a member of, beside a sibling taking `type[...]`.
+
+    The member is left off a chain for the reason `_falls_back_to_a_bare_type` gives, and the classes written
+    beside it in the same union are kept: the chain takes a tuple or a union of exceptions and refuses `int`.
+    """
+    if not any(
+        other is not node
+        and other.name == node.name
+        and any(ast.unparse(one.annotation).startswith("type[") for one in other.args.args[1:] if one.annotation)
+        for other in siblings
+    ):
+        return node
+    rewritten = copy.deepcopy(node)
+    for argument in rewritten.args.args[1:]:
+        members = _union_members(argument.annotation) if argument.annotation is not None else []
+        kept = [one for one in members if ast.unparse(one) != "type"]
+        if len(members) > 1 and kept and len(kept) < len(members):
+            joined = kept[0]
+            for one in kept[1:]:
+                joined = ast.BinOp(left=joined, op=ast.BitOr(), right=one)
+            argument.annotation = joined
+    return rewritten
+
+
+def _union_members(annotation: ast.expr) -> list[ast.expr]:
+    """The members of a union written with `|`, in order, or the annotation alone."""
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return [*_union_members(annotation.left), *_union_members(annotation.right)]
+    return [annotation]
+
+
 def _lands_elsewhere(rung: ast.FunctionDef, chain: str) -> bool:
     """Whether the umbrella rung hands back anything but a verdict or the chain it was asked on.
 
@@ -705,6 +738,7 @@ def _rungs(
         for method, written_as in zip(methods, declared, strict=True):
             if _falls_back_to_a_bare_type(method, methods):
                 continue
+            method = _past_a_bare_type(method, methods)
             rendered = _rewritten(method, restriction, flavour, known, holder=protocol, returns_as=returns_as)
             # narrowed only to bind what the chain then hands back as `Any`: the rung under it says the same
             if _narrows_itself(method) and rendered.returns and ast.unparse(rendered.returns) == f"{flavour}[Any]":
@@ -746,6 +780,7 @@ def _rungs(
         for method in methods:
             if _falls_back_to_a_bare_type(method, methods):
                 continue
+            method = _past_a_bare_type(method, methods)
             for asked in (claimed, "_CapableT"):
                 rung = _rewritten(
                     method, f"{flavour}[{asked}]", flavour, known, holder=protocol, umbrella=True, returns_as=returns_as
@@ -879,7 +914,7 @@ def _landings() -> str:
             knobs = [
                 f"        def within(self, timeout: float) -> {{same}}[{held}]: ...",
                 f"        def every(self, interval: float) -> {{same}}[{held}]: ...",
-                f"        def ignoring(self, *exceptions: type[Exception]) -> {{same}}[{held}]: ...",
+                f"        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> {{same}}[{held}]: ...",
             ]
             if flavour == "_AsyncPoll":
                 knobs.append("        def close(self) -> None: ...")
@@ -1229,7 +1264,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
-    from .._matcher_impls import ClassInfo
+    from .._matcher_impls import ClassInfo, ExceptionInfo, RetriedInfo, WarningInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
     from ._builder_check_typing import _CheckAnyValue
@@ -1323,7 +1358,7 @@ if TYPE_CHECKING:
         val: Any
         description: str
         kind: str | None
-        expected: type[BaseException] | None
+        expected: type[BaseException] | ExceptionInfo | None
         logger: logging.LoggerAdapter[Any]
 
         @property
@@ -1393,7 +1428,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
         def eventually_sync(
@@ -1401,20 +1436,24 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
         # where the callable view lands: flattened, the runtime's `-> Self` kept a caught message typed as the callable
         @overload
         def raises(self: _CapableAssertion[_Callable], ex: type[_Landed]) -> _ExpectedRaiseAssertion[Any, _Landed]: ...
         @overload
-        def raises(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedRaiseAssertion[Any, BaseException]: ...
-        def does_not_raise(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedCompletionAssertion[Any]: ...
+        def raises(
+            self: _CapableAssertion[_Callable], ex: type | ExceptionInfo
+        ) -> _ExpectedRaiseAssertion[Any, BaseException]: ...
+        def does_not_raise(
+            self: _CapableAssertion[_Callable], ex: type | ExceptionInfo
+        ) -> _ExpectedCompletionAssertion[Any]: ...
         def warns(
-            self: _CapableAssertion[_Callable], warning: type[Warning] = ...
+            self: _CapableAssertion[_Callable], warning: type[Warning] | WarningInfo = ...
         ) -> _ExpectedWarningAssertion[Any]: ...
         def does_not_warn(
-            self: _CapableAssertion[_Callable], warning: type[Warning] = ...
+            self: _CapableAssertion[_Callable], warning: type[Warning] | WarningInfo = ...
         ) -> _ExpectedCompletionAssertion[Any]: ...
         when_called_with: _NoExpectationOnAChain
         # the builder's own helpers: left to `__getattr__`, `builder()` read as this facade over the value already here

@@ -36,6 +36,10 @@ assert_that("123-456-7890").matches(r"\d{3}-\d{3}-\d{4}")
 assert_that("foo").does_not_match(r"\d+")
 ```
 
+`contains_any_of()` and `contains_none_of()` ask a string about substrings. For the items of a
+collection, `any_satisfy(match.is_in(2, 9))` holds when any item is one of them, and
+`does_not_contain(8, 9)` when none is. Over an empty collection the first fails and the second passes.
+
 !!! note "An empty prefix or suffix is refused"
     This one does not follow from Python, where `"foo".startswith("")` is `True`. An empty prefix holds
     for every value, so the assertion cannot fail and checks nothing. `starts_with()`, `ends_with()`,
@@ -93,6 +97,23 @@ assert_that(float("Inf")).is_inf()
 assert_that(123.4).is_not_inf()
 ```
 
+
+`is_in()` and `is_not_in()` take the candidates as arguments, so a collection is unpacked into them.
+Passed whole, it is one candidate, and the question is whether the value is that collection itself:
+
+```python
+allowed = [0, 1, 2, 3]
+
+assert_that(1).is_in(*allowed)
+assert_that(1).satisfies(match.is_in(*allowed))
+assert_that(9).is_not_in(*allowed)
+assert_that(1).is_not_in(allowed)   # passes: 1 is not the list, though the list holds it
+```
+
+The last line is the trap. `is_in(allowed)` fails for a member and shows the list in its message, and
+`is_not_in(allowed)` passes for a member, where no message is printed for a reader to notice anything.
+`match.is_in()` takes its candidates the same way.
+
 !!! warning "Floats and equality"
     Avoid `is_equal_to()` with `float` values. Use `is_close_to()` or `is_between()` instead.
 
@@ -123,6 +144,21 @@ assert_that(float("inf")).is_not_close_to(1e308, float("inf"))
 assert_that(float("nan")).is_not_close_to(float("nan"), 1)
 ```
 
+A tolerance relative to the size of the numbers is `rel=`, a fraction of the larger of the two, as
+`math.isclose()` scales it, so it reads the same whichever operand is the value. `pytest.approx()` scales
+by the expected side alone, and refuses `100` against `98` within `0.02` one way round only. Given beside
+an absolute tolerance, either holding is enough, which keeps a value near zero within reach of a
+relative one. They are not added: `100` is not close to `103` within `1` and `rel=0.02`, which their
+sum would cover. A datetime has no size to take a fraction of and refuses `rel`. `match.close_to()`,
+`match.equal_to()` and `is_equal_to()` take it too:
+
+```python
+assert_that(101.5).is_close_to(100, rel=0.02)
+assert_that(98.0).is_close_to(100.0, rel=0.02)
+assert_that(0.0).is_close_to(0.001, 0.01, rel=0.02)
+assert_that(100).is_not_close_to(103, 1, rel=0.02)
+```
+
 A `bool` is refused as the value, the expected value or the tolerance, and so is a negative or NaN
 tolerance:
 
@@ -137,6 +173,7 @@ assert_that(True).is_close_to(1, 0)
 
 ```python
 assert_that([]).is_empty().is_type_of(list).is_iterable()
+assert_that([]).is_instance_of((list, tuple))
 assert_that(["a", "b"]).is_length(2).is_not_empty()
 assert_that(["a", "b"]).is_equal_to(["a", "b"]).is_not_equal_to(["b", "a"])
 
@@ -172,6 +209,11 @@ assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_b
 ```
 
 `any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
+`is_length()` takes a matcher in place of the number, which is asked about the length, so a range or a
+composed condition is one assertion: `is_length(match.between(2, 5))`, as `match.has_length()` and
+`match.is_length()` take one too.
+`is_type_of()` asks for the exact class and takes one class, so a `bool` is no `int` there.
+`is_instance_of()` takes a subclass, and a tuple or a union of classes any one of which will do.
 
 #### Assertions that checked nothing
 
@@ -538,6 +580,9 @@ comparators, anywhere in the graph:
   duration leaves, and a numeric one measures no duration leaf. It reaches a leaf inside a mapping, a
   sequence, a deque or a record. An [object compared by its own `==`](#what-the-walk-takes-apart) is
   not opened for it.
+- `rel` - a tolerance relative to the larger of each pair of real-number leaves, beside or instead of
+  `tolerance`, either holding being enough, as `is_close_to(..., rel=)` has it. `snapshot()` and
+  `matches_inline()` take both.
 - `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
   field-name key wins over a type key). A node it matches, a value or a whole container whose type you
   name, is decided by the predicate alone, at any depth and at the root. A container whose `==` holds is
@@ -789,6 +834,18 @@ assert_that(today).is_before_or_equal_to(today)
 assert_that(today).is_after_or_equal_to(yesterday)
 ```
 
+`is_before()` and `is_after()` take a `datetime` and refuse a `date`. Two dates are ordered by the
+assertions every ordered value has:
+
+```python
+day, later = datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)
+
+assert_that(day).is_less_than(later).is_between(day, later)
+```
+
+Closeness of two datetimes takes a `timedelta`, `is_close_to(other, datetime.timedelta(seconds=2))`,
+and refuses a number of seconds. `match.is_now()` takes either, seconds or a `timedelta`.
+
 Both operands must agree on awareness.
 
 Comparing a timezone-naive datetime with an aware one raises a `TypeError` rather than answering. The
@@ -888,6 +945,12 @@ for the code that already uses them. They delegate, so all four report the same 
 assert_that(b"hello").decoded_as("utf-8").starts_with("hel").is_length(5)
 assert_that(b"hello").decoded_as().is_equal_to("hello")  # default encoding utf-8
 ```
+
+It is also the way to a pattern: `matches()` and `match.matches_regex()` take text, and refuse bytes and
+a bytes pattern. `decoded_as("utf-8").matches(r"...")` decodes the whole value with one encoding first,
+so it suits text that arrived as bytes. Binary data that is no valid text in any encoding raises the
+codec's `UnicodeDecodeError` there instead of failing, and is asked with `starts_with()`, `ends_with()`
+and `contains()` and a bytes operand.
 
 All bytes assertions work with soft assertions, warn mode, and `.not_` negation.
 

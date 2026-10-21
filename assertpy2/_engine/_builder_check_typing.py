@@ -895,39 +895,69 @@ if TYPE_CHECKING:
 
         @overload
         def is_close_to(
-            self: _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
+            self: _CheckAnyValue[int] | _CheckAnyValue[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> AssertionOutcome: ...
         @overload
         def is_close_to(
-            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _CheckAnyValue[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> AssertionOutcome: ...
         @overload
         def is_close_to(
             self: _CheckAnyValue[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> AssertionOutcome: ...
         @overload
         def is_close_to(
-            self: _CheckAnyValue[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> AssertionOutcome: ...
 
         @overload
         def is_not_close_to(
-            self: _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
+            self: _CheckAnyValue[int] | _CheckAnyValue[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> AssertionOutcome: ...
         @overload
         def is_not_close_to(
-            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _CheckAnyValue[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> AssertionOutcome: ...
         @overload
         def is_not_close_to(
             self: _CheckAnyValue[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> AssertionOutcome: ...
         @overload
-        def is_not_close_to(self: _CheckAnyValue[_Capable], other: _Number, tolerance: _Number) -> AssertionOutcome: ...
+        def is_not_close_to(
+            self: _CheckAnyValue[_Capable],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
+        ) -> AssertionOutcome: ...
 
         @overload
         def is_even(self: _CheckAnyValue[int] | _CheckAnyValue[float]) -> AssertionOutcome: ...
@@ -1263,6 +1293,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
@@ -1284,7 +1315,7 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> AssertionOutcome: ...
 
-        def is_length(self, length: SupportsIndex) -> AssertionOutcome: ...
+        def is_length(self, length: SupportsIndex | Matcher[int]) -> AssertionOutcome: ...
 
         def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> AssertionOutcome: ...
 
@@ -1314,6 +1345,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> AssertionOutcome: ...
@@ -1327,6 +1359,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> AssertionOutcome: ...

@@ -184,6 +184,7 @@ pytest_add_cli_args = [
     and not TestTheProfileFromAConfigFile \
     and not TestTheDiffTravelsWithTheFailure \
     and not TestTheHandoffInARealRun \
+    and not TestARealUpdateRun \
     and not TestASoftBlocksSectionsReachEveryReader \
     and not test_the_warning_points_at_the_line_that_reused_the_key \
     and not test_no_vararg_assertion_passes_with_nothing_to_assert \
@@ -264,6 +265,9 @@ pytest_add_cli_args = [
     "--deselect=tests/test_chain_machine.py::TestChains::runTest",
     "--deselect=tests/test_prerequisites.py::TestNegationKeepsThePrerequisite::test_check_answers_the_positive_failure_asked_through_not",
     "--deselect=tests/test_expected_exception.py::TestNegationKeepsTheGroupRequirement::test_check_answers_the_positive_failure_asked_through_not",
+    "--deselect=tests/test_warn_on_failure.py::test_a_failure_reaches_the_callback_as_its_record",
+    "--deselect=tests/test_warn_on_failure.py::test_each_link_of_a_chain_is_handed_over_once",
+    "--deselect=tests/test_warn_on_failure.py::test_an_expected_exception_chain_keeps_the_callback",
     # the line that asked is read off the stack, where the trampoline's own frames now stand
     "--deselect=tests/test_prerequisites.py::TestNegationKeepsThePrerequisite::test_a_soft_block_collects_it_once_either_way",
     "--deselect=tests/test_expected_exception.py::TestNegationKeepsTheGroupRequirement::test_a_soft_block_collects_it_either_way_where_the_positive_lands",

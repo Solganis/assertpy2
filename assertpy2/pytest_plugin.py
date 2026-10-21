@@ -641,16 +641,17 @@ def _warn_on_reused_snapshot_keys(session) -> None:
         try:
             warnings.warn(message, _snapshot.SnapshotKeyReusedWarning, stacklevel=1)
         except _snapshot.SnapshotKeyReusedWarning:
-            _fail_on_reused_key(session, message)
+            _fail_the_run(session, message)
     _snapshot._ACCESS_SITES.clear()
 
 
-def _fail_on_reused_key(session, message: str) -> None:
-    """Turn an escalated sweep warning into a failed run instead of a broken hook.
+def _fail_the_run(session, message: str) -> None:
+    """Turn a problem found after the last test into a failed run instead of a broken hook.
 
-    An ``error`` entry in the warning filters raises here rather than at a test, and an exception out
-    of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
-    message the reader needs under a stack that points at the wrong place.  Print it and go red.
+    An escalated sweep warning, or an inline snapshot that could not be written.  An ``error`` entry in
+    the warning filters raises here rather than at a test, and an exception out of a session-finish hook
+    is an INTERNALERROR with this module's traceback in it - which buries the message the reader needs
+    under a stack that points at the wrong place.  Print it and go red.
     """
     # only a run that otherwise succeeded: reached from a `finally`, so Ctrl-C and an internal error land here too
     if session.exitstatus == pytest.ExitCode.OK:
@@ -667,7 +668,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if hasattr(config, "workeroutput"):  # xdist worker: ship recorded work to the controller, defer the rest
         worker = cast("_Worker", config)
         worker.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
-        worker.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
+        worker.workeroutput["assertpy2_inline"] = _inline.shipped()
         worker.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
         worker.workeroutput["assertpy2_failures"] = [
             [nodeid, [_observation_to_wire(one) for one in found]]
@@ -682,9 +683,10 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     # controller / single process: apply inline edits (workers' plus any recorded here) into source
     _report_retries(config)
     _warn_on_reused_snapshot_keys(session)
-    _inline._RECORDS.extend(_controller_inline)
+    rows = [*_inline.shipped(), *_controller_inline]
     _controller_inline.clear()
-    _inline.apply_inline_records()
+    for problem in _inline.apply_inline_records(rows, str(config.rootpath)):
+        _fail_the_run(session, problem)
     touched = set(_snapshot._TOUCHED) | _controller_touched
     _controller_touched.clear()
     if not touched or not _is_full_run(config):

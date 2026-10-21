@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import collections.abc
+import importlib.util
 import itertools
 import pathlib
 from typing import Any
@@ -17,7 +18,7 @@ from typing import Any
 import pytest
 
 import assertpy2
-from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
+from assertpy2 import AssertionFailure, BaseMatcher, assert_that, match, soft_assertions
 from assertpy2._engine._introspection import Replay
 from assertpy2.assertpy import AssertionBuilder
 
@@ -163,6 +164,9 @@ _ARGUMENTS: list[tuple[Any, ...]] = [
     ("real",),
     (lambda one, two, three: True,),
     (match.greater_than(0),),
+    (match.contains(1),),
+    (match.is_not_none() & (match.is_instance_of(list) | match.contains(9)),),
+    (match.equal_to(match.contains(1)),),
     (match.equal_to(1), match.equal_to(2), match.equal_to(3)),
     (int,),
     ("a",),
@@ -219,18 +223,37 @@ class TestNoAssertionReadsBesideTheBuilder:
     """
 
     def test_every_assertion_that_reads_answers_alike_when_asked_twice(self):
-        read, parted = set(), []
+        read, parted, through_equality = set(), [], set()
         # the second run of items holds one twice, which the assertions about duplicates tell from a run of none
         shapes = itertools.product(_NAMES, _ARGUMENTS, _KEYWORDS, [(1, 2, 3), (1, 1, 2)])
         for name, arguments, keywords, items in shapes:
             taken, first, second = _asked_twice(name, arguments, keywords, items)
             if not taken:
                 continue
+            if name in _HANDED_BY_EQUALITY and any(isinstance(one, BaseMatcher) for one in arguments):
+                if second != first:
+                    through_equality.add(name)
+                continue
             read.add(name)
             if second != first:
                 parted.append(f"{name}{arguments!r} {sorted(keywords)} over {items}: {first} then {second}")
         assert_that(parted).described_as("answered otherwise the second time").is_empty()
         assert_that(sorted(read)).described_as("the assertions that read a one-shot value").is_equal_to(_READERS)
+        # numpy is absent from a reduced cell, and `is_array_equal` refuses there before it reads anything
+        handed = _HANDED_BY_EQUALITY if importlib.util.find_spec("numpy") else _HANDED_BY_EQUALITY - {"is_array_equal"}
+        assert_that(through_equality).described_as("a matcher reading items handed the value by `==`").is_equal_to(
+            handed
+        )
+
+
+_HANDED_BY_EQUALITY = frozenset(
+    {"all_fields_satisfy", "is_array_equal", "is_equal_to", "is_in", "is_not_equal_to", "is_not_in", "matches_inline"}
+)
+"""Where a matcher is an operand the value is compared with, it is handed the value as ``==`` hands it.
+
+Equality, membership among candidates, a field walk and numpy each ask ``matcher == value``, and a matcher that
+reads items takes them from the iterator itself, beside the chain.  Named so it cannot grow unseen.
+"""
 
 
 _READERS = sorted(

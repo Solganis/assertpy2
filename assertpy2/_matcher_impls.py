@@ -11,6 +11,7 @@ from types import UnionType
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Final,
     NamedTuple,
     NoReturn,
@@ -31,8 +32,9 @@ from ._engine._compare import (
     _keyed_types_differ,
     _non_finite,
     _resolve_comparator,
-    _within_tolerance,
     plainly_within,
+    require_rel,
+    within_either,
     zero_of,
 )
 from ._engine._equality import (
@@ -109,6 +111,13 @@ if TYPE_CHECKING:
     # quoted: ty ignores an alias whose whole right-hand side is a string, and `is_instance_of("int")`
     # stopped being a type error.  A PEP 695 `type` statement is read by all three and is a SyntaxError on 3.10
     ClassInfo: TypeAlias = type | UnionType | tuple[type | UnionType | tuple["ClassInfo", ...], ...]
+    _ExceptionClasses: TypeAlias = type[BaseException] | UnionType | tuple["_ExceptionClasses", ...]
+    _WarningClasses: TypeAlias = type[Warning] | UnionType | tuple["_WarningClasses", ...]
+    _RetriedClasses: TypeAlias = type[Exception] | UnionType | tuple["_RetriedClasses", ...]
+    # several classes, any one of which will do; one class is spelled beside these, where it can stay typed as itself
+    ExceptionInfo: TypeAlias = UnionType | tuple[_ExceptionClasses, ...]
+    WarningInfo: TypeAlias = UnionType | tuple[_WarningClasses, ...]
+    RetriedInfo: TypeAlias = UnionType | tuple[_RetriedClasses, ...]
 
 __tracebackhide__ = raised_on_purpose
 
@@ -177,9 +186,15 @@ def _has_own_evaluate(matcher: object) -> bool:
     far as its parts do.  Asked by class, `greater_than(0) & less_than(10)` would take the one-call path
     for nothing and pay a `MatchResult` and a recursive `describe()` per structural leaf: 0.35 ms became
     0.75 ms over 200 records.
+
+    A subclass of a composite is a matcher of its own, asked as it answers: the `evaluate()` it inherits
+    from the composite would disagree with a `matches()` it overrides, so only one it declares counts.
     """
-    if isinstance(matcher, (AllOfMatcher, AnyOfMatcher, NotMatcher)):
-        return matcher.walks_its_value
+    if isinstance(matcher, _COMPOSITES):
+        if _composed(matcher):
+            return matcher.walks_its_value
+        inherited = (BaseMatcher.evaluate, AllOfMatcher.evaluate, AnyOfMatcher.evaluate, NotMatcher.evaluate)
+        return getattr(type(matcher), "evaluate", BaseMatcher.evaluate) not in inherited
     return getattr(type(matcher), "evaluate", BaseMatcher.evaluate) is not BaseMatcher.evaluate
 
 
@@ -253,7 +268,7 @@ class MatchResult:
 
 
 # the options `is_equal_to` takes: with `strict_types` alone a spec could not say "close enough"
-_EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "comparators", "ignore_null"})
+_EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "rel", "comparators", "ignore_null"})
 
 
 class BaseMatcher:
@@ -264,6 +279,17 @@ class BaseMatcher:
     `matches_structure` and as snapshot placeholders, so a comparison must not have to build a result
     object.  `evaluate()` is the whole answer, for a caller that would otherwise ask the same value
     three questions in a row.
+    """
+
+    reads_items: ClassVar[bool] = True
+    """Whether a one-shot iterator is handed to this matcher as its items rather than as itself.
+
+    An iterator hands its items out once, so a matcher combined with others, or asked after an earlier
+    link of a chain read the value, would judge what is left of it.  A matcher that reads the items gets
+    them in a list, the same list for every matcher and every link reading the same value.  One that asks
+    about the value itself, its type, identity, length or an attribute, sets this to ``False`` and is
+    handed the iterator, as a predicate is.  ``True`` by default: a matcher written before this was
+    handed the items by `satisfies()`, and goes on being handed them.
     """
 
     def matches(self, value: Any) -> bool:
@@ -325,8 +351,113 @@ class BaseMatcher:
         return self.describe()
 
 
-def _failure(matcher: Matcher[Any], value: object) -> str | None:
-    """Why *matcher* turned *value* down, or `None` when it held.
+class _OfTheValueItself(BaseMatcher):
+    """A matcher of this library that asks about the value itself and takes nothing from it.
+
+    Its type, identity, truthiness, length, an attribute, its equality to an operand.  A one-shot
+    iterator is handed to it as it is, and without the guard a predicate gets, which refuses the links
+    after it once a part of the value was read: nothing here walks what it is handed.  A subclass defined
+    elsewhere gets the guard, since its `matches()` may walk it.
+    """
+
+    reads_items: ClassVar[bool] = False
+
+
+_UNREAD: Final = object()
+
+
+def _reads_items(matcher: object) -> bool:
+    """Whether *matcher* is handed a one-shot value's items rather than the value: what `reads_items` says, else so."""
+    return getattr(type(matcher), "reads_items", True) is not False
+
+
+def _asked(matcher: Matcher[Any]) -> Matcher[Any]:
+    """The matcher that answers for *matcher*: plain `equal_to(m)` is *m*'s question, through `BaseMatcher.__eq__`.
+
+    The built-in class only: a subclass may answer otherwise, and is asked as it is.
+
+    So it is handed what *m* would be, through the same reader and the same guard: as an object reader of
+    its own, `equal_to(contains(1))` took items past the chain's, and `equal_to(m)` around a matcher of
+    somebody else's was handed the iterator without the guard *m* alone gets.
+    """
+    while type(matcher) is EqualToMatcher and matcher.plain and _is_matcher(matcher.expected):
+        matcher = matcher.expected
+    return matcher
+
+
+class _ReadOnce:
+    """The value one question is asked about, as each matcher asking it should see it.
+
+    A one-shot value handed whole to several matchers is consumed by the first of them, so the rest judge
+    what is left of it.  Draining it for every one of them instead is also wrong: a type or identity check
+    would be asked about a list the caller never passed.  So a matcher that reads items gets them, drained
+    at most once and the same list for every one of them, and one that asks about the value gets the value.
+
+    *items* supplies the items where the value is the subject of a chain, which keeps what every link
+    reads, and otherwise they are drained from the value.  *itself* hands the value over to a matcher of
+    somebody else's that asks about it, which may still walk it, as a predicate may.
+    """
+
+    __slots__ = ("_items", "_itself", "_supply", "value")
+
+    def __init__(
+        self, value: Any, items: Callable[[], Any] | None = None, itself: Callable[[], Any] | None = None
+    ) -> None:
+        self.value = value
+        self._supply = items
+        self._itself = itself
+        self._items: Any = _UNREAD
+
+    def items(self) -> Any:
+        if self._items is _UNREAD:
+            self._items = materialized(self.value) if self._supply is None else self._supply()
+        return self._items
+
+    def handed(self, matcher: object) -> Any:
+        """What a matcher that is not a composite is asked about."""
+        if _reads_items(matcher):
+            return self.items()
+        if self._itself is None or (isinstance(matcher, _OfTheValueItself) and type(matcher).__module__ == __name__):
+            return self.value
+        return self._itself()
+
+    def shown(self) -> Any:
+        """The value as a failure names it: its items once a matcher read them, the value itself before that."""
+        return self.value if self._items is _UNREAD else self._items
+
+
+def _verdict_of(matcher: Matcher[Any], read: _ReadOnce) -> bool:
+    """`matches()` of *matcher*, asked about the value *read* holds as that matcher should see it."""
+    if type(matcher) is EqualToMatcher:
+        matcher = _asked(matcher)
+    if isinstance(matcher, _COMPOSITES) and _composed(matcher):
+        return matcher._holds(read)
+    return bool(verdict(matcher.matches(read.handed(matcher)), subject="the matcher"))
+
+
+def _outcome_of(matcher: Matcher[Any], read: _ReadOnce) -> MatchResult | None:
+    """Why *matcher* refused the value *read* holds, as a result, or `None` where it held.
+
+    One look through `evaluate()` where the matcher has its own, and otherwise the verdict from
+    `matches()` and the reason after it, so a passing value builds no result at all.
+    """
+    if type(matcher) is EqualToMatcher:
+        matcher = _asked(matcher)
+    if _has_own_evaluate(matcher):
+        if isinstance(matcher, _COMPOSITES) and _composed(matcher):
+            outcome = matcher._evaluated(read)
+        else:
+            outcome = cast("BaseMatcher", matcher).evaluate(read.handed(matcher))
+        return None if outcome.matched else outcome
+    if _verdict_of(matcher, read):
+        return None
+    if isinstance(matcher, _COMPOSITES) and _composed(matcher):
+        return matcher._refusal(read)
+    return _refused(matcher, read.handed(matcher))
+
+
+def _failure(matcher: Matcher[Any], read: _ReadOnce) -> str | None:
+    """Why *matcher* turned the value *read* holds down, or `None` when it held.
 
     What this recovers is the reason.  The composites used to list what a failing child *requires* and
     drop what the child had computed about the value, so `an instance of <str>` arrived where the child
@@ -336,9 +467,12 @@ def _failure(matcher: Matcher[Any], value: object) -> str | None:
     One look per leaf, through `evaluate()` where the leaf has its own, for the reason in `_refused`: a
     matcher over a one-shot value answers a second call from what the first walk left.
     """
-    if isinstance(matcher, (AllOfMatcher, AnyOfMatcher, NotMatcher)):
-        held, failure = matcher.decide(value)
+    if type(matcher) is EqualToMatcher:
+        matcher = _asked(matcher)
+    if isinstance(matcher, _COMPOSITES) and _composed(matcher):
+        held, failure = matcher._decided(read)
         return None if held else failure or matcher.describe()
+    value = read.handed(matcher)
     if _has_own_evaluate(matcher):
         outcome = cast("BaseMatcher", matcher).evaluate(value)
     elif verdict(matcher.matches(value), subject="the matcher"):
@@ -348,28 +482,6 @@ def _failure(matcher: Matcher[Any], value: object) -> str | None:
     return None if outcome.matched else f"{outcome.description} ({outcome.mismatch})"
 
 
-class _ReadOnce:
-    """The value as each child should see it: drained at most once, and only for a child that walks.
-
-    A one-shot value handed whole to several children is consumed by the first of them, so the rest
-    judge what is left of it.  Draining it for every child instead is also wrong: a type or identity
-    check would be asked about a list the caller never passed.
-    """
-
-    __slots__ = ("_drained", "_value")
-
-    def __init__(self, value: Any):
-        self._value = value
-        self._drained: Any = None
-
-    def for_child(self, walks: bool) -> Any:
-        if not walks:
-            return self._value
-        if self._drained is None:
-            self._drained = materialized(self._value)
-        return self._drained
-
-
 class AllOfMatcher(BaseMatcher):
     """Matches when all sub-matchers match (``&`` operator)."""
 
@@ -377,42 +489,44 @@ class AllOfMatcher(BaseMatcher):
         for one in matchers:
             _require_matcher_argument(one)
         self.matchers: tuple[Matcher[Any], ...] = matchers
-        self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
-        self.walks_its_value: bool = any(self._walkers)
+        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
-        read = _ReadOnce(value)
-        return all(
-            verdict(matcher.matches(read.for_child(walks)), subject="the matcher")
-            for matcher, walks in zip(self.matchers, self._walkers, strict=True)
-        )
+        return self._holds(_ReadOnce(value))
+
+    def _holds(self, read: _ReadOnce) -> bool:
+        return all(_verdict_of(matcher, read) for matcher in self.matchers)
 
     def describe(self) -> str:
         return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
 
-    def decide(self, value: Any) -> tuple[bool, str]:
+    def _decided(self, read: _ReadOnce) -> tuple[bool, str]:
         """The verdict and the reason from one pass, so the two cannot disagree.
 
         Deriving the verdict from whether there was a reason instead read a satisfied child as a failure
         and, on a matcher answering two calls differently, an unsatisfied one as a pass.
         """
-        read = _ReadOnce(value)
-        failed = [
-            why
-            for one, walks in zip(self.matchers, self._walkers, strict=True)
-            if (why := _failure(one, read.for_child(walks))) is not None
-        ]
+        failed = [why for one in self.matchers if (why := _failure(one, read)) is not None]
         return not failed, ", ".join(failed)
 
     def evaluate(self, value: Any) -> MatchResult:
-        held, failure = self.decide(value)
+        return self._evaluated(_ReadOnce(value))
+
+    def _evaluated(self, read: _ReadOnce) -> MatchResult:
+        held, failure = self._decided(read)
         if held:
             return MatchResult(matched=True, description=self.describe())
-        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value, failure))
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(read.shown(), failure))
+
+    def _refusal(self, read: _ReadOnce) -> MatchResult:
+        """The result for a value already refused, with the reason a second look gives, or the requirement."""
+        return MatchResult(
+            matched=False, description=self.describe(), mismatch=self._line(read.shown(), self._decided(read)[1])
+        )
 
     def describe_mismatch(self, value: Any) -> str:
-        return self._line(value, self.decide(value)[1])
+        return self._refusal(_ReadOnce(value)).mismatch
 
     def _line(self, value: Any, failure: str) -> str:
         return f"<{_capped(value)}> did not satisfy: {failure or self.describe()}"
@@ -425,39 +539,45 @@ class AnyOfMatcher(BaseMatcher):
         for one in matchers:
             _require_matcher_argument(one)
         self.matchers: tuple[Matcher[Any], ...] = matchers
-        self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
-        self.walks_its_value: bool = any(self._walkers)
+        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
-        read = _ReadOnce(value)
-        return any(
-            verdict(matcher.matches(read.for_child(walks)), subject="the matcher")
-            for matcher, walks in zip(self.matchers, self._walkers, strict=True)
-        )
+        return self._holds(_ReadOnce(value))
+
+    def _holds(self, read: _ReadOnce) -> bool:
+        return any(_verdict_of(matcher, read) for matcher in self.matchers)
 
     def describe(self) -> str:
         return f"({' or '.join(matcher.describe() for matcher in self.matchers)})"
 
-    def decide(self, value: Any) -> tuple[bool, str]:
+    def _decided(self, read: _ReadOnce) -> tuple[bool, str]:
         """Held as soon as one alternative holds, and otherwise every alternative with its own reason."""
-        read = _ReadOnce(value)
         reasons = []
-        for one, walks in zip(self.matchers, self._walkers, strict=True):
-            why = _failure(one, read.for_child(walks))
+        for one in self.matchers:
+            why = _failure(one, read)
             if why is None:
                 return True, ""
             reasons.append(why)
         return False, " or ".join(reasons)
 
     def evaluate(self, value: Any) -> MatchResult:
-        held, failure = self.decide(value)
+        return self._evaluated(_ReadOnce(value))
+
+    def _evaluated(self, read: _ReadOnce) -> MatchResult:
+        held, failure = self._decided(read)
         if held:
             return MatchResult(matched=True, description=self.describe())
-        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value, failure))
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(read.shown(), failure))
+
+    def _refusal(self, read: _ReadOnce) -> MatchResult:
+        """The result for a value already refused, with the reason a second look gives, or the requirement."""
+        return MatchResult(
+            matched=False, description=self.describe(), mismatch=self._line(read.shown(), self._decided(read)[1])
+        )
 
     def describe_mismatch(self, value: Any) -> str:
-        return self._line(value, self.decide(value)[1])
+        return self._refusal(_ReadOnce(value)).mismatch
 
     def _line(self, value: Any, failure: str) -> str:
         return f"<{_capped(value)}> satisfied none of: {failure or self.describe()}"
@@ -472,20 +592,30 @@ class NotMatcher(BaseMatcher):
         """Whether the wrapped matcher has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
-        return not verdict(self.matcher.matches(value), subject="the matcher")
+        return self._holds(_ReadOnce(value))
+
+    def _holds(self, read: _ReadOnce) -> bool:
+        return not _verdict_of(self.matcher, read)
 
     def describe(self) -> str:
         return f"not {self.matcher.describe()}"
 
-    def decide(self, value: Any) -> tuple[bool, str]:
+    def _decided(self, read: _ReadOnce) -> tuple[bool, str]:
         """Held when the wrapped matcher refused.  What failed, otherwise, is that the wrapped one held."""
-        held = _failure(self.matcher, value) is not None
+        held = _failure(self.matcher, read) is not None
         return held, "" if held else f"{self.describe()} (it matched)"
 
     def evaluate(self, value: Any) -> MatchResult:
-        if self.decide(value)[0]:
+        return self._evaluated(_ReadOnce(value))
+
+    def _evaluated(self, read: _ReadOnce) -> MatchResult:
+        if self._decided(read)[0]:
             return MatchResult(matched=True, description=self.describe())
-        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value))
+        return self._refusal(read)
+
+    def _refusal(self, read: _ReadOnce) -> MatchResult:
+        """The result for a value already refused: the wrapped matcher held, which needs no second look."""
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(read.shown()))
 
     def describe_mismatch(self, value: Any) -> str:
         return self._line(value)
@@ -494,7 +624,22 @@ class NotMatcher(BaseMatcher):
         return f"<{_capped(value)}> unexpectedly matched {self.matcher.describe()}"
 
 
-class EqualToMatcher(BaseMatcher):
+_COMPOSITES: Final = (AllOfMatcher, AnyOfMatcher, NotMatcher)
+"""The matchers built from others: they are handed the reader of a value rather than the value, and pass it on."""
+
+
+def _composed(matcher: AllOfMatcher | AnyOfMatcher | NotMatcher) -> bool:
+    """Whether a composite answers with a composite's own `matches()` and `evaluate()`: one of them, or a subclass
+    that overrides neither, which is handed the reader as they are.  One that overrides either is asked as it is,
+    told by identity: a wrapper `functools.wraps` makes carries the composite's module and name."""
+    kind = type(matcher)
+    if kind in _COMPOSITES:
+        return True
+    composite = next(base for base in _COMPOSITES if isinstance(matcher, base))
+    return kind.matches is composite.matches and kind.evaluate is composite.evaluate
+
+
+class EqualToMatcher(_OfTheValueItself):
     """Equality, optionally requiring the same type.
 
     ``strict_types`` is the same relation ``is_equal_to(..., strict_types=True)`` applies, spelled for a
@@ -518,6 +663,7 @@ class EqualToMatcher(BaseMatcher):
                 options.get("comparators"),
                 bool(options.get("ignore_null", False)),
                 strict_types,
+                options.get("rel"),
             )
             if options or strict_types
             else None
@@ -589,7 +735,7 @@ class EqualToMatcher(BaseMatcher):
         return f"was <{_capped(value)}>"
 
 
-class GreaterThanMatcher(BaseMatcher):
+class GreaterThanMatcher(_OfTheValueItself):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
@@ -603,7 +749,7 @@ class GreaterThanMatcher(BaseMatcher):
         return f"a value greater than <{_capped_format(self.boundary)}>"
 
 
-class GreaterThanOrEqualToMatcher(BaseMatcher):
+class GreaterThanOrEqualToMatcher(_OfTheValueItself):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
@@ -617,7 +763,7 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
         return f"a value greater than or equal to <{_capped_format(self.boundary)}>"
 
 
-class LessThanMatcher(BaseMatcher):
+class LessThanMatcher(_OfTheValueItself):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
@@ -631,7 +777,7 @@ class LessThanMatcher(BaseMatcher):
         return f"a value less than <{_capped_format(self.boundary)}>"
 
 
-class LessThanOrEqualToMatcher(BaseMatcher):
+class LessThanOrEqualToMatcher(_OfTheValueItself):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
@@ -699,7 +845,7 @@ def _swapped(low: object, high: object) -> bool:
         return False
 
 
-class BetweenMatcher(BaseMatcher):
+class BetweenMatcher(_OfTheValueItself):
     def __init__(self, low: object, high: object):
         if _swapped(low, high):
             _assertpy2_refusal = True
@@ -731,22 +877,32 @@ def _measured_under(operand: object, tolerance: object, duration: bool) -> bool:
     return type(operand) in (int, float) or _is_real_number(operand)
 
 
-class CloseToMatcher(BaseMatcher):
-    def __init__(self, expected: object, tolerance: object):
-        zero = timedelta(0) if isinstance(tolerance, timedelta) else zero_of(tolerance)
-        if _swapped(zero, tolerance):
-            _assertpy2_refusal = True
-            raise ValueError("given tolerance arg must not be negative")
+class CloseToMatcher(_OfTheValueItself):
+    def __init__(self, expected: object, tolerance: object = None, rel: object = None):
+        if tolerance is None and rel is None:
+            refuse(tolerance, "a number, or a rel given instead", subject=argument("tolerance"))
+        if tolerance is not None:
+            zero = timedelta(0) if isinstance(tolerance, timedelta) else zero_of(tolerance)
+            if _swapped(zero, tolerance):
+                _assertpy2_refusal = True
+                raise ValueError("given tolerance arg must not be negative")
+        self._duration: bool = type(tolerance) not in (int, float) and numpy_duration(tolerance)
+        if rel is not None:
+            require_rel(rel)
+            if isinstance(tolerance, timedelta) or self._duration:
+                refuse(rel, "None beside a duration, which has no size to take a fraction of", subject=argument("rel"))
         self.expected = expected
         self.tolerance = tolerance
-        self._duration: bool = type(tolerance) not in (int, float) and numpy_duration(tolerance)
+        self.rel = rel
         # a tolerance that is no ordered distance has nothing within it, not even the value itself
         self._measures = (
-            (_is_real_number(tolerance) or isinstance(tolerance, timedelta) or self._duration)
+            (tolerance is None or _is_real_number(tolerance) or isinstance(tolerance, timedelta) or self._duration)
             and _non_finite(tolerance) != "nan"
             and _measured_under(expected, tolerance, self._duration)
         )
-        self._plain = self._measures and type(expected) in (int, float) and type(tolerance) in (int, float)
+        self._plain = (
+            self._measures and rel is None and type(expected) in (int, float) and type(tolerance) in (int, float)
+        )
 
     def matches(self, value: Any) -> bool:
         if self._plain and type(value) in (int, float):
@@ -756,15 +912,20 @@ class CloseToMatcher(BaseMatcher):
         if not self._measures or not _measured_under(value, self.tolerance, self._duration):
             return False
         try:
-            return _within_tolerance(value, self.expected, self.tolerance)
+            return within_either(value, self.expected, self.tolerance, self.rel)
         except UnorderableError:
             return False
 
     def describe(self) -> str:
-        return f"a value within <{_capped_format(self.tolerance)}> of <{_capped_format(self.expected)}>"
+        relative = f"relative tolerance <{_capped_format(self.rel)}>"
+        if self.tolerance is None:
+            return f"a value within {relative} of <{_capped_format(self.expected)}>"
+        absolute = f"<{_capped_format(self.tolerance)}>"
+        within = absolute if self.rel is None else f"{absolute} or {relative}"
+        return f"a value within {within} of <{_capped_format(self.expected)}>"
 
 
-class IsNoneMatcher(BaseMatcher):
+class IsNoneMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return value is None
 
@@ -772,7 +933,7 @@ class IsNoneMatcher(BaseMatcher):
         return "None"
 
 
-class IsNotNoneMatcher(BaseMatcher):
+class IsNotNoneMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return value is not None
 
@@ -833,7 +994,7 @@ def _require_class_info(
         refuse(expected, expectation, subject=argument(name))
 
 
-class IsInstanceOfMatcher(BaseMatcher):
+class IsInstanceOfMatcher(_OfTheValueItself):
     def __init__(self, expected_type: ClassInfo):
         # eagerly, like the regex matcher
         _require_class_info(expected_type, name="class")
@@ -849,7 +1010,7 @@ class IsInstanceOfMatcher(BaseMatcher):
         return f"was <{_capped(value)}> of type <{type(value).__name__}>"
 
 
-class IsTypeOfMatcher(BaseMatcher):
+class IsTypeOfMatcher(_OfTheValueItself):
     """Exact type, mirroring the ``is_type_of`` assertion.
 
     `IsInstanceOfMatcher` accepts a subclass, which makes it unable to say "an ``int``, not a ``bool``"
@@ -873,7 +1034,7 @@ class IsTypeOfMatcher(BaseMatcher):
         return f"was <{_capped(value)}> of type <{type(value).__name__}>"
 
 
-class IsTruthyMatcher(BaseMatcher):
+class IsTruthyMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return bool(value)
 
@@ -881,7 +1042,7 @@ class IsTruthyMatcher(BaseMatcher):
         return "a truthy value"
 
 
-class IsFalsyMatcher(BaseMatcher):
+class IsFalsyMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return not bool(value)
 
@@ -889,18 +1050,26 @@ class IsFalsyMatcher(BaseMatcher):
         return "a falsy value"
 
 
-class HasLengthMatcher(BaseMatcher):
-    def __init__(self, expected_length: SupportsIndex):
-        self.expected_length: int = require_integer(expected_length, "length")
-        if self.expected_length < 0:
-            _assertpy2_refusal = True
-            raise ValueError("given arg must be a positive int")
+class HasLengthMatcher(_OfTheValueItself):
+    def __init__(self, expected_length: SupportsIndex | Matcher[int]):
+        # a matcher is asked about the number `len()` gives, so a bound or a range is one matcher
+        self.of_length: Matcher[int] | None = expected_length if _is_matcher(expected_length) else None
+        if self.of_length is None:
+            self.expected_length: int = require_integer(expected_length, "length")
+            if self.expected_length < 0:
+                _assertpy2_refusal = True
+                raise ValueError("given arg must be a positive int")
 
     def matches(self, value: Any) -> bool:
         # the core answers `None` for no length, and a raising `__len__` travels out rather than being swallowed
-        return length_of(value) == self.expected_length
+        length = length_of(value)
+        if self.of_length is None:
+            return length == self.expected_length
+        return length is not None and _verdict_of(self.of_length, _ReadOnce(length))
 
     def describe(self) -> str:
+        if self.of_length is not None:
+            return f"a value with a length that is {self.of_length.describe()}"
         return f"a value of length <{self.expected_length}>"
 
     def describe_mismatch(self, value: Any) -> str:
@@ -910,7 +1079,7 @@ class HasLengthMatcher(BaseMatcher):
         return f"was <{_capped(value)}> with length <{length}>"
 
 
-class IsEmptyMatcher(BaseMatcher):
+class IsEmptyMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return length_of(value) == 0
 
@@ -918,7 +1087,7 @@ class IsEmptyMatcher(BaseMatcher):
         return "an empty value"
 
 
-class IsNotEmptyMatcher(BaseMatcher):
+class IsNotEmptyMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         length = length_of(value)
         return length is not None and length > 0
@@ -927,7 +1096,7 @@ class IsNotEmptyMatcher(BaseMatcher):
         return "a non-empty value"
 
 
-class IsPositiveMatcher(BaseMatcher):
+class IsPositiveMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         # through the ordering engine, which answers for a NaN of either kind rather than signalling
         try:
@@ -939,7 +1108,7 @@ class IsPositiveMatcher(BaseMatcher):
         return "a positive value"
 
 
-class IsNegativeMatcher(BaseMatcher):
+class IsNegativeMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         try:
             return holds(value, 0, "lt")
@@ -950,7 +1119,7 @@ class IsNegativeMatcher(BaseMatcher):
         return "a negative value"
 
 
-class IsZeroMatcher(BaseMatcher):
+class IsZeroMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return bool(value == 0)
 
@@ -958,7 +1127,7 @@ class IsZeroMatcher(BaseMatcher):
         return "zero"
 
 
-class IsEvenMatcher(BaseMatcher):
+class IsEvenMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         whole = value if type(value) is int else whole_number(value)
         return whole is not None and whole % 2 == 0
@@ -972,7 +1141,7 @@ class IsEvenMatcher(BaseMatcher):
         return f"was <{_capped(value)}>, which is odd"
 
 
-class IsOddMatcher(BaseMatcher):
+class IsOddMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         whole = value if type(value) is int else whole_number(value)
         return whole is not None and whole % 2 != 0
@@ -986,7 +1155,7 @@ class IsOddMatcher(BaseMatcher):
         return f"was <{_capped(value)}>, which is even"
 
 
-class IsDivisibleByMatcher(BaseMatcher):
+class IsDivisibleByMatcher(_OfTheValueItself):
     def __init__(self, divisor: SupportsIndex):
         self.divisor: int = require_integer(divisor, "divisor")
         if self.divisor == 0:
@@ -1007,7 +1176,7 @@ class IsDivisibleByMatcher(BaseMatcher):
         return f"was <{_capped(value)}>, which has remainder <{whole % self.divisor}>"
 
 
-class IsCallableMatcher(BaseMatcher):
+class IsCallableMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return callable(value)
 
@@ -1030,7 +1199,7 @@ class _SearchedByMember:
         return member(item, self.values)
 
 
-class IsInMatcher(BaseMatcher):
+class IsInMatcher(_OfTheValueItself):
     def __init__(self, *values: object):
         self.values = values
         broadcasting = any(_sequence_or_numpy(candidate) for candidate in values)
@@ -1049,7 +1218,7 @@ class IsInMatcher(BaseMatcher):
         return f"was <{_capped_repr(value)}>, which is not in <{_capped_repr(self.values)}>"
 
 
-class HasPropertyMatcher(BaseMatcher):
+class HasPropertyMatcher(_OfTheValueItself):
     def __init__(self, name: str, matcher: Matcher[Any] | None = None):
         self.name = name
         self.matcher: Matcher[Any] | None = None if matcher is None else _require_matcher_argument(matcher)
@@ -1085,8 +1254,10 @@ def _textlike_noun(operand: object) -> str:
     return "bytes" if isinstance(operand, (bytes, bytearray)) else "a string"
 
 
-class ContainsStringMatcher(BaseMatcher):
+class ContainsStringMatcher(_OfTheValueItself):
     def __init__(self, substring: str | bytes):
+        if type(substring) is not str and not issubclass(type(substring), _TEXTS):
+            refuse(substring, "a string or bytes", subject=argument("substring"))
         self.substring = substring
 
     def matches(self, value: Any) -> bool:
@@ -1106,7 +1277,7 @@ def _refuse_empty(name: str) -> NoReturn:
 _TEXTS = (str, bytes, bytearray)
 
 
-class MatchesRegexMatcher(BaseMatcher):
+class MatchesRegexMatcher(_OfTheValueItself):
     def __init__(self, pattern: str | re.Pattern[str]):
         self.pattern = pattern
         # compiled eagerly so an invalid pattern raises at the call site, not inside `matches()` or a combinator
@@ -1121,10 +1292,12 @@ class MatchesRegexMatcher(BaseMatcher):
         return f"a string matching pattern <{self.pattern}>"
 
 
-class StartsWithMatcher(BaseMatcher):
+class StartsWithMatcher(_OfTheValueItself):
     def __init__(self, prefix: str | bytes):
-        # asked here: through the helper a build cost 50% more
-        if (type(prefix) is str or issubclass(type(prefix), _TEXTS)) and len(prefix) == 0:
+        # a list or a number built a matcher that never matched anything, and said nothing
+        if type(prefix) is not str and not issubclass(type(prefix), _TEXTS):
+            refuse(prefix, "a string or bytes", subject=argument("prefix"))
+        if len(prefix) == 0:
             _refuse_empty("prefix")
         self.prefix = prefix
 
@@ -1135,10 +1308,11 @@ class StartsWithMatcher(BaseMatcher):
         return f"{_textlike_noun(self.prefix)} starting with <{_capped_format(self.prefix)}>"
 
 
-class EndsWithMatcher(BaseMatcher):
+class EndsWithMatcher(_OfTheValueItself):
     def __init__(self, suffix: str | bytes):
-        # asked here: through the helper a build cost 50% more
-        if (type(suffix) is str or issubclass(type(suffix), _TEXTS)) and len(suffix) == 0:
+        if type(suffix) is not str and not issubclass(type(suffix), _TEXTS):
+            refuse(suffix, "a string or bytes", subject=argument("suffix"))
+        if len(suffix) == 0:
             _refuse_empty("suffix")
         self.suffix = suffix
 
@@ -1352,7 +1526,7 @@ class IsSortedMatcher(BaseMatcher):
         )
 
 
-class IgnoreMatcher(BaseMatcher):
+class IgnoreMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return True
 
@@ -1360,7 +1534,7 @@ class IgnoreMatcher(BaseMatcher):
         return "anything (ignored)"
 
 
-class IsUuidMatcher(BaseMatcher):
+class IsUuidMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         if not isinstance(value, str):
             return False
@@ -1374,7 +1548,7 @@ class IsUuidMatcher(BaseMatcher):
         return "a valid UUID string"
 
 
-class IsNonEmptyStringMatcher(BaseMatcher):
+class IsNonEmptyStringMatcher(_OfTheValueItself):
     def matches(self, value: Any) -> bool:
         return isinstance(value, str) and len(value) > 0
 
@@ -1382,7 +1556,7 @@ class IsNonEmptyStringMatcher(BaseMatcher):
         return "a non-empty string"
 
 
-class IsNowMatcher(BaseMatcher):
+class IsNowMatcher(_OfTheValueItself):
     """Matches a ``datetime`` within a tolerance of the current time."""
 
     def __init__(self, delta: timedelta):
@@ -1402,7 +1576,7 @@ class IsNowMatcher(BaseMatcher):
         return f"a datetime within {self._delta} of now"
 
 
-class IsBeforeMatcher(BaseMatcher):
+class IsBeforeMatcher(_OfTheValueItself):
     """Matches a ``datetime`` strictly before a reference ``datetime``."""
 
     def __init__(self, other: datetime):
@@ -1420,7 +1594,7 @@ class IsBeforeMatcher(BaseMatcher):
         return f"a datetime before {_capped_format(self._other)}"
 
 
-class IsAfterMatcher(BaseMatcher):
+class IsAfterMatcher(_OfTheValueItself):
     """Matches a ``datetime`` strictly after a reference ``datetime``."""
 
     def __init__(self, other: datetime):
@@ -1524,7 +1698,7 @@ class _SpecMismatch(NamedTuple):
     """The raw value the spec holds there, where the mismatch is one of `==` against it."""
 
 
-class StructureMatcher(BaseMatcher):
+class StructureMatcher(_OfTheValueItself):
     """Matches dicts (or pydantic-style models via ``model_dump()``) against a structure spec whose
     values are matchers, raw values, or nested dicts."""
 

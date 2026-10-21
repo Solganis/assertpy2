@@ -290,7 +290,7 @@ class _MatchNamespace:
                 relation ``is_equal_to(..., strict_types=True)`` applies, spelled for a spec.
             **options: the rest of what
                 [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to] accepts, with the same meaning:
-                ``tolerance``, ``comparators``, ``ignore``, ``include`` and ``ignore_null``.  One
+                ``tolerance``, ``rel``, ``comparators``, ``ignore``, ``include`` and ``ignore_null``.  One
                 relation, one set of knobs, whichever way it is spelled.
 
         Examples:
@@ -327,16 +327,19 @@ class _MatchNamespace:
         return BetweenMatcher(low, high)
 
     @staticmethod
-    def close_to(expected: object, tolerance: object) -> CloseToMatcher:
+    def close_to(expected: object, tolerance: object = None, *, rel: object = None) -> CloseToMatcher:
         """Matcher for a value within ``tolerance`` of ``expected`` (``abs(value - expected) <= tolerance``).
 
-        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.
+        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.  ``rel`` measures
+        as [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to] does, a fraction of the larger of the
+        two, and beside ``tolerance`` either holding is enough.
 
         Args:
             expected: the target value
             tolerance: the maximum allowed absolute difference from ``expected``
+            rel: the maximum allowed difference as a fraction of the larger of the two, for numbers
         """
-        return CloseToMatcher(expected, tolerance)
+        return CloseToMatcher(expected, tolerance, rel)
 
     @staticmethod
     def is_none() -> IsNoneMatcher:
@@ -375,13 +378,13 @@ class _MatchNamespace:
         return IsFalsyMatcher()
 
     @staticmethod
-    def has_length(length: SupportsIndex) -> HasLengthMatcher:
-        """Matcher for a value whose ``len()`` equals ``length``."""
+    def has_length(length: SupportsIndex | Matcher[int]) -> HasLengthMatcher:
+        """Matcher for a value whose ``len()`` equals ``length``, or satisfies it where it is a matcher."""
         return HasLengthMatcher(length)
 
     @staticmethod
-    def is_length(length: SupportsIndex) -> HasLengthMatcher:
-        """Matcher for a value whose ``len()`` equals ``length``.
+    def is_length(length: SupportsIndex | Matcher[int]) -> HasLengthMatcher:
+        """Matcher for a value whose ``len()`` equals ``length``, or satisfies it where it is a matcher.
 
         The same matcher as `has_length()`, under the name the fluent assertion uses
         ([`is_length()`][assertpy2.base.BaseMixin.is_length]).  One relation was reachable as

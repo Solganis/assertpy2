@@ -507,12 +507,49 @@ A recorded literal holds the value captured on that run, so a placeholder field 
 rather than the `0` above. The placeholder governs the comparison, not what is written.
 
 Recording needs the `[inline]` extra (`pip install assertpy2[inline]`). The **comparison** does not.
+Below Python 3.11 a call written inside an `assert` statement, which pytest rewrites, cannot be found
+to record, and neither can one given its value through `**`. Write `matches_inline()` on a line of its
+own there, with its literal in the call.
 
 It is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting.
 
 Under xdist the recorded edits are shipped to the controller and applied once, never written by
-workers in parallel.
+workers in parallel. A literal is written only where every worker that ran the call takes it. A worker
+that saw another value, or whose own comparison turns its value down, stops it, and the run says to
+record that call with `-n 0`.
+
+One call holds one literal, so every case that reaches it has to accept the literal written there: the
+cases of a `parametrize`, the turns of a loop. A case accepts a literal its own comparison passes
+against, so cases that differ only in an ignored field share one. Where no literal satisfies them all,
+nothing is written to that call and the run fails with a line naming it and the values it saw. Give
+each case a call of its own, or use `snapshot()`, which keys every case apart.
+
+The case that asked for a literal has to accept it too. Under a comparator or a tolerance by which the
+value is not equal to itself nothing is written, and the run fails saying so.
+
+A case is asked when it runs about every literal its call has been asked for so far. One compared by
+plain data, a literal value under options with no function in them, is also asked at the end of the
+run about a literal a later case asked for, with its value and options as they were, so a `dict` the
+test changes afterwards does not move it. One that holds a comparator function, or a value that is no
+literal, could answer differently by then, so it takes only a literal asked for by the time it ran.
+
+A case is asked about the literal as Python builds it from the source, so equal parts of it, such as the
+two tuples in `((1, 2), (1, 2))`, are one object, as they will be when the test runs. Python also shares
+them with equal constants elsewhere in the file, which the literal compiled on its own cannot show, so a
+comparator that tells objects apart by identity may still be answered otherwise by the next run.
+A recorded `set()` or `frozenset({...})` is asked about as Python's own `set` and `frozenset`. In a test
+that rebinds either name the written call means something else, and the next run fails on it.
+
+A literal is written only into a file under pytest's rootdir, never into one under a `site-packages`
+or `dist-packages` folder: a call there belongs to an installed package and runs on behalf of a test,
+and update mode refuses to rewrite it. The file has to be the text the call was found in, so one edited
+while the run went on is left alone and named. It is written back in its own encoding and line ending.
+
+A literal is written only into the call it was recorded from. The expected value has to be a literal
+already: `matches_inline(EXPECTED)` is refused under update mode rather than rewritten, since a
+literal in its place would stop the test reading the constant. Under `not_` nothing is recorded,
+because the literal would be the very value the negation is asked to differ from.
 
 Inline snapshots hold source **literals**, so only JSON-ish values work: a `dict`, `list`, `tuple` or
 `set` of scalars.

@@ -325,7 +325,8 @@ class TestWhereAPivotLands:
             landed = {name: returns(flavour, name) for name in ("raises", "does_not_raise", "warns", "does_not_warn")}
             assert_that(landed).described_as(flavour).is_equal_to(
                 {
-                    "raises": {f"{expecting}Invoked[_Landed]]"},
+                    # several classes, any one of which may be raised, land on no one class
+                    "raises": {f"{expecting}Invoked[_Landed]]", f"{expecting}Invoked[BaseException]]"},
                     "does_not_raise": {f"{expecting}Completed[_P]]"},
                     "warns": {f"{expecting}Warned[_P]]"},
                     "does_not_warn": {f"{expecting}Completed[_P]]"},

@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
-    from .._matcher_impls import ClassInfo
+    from .._matcher_impls import ClassInfo, ExceptionInfo, RetriedInfo, WarningInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
     from ._capable_typing import (
@@ -120,7 +120,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPoll[_P_co]: ...
         def every(self, interval: float) -> _SyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPoll[_P_co]: ...
         @property
         def not_(self) -> _NegatedSyncPoll[_P_co]: ...
         @property
@@ -987,39 +987,65 @@ if TYPE_CHECKING:
 
         @overload
         def is_close_to(
-            self: _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
+            self: _SyncPoll[int] | _SyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _SyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
             self: _SyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _SyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+            self: _SyncPoll[SupportsFloat | SupportsIndex],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_not_close_to(
-            self: _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
+            self: _SyncPoll[int] | _SyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _SyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
             self: _SyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
-        def is_not_close_to(self: _SyncPoll[_Capable], other: _Number, tolerance: _Number) -> _SyncPoll[_P_co]: ...
+        def is_not_close_to(
+            self: _SyncPoll[_Capable], other: _Number, tolerance: _Number | None = ..., *, rel: _Number | None = ...
+        ) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _SyncPoll[int] | _SyncPoll[float]) -> _SyncPoll[_P_co]: ...
@@ -1287,20 +1313,25 @@ if TYPE_CHECKING:
             **options: Any,
         ) -> _SyncPoll[_P_co]: ...
 
+        @overload
         def raises(
             self: _SyncPoll[Callable[..., _P]], ex: type[_Landed]
         ) -> _SyncPollExpecting[_P_co, _SyncPollInvoked[_Landed]]: ...
+        @overload
+        def raises(
+            self: _SyncPoll[Callable[..., _P]], ex: ExceptionInfo
+        ) -> _SyncPollExpecting[_P_co, _SyncPollInvoked[BaseException]]: ...
 
         def does_not_raise(
-            self: _SyncPoll[Callable[..., _P]], ex: type
+            self: _SyncPoll[Callable[..., _P]], ex: type | ExceptionInfo
         ) -> _SyncPollExpecting[_P_co, _SyncPollCompleted[_P]]: ...
 
         def warns(
-            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] | WarningInfo = ...
         ) -> _SyncPollExpecting[_P_co, _SyncPollWarned[_P]]: ...
 
         def does_not_warn(
-            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] | WarningInfo = ...
         ) -> _SyncPollExpecting[_P_co, _SyncPollCompleted[_P]]: ...
 
         @overload
@@ -1309,7 +1340,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
         @overload
@@ -1318,7 +1349,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
 
@@ -1328,7 +1359,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
         @overload
@@ -1337,7 +1368,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
 
@@ -1408,6 +1439,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
@@ -1429,7 +1461,7 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> _SyncPoll[_P_co]: ...
 
-        def is_length(self, length: SupportsIndex) -> _SyncPoll[_P_co]: ...
+        def is_length(self, length: SupportsIndex | Matcher[int]) -> _SyncPoll[_P_co]: ...
 
         def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> _SyncPoll[_P_co]: ...
 
@@ -1459,6 +1491,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
@@ -1472,6 +1505,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
@@ -1490,7 +1524,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
         def every(self, interval: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPollExpecting[_P_co, _L_co]: ...
         @property
         def val(self) -> _P_co: ...
 
@@ -1513,7 +1547,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedSyncPoll[_P_co]: ...
         def every(self, interval: float) -> _NegatedSyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedSyncPoll[_P_co]: ...
         @property
         def val(self) -> _P_co: ...
 
@@ -2379,40 +2413,68 @@ if TYPE_CHECKING:
 
         @overload
         def is_close_to(
-            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number, tolerance: _Number
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _NegatedSyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
             self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_not_close_to(
-            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number, tolerance: _Number
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _NegatedSyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
             self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _NegatedSyncPoll[_Capable], other: _Number, tolerance: _Number
+            self: _NegatedSyncPoll[_Capable],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         @overload
@@ -2757,6 +2819,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
@@ -2778,7 +2841,7 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> _SyncPoll[_P_co]: ...
 
-        def is_length(self, length: SupportsIndex) -> _SyncPoll[_P_co]: ...
+        def is_length(self, length: SupportsIndex | Matcher[int]) -> _SyncPoll[_P_co]: ...
 
         def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> _SyncPoll[_P_co]: ...
 
@@ -2808,6 +2871,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
@@ -2821,6 +2885,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
@@ -2834,7 +2899,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPoll[_P_co]: ...
         def every(self, interval: float) -> _AsyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPoll[_P_co]: ...
         def close(self) -> None: ...
         @property
         def not_(self) -> _NegatedAsyncPoll[_P_co]: ...
@@ -3717,39 +3782,65 @@ if TYPE_CHECKING:
 
         @overload
         def is_close_to(
-            self: _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
+            self: _AsyncPoll[int] | _AsyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _AsyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
             self: _AsyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _AsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+            self: _AsyncPoll[SupportsFloat | SupportsIndex],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_not_close_to(
-            self: _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
+            self: _AsyncPoll[int] | _AsyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _AsyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
             self: _AsyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
-        def is_not_close_to(self: _AsyncPoll[_Capable], other: _Number, tolerance: _Number) -> _AsyncPoll[_P_co]: ...
+        def is_not_close_to(
+            self: _AsyncPoll[_Capable], other: _Number, tolerance: _Number | None = ..., *, rel: _Number | None = ...
+        ) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _AsyncPoll[int] | _AsyncPoll[float]) -> _AsyncPoll[_P_co]: ...
@@ -4023,20 +4114,25 @@ if TYPE_CHECKING:
             **options: Any,
         ) -> _AsyncPoll[_P_co]: ...
 
+        @overload
         def raises(
             self: _AsyncPoll[Callable[..., _P]], ex: type[_Landed]
         ) -> _AsyncPollExpecting[_P_co, _AsyncPollInvoked[_Landed]]: ...
+        @overload
+        def raises(
+            self: _AsyncPoll[Callable[..., _P]], ex: ExceptionInfo
+        ) -> _AsyncPollExpecting[_P_co, _AsyncPollInvoked[BaseException]]: ...
 
         def does_not_raise(
-            self: _AsyncPoll[Callable[..., _P]], ex: type
+            self: _AsyncPoll[Callable[..., _P]], ex: type | ExceptionInfo
         ) -> _AsyncPollExpecting[_P_co, _AsyncPollCompleted[_P]]: ...
 
         def warns(
-            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] | WarningInfo = ...
         ) -> _AsyncPollExpecting[_P_co, _AsyncPollWarned[_P]]: ...
 
         def does_not_warn(
-            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] | WarningInfo = ...
         ) -> _AsyncPollExpecting[_P_co, _AsyncPollCompleted[_P]]: ...
 
         @overload
@@ -4045,7 +4141,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
         @overload
@@ -4054,7 +4150,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
 
@@ -4064,7 +4160,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
         @overload
@@ -4073,7 +4169,7 @@ if TYPE_CHECKING:
             *,
             timeout: float = ...,
             interval: float = ...,
-            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            ignoring: type[Exception] | RetriedInfo = ...,
             trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
 
@@ -4144,6 +4240,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
@@ -4165,7 +4262,7 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> _AsyncPoll[_P_co]: ...
 
-        def is_length(self, length: SupportsIndex) -> _AsyncPoll[_P_co]: ...
+        def is_length(self, length: SupportsIndex | Matcher[int]) -> _AsyncPoll[_P_co]: ...
 
         def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> _AsyncPoll[_P_co]: ...
 
@@ -4195,6 +4292,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
@@ -4208,6 +4306,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
@@ -4217,7 +4316,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
         def every(self, interval: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPollExpecting[_P_co, _L_co]: ...
         def close(self) -> None: ...
         @property
         def val(self) -> _P_co: ...
@@ -4232,7 +4331,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedAsyncPoll[_P_co]: ...
         def every(self, interval: float) -> _NegatedAsyncPoll[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedAsyncPoll[_P_co]: ...
         def close(self) -> None: ...
         def __await__(self) -> Generator[Any, None, AssertionBuilder[_P_co]]: ...
 
@@ -5108,40 +5207,68 @@ if TYPE_CHECKING:
 
         @overload
         def is_close_to(
-            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number, tolerance: _Number
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _NegatedAsyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
             self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_close_to(
-            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_not_close_to(
-            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number, tolerance: _Number
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+            self: _NegatedAsyncPoll[datetime.datetime],
+            other: datetime.datetime,
+            tolerance: datetime.timedelta | None = ...,
+            *,
+            rel: None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
             self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
             other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex | None = ...,
+            *,
+            rel: SupportsFloat | SupportsIndex | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_close_to(
-            self: _NegatedAsyncPoll[_Capable], other: _Number, tolerance: _Number
+            self: _NegatedAsyncPoll[_Capable],
+            other: _Number,
+            tolerance: _Number | None = ...,
+            *,
+            rel: _Number | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
@@ -5496,6 +5623,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
@@ -5517,7 +5645,7 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> _AsyncPoll[_P_co]: ...
 
-        def is_length(self, length: SupportsIndex) -> _AsyncPoll[_P_co]: ...
+        def is_length(self, length: SupportsIndex | Matcher[int]) -> _AsyncPoll[_P_co]: ...
 
         def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> _AsyncPoll[_P_co]: ...
 
@@ -5547,6 +5675,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
@@ -5560,6 +5689,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
+            rel: float | None = ...,
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
@@ -5569,7 +5699,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPollInvoked[_Exc_co]: ...
         def every(self, interval: float) -> _SyncPollInvoked[_Exc_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollInvoked[_Exc_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPollInvoked[_Exc_co]: ...
         @property
         def not_(self) -> _NegatedSyncPollInvoked[_Exc_co]: ...
         @property
@@ -5600,7 +5730,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedSyncPollInvoked[_Exc_co]: ...
         def every(self, interval: float) -> _NegatedSyncPollInvoked[_Exc_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollInvoked[_Exc_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedSyncPollInvoked[_Exc_co]: ...
         @property
         def val(self) -> str: ...
 
@@ -5635,7 +5765,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPollWarned[_R_co]: ...
         def every(self, interval: float) -> _SyncPollWarned[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPollWarned[_R_co]: ...
         @property
         def not_(self) -> _NegatedSyncPollWarned[_R_co]: ...
         @property
@@ -5653,7 +5783,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedSyncPollWarned[_R_co]: ...
         def every(self, interval: float) -> _NegatedSyncPollWarned[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedSyncPollWarned[_R_co]: ...
         @property
         def val(self) -> str: ...
 
@@ -5688,7 +5818,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _SyncPollCompleted[_R_co]: ...
         def every(self, interval: float) -> _SyncPollCompleted[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _SyncPollCompleted[_R_co]: ...
         @property
         def not_(self) -> _NegatedSyncPollCompleted[_R_co]: ...
         @property
@@ -5706,7 +5836,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedSyncPollCompleted[_R_co]: ...
         def every(self, interval: float) -> _NegatedSyncPollCompleted[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedSyncPollCompleted[_R_co]: ...
         @property
         def val(self) -> Callable[..., _R_co]: ...
 
@@ -5741,7 +5871,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPollInvoked[_Exc]: ...
         def every(self, interval: float) -> _AsyncPollInvoked[_Exc]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollInvoked[_Exc]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPollInvoked[_Exc]: ...
         def close(self) -> None: ...
         @property
         def not_(self) -> _NegatedAsyncPollInvoked[_Exc]: ...
@@ -5772,7 +5902,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedAsyncPollInvoked[_Exc]: ...
         def every(self, interval: float) -> _NegatedAsyncPollInvoked[_Exc]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollInvoked[_Exc]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedAsyncPollInvoked[_Exc]: ...
         def close(self) -> None: ...
         def __await__(self) -> Generator[Any, None, _InvokedAssertion[_Exc]]: ...
 
@@ -5807,7 +5937,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPollWarned[_R_co]: ...
         def every(self, interval: float) -> _AsyncPollWarned[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPollWarned[_R_co]: ...
         def close(self) -> None: ...
         @property
         def not_(self) -> _NegatedAsyncPollWarned[_R_co]: ...
@@ -5825,7 +5955,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedAsyncPollWarned[_R_co]: ...
         def every(self, interval: float) -> _NegatedAsyncPollWarned[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedAsyncPollWarned[_R_co]: ...
         def close(self) -> None: ...
         def __await__(self) -> Generator[Any, None, _WarnedAssertion[_R_co]]: ...
 
@@ -5860,7 +5990,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _AsyncPollCompleted[_R_co]: ...
         def every(self, interval: float) -> _AsyncPollCompleted[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _AsyncPollCompleted[_R_co]: ...
         def close(self) -> None: ...
         @property
         def not_(self) -> _NegatedAsyncPollCompleted[_R_co]: ...
@@ -5878,7 +6008,7 @@ if TYPE_CHECKING:
 
         def within(self, timeout: float) -> _NegatedAsyncPollCompleted[_R_co]: ...
         def every(self, interval: float) -> _NegatedAsyncPollCompleted[_R_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> _NegatedAsyncPollCompleted[_R_co]: ...
         def close(self) -> None: ...
         def __await__(self) -> Generator[Any, None, _CompletedAssertion[_R_co]]: ...
 

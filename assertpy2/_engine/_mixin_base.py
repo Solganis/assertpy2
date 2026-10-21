@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from ._introspection import Replay, handed_away
 
 if TYPE_CHECKING:
+    from .._matcher_impls import ExceptionInfo, WarningInfo
     from ..errors import AssertionFailure, DiffResult, PollTrace
     from ..http_mixin import _Response
     from ..outcome import AssertionOutcome, Requirement
@@ -133,10 +134,10 @@ class _MixinBase:
         val: Any
         description: str
         kind: str | None
-        expected: type[BaseException] | None
+        expected: type[BaseException] | ExceptionInfo | None
         logger: WarningLogger
         _not_expected: bool
-        _expected_warning: type[Warning] | None
+        _expected_warning: type[Warning] | WarningInfo | None
         _return_value: object
         _raised_exception: object
         _value_taint_reason: str | None
@@ -180,17 +181,17 @@ class _MixinBase:
             val: object,
             description: str = ...,
             kind: str | None = ...,
-            expected: type[BaseException] | None = ...,
+            expected: type[BaseException] | ExceptionInfo | None = ...,
             logger: WarningLogger | None = ...,
             origin: str | None = ...,
         ) -> Self: ...
 
         def _when_called_with_warning(
-            self, expected: type[Warning], *some_args: object, **some_kwargs: object
+            self, expected: type[Warning] | WarningInfo, *some_args: object, **some_kwargs: object
         ) -> Self: ...
 
         def _when_called_with_not_warning(
-            self, expected: type[Warning], *some_args: object, **some_kwargs: object
+            self, expected: type[Warning] | WarningInfo, *some_args: object, **some_kwargs: object
         ) -> Self: ...
 
         def _fmt_items(self, items: object) -> str: ...
@@ -199,7 +200,7 @@ class _MixinBase:
 
         def _validate_between_args(self, val_type: type, low: object, high: object) -> None: ...
 
-        def _validate_close_to_args(self, val: object, other: object, tolerance: object) -> None: ...
+        def _validate_close_to_args(self, val: object, other: object, tolerance: object, rel: object = ...) -> None: ...
 
         def _is_dict_like(
             self,

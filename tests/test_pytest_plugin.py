@@ -824,15 +824,15 @@ class TestEachFailureASoftBlockCollectedGetsItsOwn:
         assert_that(drawn.call_count).is_equal_to(40)
         assert_that(self._titles(report)[-1]).is_equal_to("Left Out (failures 21 to 25)")
 
-    @pytest.mark.parametrize("escaping", [RuntimeError("boom"), AssertionError("plain")], ids=["error", "assert"])
+    @pytest.mark.parametrize("escaping", [RuntimeError, AssertionError], ids=["error", "assert"])
     def test_an_exception_that_escaped_the_block_brings_what_it_had_collected(self, escaping):
         def asks():
             with soft_assertions():
                 assert_that({2: 4}).is_equal_to({2: 3})
                 assert_that(lambda: 1).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(2)
-                raise escaping
+                raise escaping("escaped")
 
-        with pytest.raises(type(escaping)) as raised:
+        with pytest.raises(escaping) as raised:
             asks()
         report = _run_hook(_make_report(), _make_call(exc=raised.value))
         titles = self._titles(report)
@@ -2305,7 +2305,7 @@ class TestSnapshotUpdateOption:
 def _controller_config(reporter, *, full=True):
     option = SimpleNamespace(keyword="" if full else "somekeyword", markexpr="", last_failed=False, failed_first=False)
     pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
-    return SimpleNamespace(option=option, pluginmanager=pluginmanager)
+    return SimpleNamespace(option=option, pluginmanager=pluginmanager, rootpath=pathlib.Path.cwd())
 
 
 class TestSnapshotOrphans:
@@ -2448,7 +2448,7 @@ class TestSnapshotOrphans:
             keyword="", markexpr="", last_failed=False, failed_first=False, file_or_dir=["tests/test_mod.py::test_a"]
         )
         pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
-        config = SimpleNamespace(option=option, pluginmanager=pluginmanager)
+        config = SimpleNamespace(option=option, pluginmanager=pluginmanager, rootpath=pathlib.Path.cwd())
         pytest_sessionfinish(SimpleNamespace(config=config), 0)
         assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")
 

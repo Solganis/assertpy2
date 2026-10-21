@@ -1822,3 +1822,47 @@ class TestWhatIsWrittenIsWrittenWhole:
         with contextlib.suppress(Exception):
             _save(str(target), {"a": Refusing()})
         assert_that(sorted(entry.name for entry in tmp_path.iterdir())).is_empty()
+
+
+class TestASnapshotThroughCheckOrNot:
+    """`check()` and `not_` run an assertion through a wrapper of this package.
+
+    One hop up from the snapshot was that wrapper, so `check().snapshot()` was keyed by a line of
+    `assertpy.py` and every such call in a run shared one key.  Under `not_` the verdict is inverted, so a
+    snapshot created or rewritten there holds the value the negation is asked to differ from.
+    """
+
+    def test_check_keys_it_by_the_line_of_the_test(self, tmp_path):
+        line = sys._getframe().f_lineno + 2
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(assert_that(1).check().snapshot(path=str(tmp_path)).passed).is_true()
+        assert_that(_load(_snapshot._name(str(tmp_path), "test_snapshots"))).is_equal_to({str(line): 1})
+
+    def test_not_does_not_create_one(self, tmp_path):
+        snapname = _snapshot._name(str(tmp_path), "never")
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(1).not_.snapshot(id="never", path=str(tmp_path))
+        assert_that(failure.value._outcome.message).is_equal_to(
+            f"snapshot <{snapname}> does not exist, and not_ cannot create one; create it without not_"
+        )
+        assert_that(os.path.exists(snapname)).is_false()
+
+    def test_not_keeps_a_stale_one_under_update_mode(self, tmp_path, monkeypatch):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).snapshot(id="kept", path=str(tmp_path))
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that({"a": 2}).not_.snapshot(id="kept", path=str(tmp_path))
+        assert_that(_load(_snapshot._name(str(tmp_path), "kept"))).is_equal_to({"a": 1})
+
+    def test_not_does_not_create_a_contract(self, tmp_path):
+        with pytest.raises(AssertionFailure, match="not_ cannot create one"):
+            assert_that({"a": 1}).not_.matches_contract_snapshot(id="never", path=str(tmp_path))
+        assert_that(os.path.exists(_snapshot._name(str(tmp_path), "never"))).is_false()
+
+    def test_not_keeps_a_drifted_contract_under_update_mode(self, tmp_path, monkeypatch):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(id="shape", path=str(tmp_path))
+        stored = _load(_snapshot._name(str(tmp_path), "shape"))
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that({"b": "x"}).not_.matches_contract_snapshot(id="shape", path=str(tmp_path))
+        assert_that(_load(_snapshot._name(str(tmp_path), "shape"))).is_equal_to(stored)

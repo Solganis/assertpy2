@@ -18,7 +18,7 @@ from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
 from ._engine._require import VerdictError, argument, refuse, verdict
 from ._hints import class_in_spec, under
-from ._matcher_impls import _A_STRUCTURE, _describe_spec_value, _has_own_evaluate
+from ._matcher_impls import _A_STRUCTURE, _describe_spec_value, _has_own_evaluate, _outcome_of, _ReadOnce
 from .errors import (
     DiffEntry,
     DiffResult,
@@ -311,15 +311,10 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** satisfy the matcher
         """
         if _is_matcher(matcher):
-            # asked twice about one value: on a one-shot iterator the second call made `each_item` name the wrong item
-            value = self._drained()
-            # a matcher that walks its value is asked once, so a `key` inside it runs once
-            if _has_own_evaluate(matcher):
-                outcome = _evaluate_matcher(matcher, value)
-                result = None if outcome.matched else outcome
-            else:
-                result = None if verdict(matcher.matches(value), subject="the matcher") else _refused(matcher, value)
+            read = _ReadOnce(self.val, self._drained, self._handed_out)
+            result = _outcome_of(matcher, read)
             if result is not None:
+                value = read.shown()
                 return self.error(
                     f"Expected {result.description}, but {result.mismatch}.",
                     actual=value,

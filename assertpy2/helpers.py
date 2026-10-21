@@ -23,6 +23,7 @@ from ._engine._compare import (
     _node_decision,
     _spec_matches,
     _walked_equal,
+    require_rel,
     zero_of,
 )
 from ._engine._diff import _aligned_match_indices, _graphs_differ, _sub_diff_entries, readable, run_nested
@@ -399,6 +400,33 @@ def _elided_walks(config: _CompareConfig | None) -> tuple[_ElidedWalk, _ElidedWa
 _NO_SPAN: Final = datetime.timedelta()
 
 
+def _validate_moments_close(other, tolerance, rel) -> None:
+    """The arguments of a closeness of two datetimes: a datetime and a timedelta, and no `rel`."""
+    require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
+    if rel is not None:
+        refuse(rel, "None for a datetime, which has no size to take a fraction of", subject=argument("rel"))
+    span = require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
+    if datetime.timedelta.__lt__(span, _NO_SPAN):
+        raise ValueError("given tolerance arg must not be negative")
+
+
+def _validate_numbers_close(val, other, tolerance, rel) -> None:
+    """The arguments of a closeness of two numbers: a tolerance, a `rel` or both, neither negative nor NaN."""
+    if tolerance is None and rel is None:
+        refuse(tolerance, "a number, or a rel given instead", subject=argument("tolerance"))
+    if rel is not None:
+        require_rel(rel)
+        if numpy_duration(val):
+            refuse(rel, "None for a numpy duration, which has no size to take a fraction of", subject=argument("rel"))
+    if tolerance is not None:
+        plain = type(val) in (int, float) and type(other) in (int, float) and type(tolerance) in (int, float)
+        zero = 0 if plain else _zero_for(val, other, tolerance)
+        if _is_nan(tolerance):
+            raise ValueError("given tolerance arg must not be NaN")
+        if tolerance < zero:
+            raise ValueError("given tolerance arg must not be negative")
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -466,7 +494,7 @@ class HelpersMixin(_MixinBase):
         if swapped:
             raise ValueError("given low arg must be less than given high arg")
 
-    def _validate_close_to_args(self, val, other, tolerance):
+    def _validate_close_to_args(self, val, other, tolerance, rel=None):
         """Helper for validate given arg and delta."""
         for operand in (val, other, tolerance):
             if type(operand) is complex:
@@ -478,19 +506,9 @@ class HelpersMixin(_MixinBase):
             refuse(val, "a number or a datetime")
 
         if isinstance(val, datetime.datetime):
-            require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
-            span = require_type(
-                tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance")
-            )
-            if datetime.timedelta.__lt__(span, _NO_SPAN):
-                raise ValueError("given tolerance arg must not be negative")
+            _validate_moments_close(other, tolerance, rel)
         else:
-            plain = type(val) in (int, float) and type(other) in (int, float) and type(tolerance) in (int, float)
-            zero = 0 if plain else _zero_for(val, other, tolerance)
-            if _is_nan(tolerance):
-                raise ValueError("given tolerance arg must not be NaN")
-            if tolerance < zero:
-                raise ValueError("given tolerance arg must not be negative")
+            _validate_numbers_close(val, other, tolerance, rel)
 
     def _is_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True):
         """Return whether *candidate* has the requested dict-like attributes."""

@@ -447,6 +447,36 @@ The bridge runs both ways: implement `matches()` and `evaluate()` comes for free
 it is what `==` calls, and a matcher is a dict value in `matches_structure()` and a snapshot
 placeholder, so a comparison must not have to build a result object.
 
+### A one-shot value
+
+A generator or an iterator hands its items out once. Where several matchers share one, combined with
+`&`, `|` or `~`, or where `satisfies()` asks one about the value of a chain, the library hands a
+matcher either the items, read once and kept, or the value itself. `reads_items` on the class says
+which:
+
+```python
+from collections.abc import Iterator
+
+from assertpy2 import BaseMatcher, assert_that, match
+
+class IsAnIterator(BaseMatcher):
+    reads_items = False  # asks about the value itself
+
+    def matches(self, value):
+        return isinstance(value, Iterator)
+
+    def describe(self):
+        return "an iterator"
+
+assert_that(iter([1, 2])).satisfies(IsAnIterator() & match.contains(2))
+```
+
+It is `True` by default, which hands a matcher the items in a list, as `satisfies()` always did. The
+built-in matchers that ask about the value, `is_instance_of()`, `is_type_of()`, `has_length()`,
+`equal_to()` and the rest, say `False`. A matcher that says `False` and walks the value anyway takes the
+items from the iterator itself, so after a link that read a part of it the links that follow are
+refused, as they are after a predicate, and so is a matcher combined with it that reads the items.
+
 ### Registering one on the `match` namespace
 
 ```python

@@ -3,13 +3,13 @@ from __future__ import annotations
 import inspect
 import types
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, TypeVar, cast, get_origin
 
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
 from ._engine._pairing import maximum_pairing
 from ._engine._require import argument, refuse
-from ._matcher_impls import _require_class_info
+from ._matcher_impls import _UNION_ORIGINS, _require_class_info
 from .errors import _callable_name, _safe_str, _type_expression_name
 from .outcome import AssertionOutcome
 
@@ -17,11 +17,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from ._engine._compat import Self
-    from ._matcher_impls import ClassInfo
+    from ._matcher_impls import ClassInfo, ExceptionInfo
 
 __tracebackhide__ = True
 
 _UNSET: Final = object()  # sentinel: no return value / exception captured yet
+
+_E = TypeVar("_E", bound=BaseException)
 
 
 def _nodes(exc: BaseException) -> Iterator[BaseException]:
@@ -56,6 +58,46 @@ def _require_exception_type(ex: object) -> type[BaseException]:
     if not (isinstance(ex, type) and issubclass(ex, BaseException)):
         refuse(ex, "an exception type", subject=argument("exception"))
     return ex
+
+
+_AN_EXCEPTION: Final = "an exception type, or a union or a non-empty tuple of them"
+
+
+def named_classes(
+    spec: object, base: type[_E], expectation: str, *, subject: str, allow_empty: bool = False
+) -> tuple[type[_E], ...]:
+    """Every class *spec* names, through tuples and unions to any depth, each refused unless it subclasses *base*.
+
+    Read whole before anything is called, so a member that is no class, after one that is, is refused where
+    it is written rather than once the call raised something it would have been asked about.  A tuple is read
+    from its storage, as `isinstance` reads it.  An empty one names nothing that could ever be met, and is
+    refused unless *allow_empty* says nothing is a choice there, as `pytest.raises(())` refuses it.
+    """
+    pending: list[object] = [spec]
+    found: list[type[_E]] = []
+    while pending:
+        member = pending.pop()
+        if isinstance(member, tuple):
+            pending.extend(tuple.__getitem__(member, slice(None, None, -1)))
+        elif isinstance(member, types.UnionType) or get_origin(member) in _UNION_ORIGINS:
+            pending.extend(cast("Any", member).__args__[::-1])
+        elif isinstance(member, type) and issubclass(member, base):
+            found.append(member)
+        else:
+            refuse(spec, expectation, subject=argument(subject))
+    if not found and not allow_empty:
+        refuse(spec, expectation, subject=argument(subject))
+    return tuple(found)
+
+
+def _expected_classes(spec: object) -> type[BaseException] | ExceptionInfo:
+    """*spec* as it was written, once every class it names is read as an exception.
+
+    Kept as written for the message and for `expected`, as `caused_by` keeps it: `issubclass` and `isinstance`
+    read a tuple and either spelling of a union on every Python this package supports.
+    """
+    named_classes(spec, BaseException, _AN_EXCEPTION, subject="exception")
+    return cast("type[BaseException] | ExceptionInfo", spec)
 
 
 def _shaped(spec: object, at: str) -> object:
@@ -191,7 +233,7 @@ def _escaped(exc: BaseException) -> bool:
     return not isinstance(exc, Exception)
 
 
-def _first_of(exc: BaseException, ex: type) -> BaseException | None:
+def _first_of(exc: BaseException, ex: type | ExceptionInfo) -> BaseException | None:
     """The first exception of type *ex* in the tree, or ``None``.
 
     The one place the three group assertions ask their question, so they cannot answer it differently.
@@ -326,14 +368,14 @@ class _InertVerdict:
 class ExceptionMixin(_MixinBase):
     """Expected exception mixin."""
 
-    def raises(self, ex: type) -> Self:
+    def raises(self, ex: type | ExceptionInfo) -> Self:
         """Asserts that val is callable and set the expected exception.
 
         Just sets the expected exception, but never calls val, and therefore never fails. You must
         chain to [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()``.
 
         Args:
-            ex: the expected exception
+            ex: the expected exception, or a union or a tuple of them any one of which will do
 
         Examples:
             Usage:
@@ -345,7 +387,7 @@ class ExceptionMixin(_MixinBase):
         """
         if not callable(self.val):
             refuse(self.val, "callable")
-        expected = _require_exception_type(ex)
+        expected = _expected_classes(ex)
 
         return self.builder(self.val, self.description, self.kind, expected, self.logger)
 
@@ -405,7 +447,7 @@ class ExceptionMixin(_MixinBase):
                 raise
             else:
                 self.error(
-                    f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
+                    f"Expected <{_callable_name(self.val)}> to raise <{_type_expression_name(self.expected)}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but raised <{type(e).__name__}>.",
                     expected=self.expected,
@@ -414,7 +456,7 @@ class ExceptionMixin(_MixinBase):
 
         _require_synchronous_result(result, self.val)
         self.error(
-            f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
+            f"Expected <{_callable_name(self.val)}> to raise <{_type_expression_name(self.expected)}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
             expected=self.expected,
         )
@@ -532,7 +574,7 @@ class ExceptionMixin(_MixinBase):
         pivoted._raised_exception = root
         return pivoted
 
-    def contains_error(self, *ex_types: type) -> Self:
+    def contains_error(self, *ex_types: type | ExceptionInfo) -> Self:
         """Asserts the caught exception is an exception group that contains, recursively, an exception of
         each given type (for [`raises(ExceptionGroup)`][assertpy2.exception.ExceptionMixin.raises]).
 
@@ -545,7 +587,8 @@ class ExceptionMixin(_MixinBase):
                 assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
 
         Args:
-            *ex_types: the exception types the group must contain
+            *ex_types: the exception types the group must contain, each of which may be a union or a tuple
+                of them that any one class answers
 
         Returns:
             AssertionBuilder: this instance, to chain further assertions on the group
@@ -556,20 +599,20 @@ class ExceptionMixin(_MixinBase):
         """
         if len(ex_types) == 0:
             raise ValueError("one or more args must be given")
-        for ex in ex_types:
-            _require_exception_type(ex)
+        wanted = [_expected_classes(ex) for ex in ex_types]
         exc = self._require_group("contains_error")
         if exc is None:
             return cast("Self", _InertBuilder(self._value_taint_reason))
-        for ex in ex_types:
+        for ex in wanted:
             if _first_of(exc, ex) is None:
                 self.error(
-                    f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex
+                    f"Expected the raised exception group to contain <{_type_expression_name(ex)}>, but it did not.",
+                    expected=ex,
                 )
                 return cast("Self", _InertBuilder(self._value_taint_reason))
         return self
 
-    def does_not_contain_error(self, *ex_types: type) -> Self:
+    def does_not_contain_error(self, *ex_types: type | ExceptionInfo) -> Self:
         """Asserts the caught exception group holds none of the given types, at any depth.
 
         The none-of counterpart to [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error]
@@ -583,7 +626,8 @@ class ExceptionMixin(_MixinBase):
                 assert_that(run_tasks).raises(ExceptionGroup).when_called_with().does_not_contain_error(KeyError)
 
         Args:
-            *ex_types: the exception types the group must not contain
+            *ex_types: the exception types the group must not contain, each of which may be a union or a
+                tuple of them
 
         Returns:
             AssertionBuilder: this instance, to chain further assertions on the group
@@ -594,14 +638,15 @@ class ExceptionMixin(_MixinBase):
         """
         if len(ex_types) == 0:
             raise ValueError("one or more args must be given")
-        for ex in ex_types:
-            _require_exception_type(ex)
+        unwanted = [_expected_classes(ex) for ex in ex_types]
         exc = self._require_group("does_not_contain_error")
         if exc is None:
             return cast("Self", _InertBuilder(self._value_taint_reason))
-        for ex in ex_types:
+        for ex in unwanted:
             if _first_of(exc, ex) is not None:
-                self.error(f"Expected the raised exception group to not contain <{ex.__name__}>, but it did.")
+                self.error(
+                    f"Expected the raised exception group to not contain <{_type_expression_name(ex)}>, but it did."
+                )
                 return cast("Self", _InertBuilder(self._value_taint_reason))
         return self
 
@@ -748,13 +793,14 @@ class ExceptionMixin(_MixinBase):
         return cast("BaseException", self._raised_exception)
 
     def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
-        expected = cast("type[BaseException]", self.expected)  # when_called_with() rejects an unset expectation
+        # when_called_with() rejects an unset expectation
+        expected = cast("type[BaseException] | ExceptionInfo", self.expected)
         try:
             result = self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), expected):
                 self.error(
-                    f"Expected <{_callable_name(self.val)}> to not raise <{expected.__name__}>"
+                    f"Expected <{_callable_name(self.val)}> to not raise <{_type_expression_name(expected)}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but did raise <{type(e).__name__}>."
                 )
@@ -766,14 +812,14 @@ class ExceptionMixin(_MixinBase):
         self._return_value = result
         return self
 
-    def does_not_raise(self, ex: type) -> Self:
+    def does_not_raise(self, ex: type | ExceptionInfo) -> Self:
         """Asserts that val is callable and sets the not-expected exception.
 
         Just sets the not-expected exception, but never calls val. You must
         chain to [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()``.
 
         Args:
-            ex: the exception that should **not** be raised
+            ex: the exception that should **not** be raised, or a union or a tuple of them
 
         Examples:
             Usage:
@@ -785,7 +831,7 @@ class ExceptionMixin(_MixinBase):
         """
         if not callable(self.val):
             refuse(self.val, "callable")
-        unwanted = _require_exception_type(ex)
+        unwanted = _expected_classes(ex)
 
         new_builder = self.builder(self.val, self.description, self.kind, unwanted, self.logger)
         new_builder._not_expected = True

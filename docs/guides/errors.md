@@ -952,12 +952,29 @@ assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_equal_to(
 )
 ```
 
+The caught message is the value the chain holds, so the message pattern `pytest.raises(ValueError,
+match=...)` takes beside the class is a step of its own here, a search as `re.search` makes one:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(parse).raises(ValueError).when_called_with("x").matches(r"invalid literal")
+```
+
 Or assert it does **not** raise a given exception:
 
 <!-- docs-guard: skip -->
 ```python
 assert_that(safe_func).does_not_raise(ValueError).when_called_with("foo")
 ```
+
+`does_not_raise(ValueError)` is about that one exception. A call that raises another passes it, and
+the other exception goes unreported, so a call that has to complete is asked with
+`does_not_raise(Exception)`.
+
+Either takes a tuple of classes too, as `except` and `pytest.raises` do, or a union, as `isinstance`
+does, and any one of them answers it: `raises((TimeoutError, ConnectionError))` holds when either is raised, and
+`does_not_raise(KeyError | IndexError)` fails on either. An empty tuple names nothing that could be raised
+and is refused. With several classes named, a type checker reads the caught exception as `BaseException`.
 
 !!! tip
     For the common "did it raise?" case without inspecting the message, prefer pytest's
@@ -998,7 +1015,9 @@ cause as `BaseException` (Pyrefly keeps a union as the union).
 
 **Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`). `contains_error()`
 asserts the caught group holds an exception of each given type, and `does_not_contain_error()` asserts it
-holds none of them. Both search the whole tree, so a group nested inside a group is reached.
+holds none of them. Both search the whole tree, so a group nested inside a group is reached. Each argument
+may be a tuple or a union, which any one of its classes answers: `contains_error((ValueError, KeyError),
+OSError)` asks for one of the first two and for an `OSError` too.
 
 To ask about the failures rather than their types, pivot. `errors()` hands back the leaves as a list, so
 every collection assertion applies to them, and `error_of()` picks the first exception of a type and
@@ -1059,7 +1078,8 @@ assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").m
 )
 ```
 
-The category defaults to `Warning` (matches any warning) and matches subclasses. Or assert it does
+The category defaults to `Warning` (matches any warning) and matches subclasses, and a tuple or a union of
+categories is answered by a warning of any one of them. Or assert it does
 **not** emit a given category:
 
 <!-- docs-guard: skip -->
@@ -1220,7 +1240,7 @@ outcome = assert_that(1).check().is_close_to(9, 0.1)
 assert outcome.requirement is not None
 
 print(outcome.requirement.operation)    # is_close_to
-print(outcome.requirement.parameters)   # {'other': 9, 'tolerance': 0.1}
+print(outcome.requirement.parameters)   # {'other': 9, 'tolerance': 0.1, 'rel': None}
 print(outcome.requirement.negated)      # False
 ```
 

@@ -24,7 +24,7 @@ import pathlib
 import re
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ._introspection import (
     as_held,
@@ -109,6 +109,8 @@ class _CompareConfig:
     """
 
     tolerance: float | None = None
+    rel: float | None = None
+    """A tolerance relative to the larger of the two numbers, held beside the absolute one: either is enough."""
     # `dict` and not `Mapping`: the runtime refuses anything else, so a checker-approved `MappingProxyType` would fail
     comparators: dict[Any, Callable[[Any, Any], Any]] | None = None
     ignore_null: bool = False
@@ -117,10 +119,12 @@ class _CompareConfig:
     duration: bool = False
 
 
-def _build_compare_config(tolerance, comparators, ignore_null=False, strict_types=False) -> _CompareConfig | None:
+def _build_compare_config(
+    tolerance, comparators, ignore_null=False, strict_types=False, rel=None
+) -> _CompareConfig | None:
     """Validate the ``is_equal_to`` comparison kwargs and build a config.
 
-    Returns ``None`` when none are set.  ``tolerance`` must be a non-negative real number (not
+    Returns ``None`` when none are set.  ``tolerance`` and ``rel`` must be non-negative real numbers (not
     ``bool``/``complex``/``NaN``); ``comparators`` must be a dict of ``(actual, expected) -> bool`` callables
     keyed by ``type`` or field name; ``ignore_null`` and ``strict_types`` must be bools.
     """
@@ -128,28 +132,49 @@ def _build_compare_config(tolerance, comparators, ignore_null=False, strict_type
         raise TypeError("given ignore_null arg must be a bool")
     if strict_types is not False and strict_types is not True:
         raise TypeError("given strict_types arg must be a bool")
-    if tolerance is None and comparators is None and not ignore_null and not strict_types:
+    if tolerance is None and rel is None and comparators is None and not ignore_null and not strict_types:
         return None
+    if rel is not None:
+        require_rel(rel)
     if tolerance is not None:
-        if isinstance(tolerance, bool) or not isinstance(tolerance, numbers.Number) or isinstance(tolerance, complex):
-            raise TypeError("given tolerance arg must be a real number")
-        if _is_nan(tolerance):
-            raise ValueError("given tolerance arg must not be NaN")
-        if tolerance < zero_of(tolerance):
-            raise ValueError("given tolerance arg must not be negative")
+        _require_tolerance(tolerance)
     if comparators is not None:
         if not isinstance(comparators, dict):
             raise TypeError("given comparators arg must be a dict")
         for comparator in comparators.values():
             if not callable(comparator):
                 raise TypeError("each comparator must be callable")
+    duration = type(tolerance) not in (int, float) and numpy_duration(tolerance)
+    if duration and rel is not None:
+        raise TypeError("given rel arg is a fraction of a number's size, which a numpy duration tolerance has none of")
     return _CompareConfig(
         tolerance=tolerance,
+        rel=rel,
         comparators=comparators,
         ignore_null=ignore_null,
         strict_types=strict_types,
-        duration=type(tolerance) not in (int, float) and numpy_duration(tolerance),
+        duration=duration,
     )
+
+
+def _require_tolerance(tolerance: Any) -> None:
+    """Refuse an absolute tolerance that is no non-negative real number: a `bool`, a complex one, a NaN."""
+    if isinstance(tolerance, bool) or not isinstance(tolerance, numbers.Number) or isinstance(tolerance, complex):
+        raise TypeError("given tolerance arg must be a real number")
+    if _is_nan(tolerance):
+        raise ValueError("given tolerance arg must not be NaN")
+    if tolerance < zero_of(tolerance):
+        raise ValueError("given tolerance arg must not be negative")
+
+
+def require_rel(rel: object) -> None:
+    """Refuse a relative tolerance that is no non-negative real number: a `bool`, a complex one, a NaN, a duration."""
+    if isinstance(rel, bool) or not _is_real_number(rel):
+        raise TypeError("given rel arg must be a real number")
+    if _is_nan(rel):
+        raise ValueError("given rel arg must not be NaN")
+    if cast("float", rel) < 0:
+        raise ValueError("given rel arg must not be negative")
 
 
 def _ambiguous_array_operand(value: object, other: object) -> object | None:
@@ -330,6 +355,42 @@ def plainly_within(actual, expected, tolerance) -> bool | None:
         )
     except OverflowError:
         return None
+
+
+def within_either(actual, expected, tolerance, rel) -> bool:
+    """Whether the absolute tolerance holds, where one is given, or else the relative one, where one is given.
+
+    Either is enough, as `pytest.approx` takes the larger of its two allowances.  Added together, the two
+    widened each other: ``100`` against ``103`` within ``1`` and ``0.02`` held by their sum and by neither.
+    """
+    if tolerance is not None and _within_tolerance(actual, expected, tolerance):
+        return True
+    return rel is not None and relatively_within(actual, expected, rel)
+
+
+def relatively_within(actual, expected, rel) -> bool:
+    """Whether two numbers differ by at most *rel* of the larger of their sizes, the same answer either way round.
+
+    Scaled by the larger, as `math.isclose` scales.  `pytest.approx` scales by the expected side alone and
+    answers ``100`` against ``98`` within ``0.02`` one way round and not the other.  A NaN is within nothing and
+    an infinity only of an equal one, as under the absolute tolerance, and an infinite *rel* covers every finite
+    pair.  Taken in the operands' own arithmetic, and exactly as fractions where that refuses or overflows a
+    float, as a `Decimal` or a bignum does.
+    """
+    actual, expected, rel = _as_measured(actual, expected, rel)
+    actual_kind, expected_kind = _non_finite(actual), _non_finite(expected)
+    if actual_kind or expected_kind:
+        return actual_kind == expected_kind == "inf" and bool(actual == expected)
+    if _non_finite(rel) == "inf":
+        return True
+    try:
+        return bool(abs(actual - expected) <= rel * max(abs(actual), abs(expected)))
+    except (TypeError, OverflowError) as error:
+        # their own `__sub__` or `__abs__` raised: a bug in the value, not a refusal
+        if raised_inside(error) and not rational_overflow(error):
+            raise
+        exact, other = _as_fraction(actual), _as_fraction(expected)
+        return abs(exact - other) <= _as_fraction(rel) * max(abs(exact), abs(other))
 
 
 def _within_tolerance(actual, expected, tolerance) -> bool:
@@ -764,7 +825,7 @@ def _node_decision(
                 # values.  Asked of an equal pair alone: two that differ may differ only in a key left out.
                 # Not where a path leaves keys of this pair out: the walk asks the types of the keys it keeps
                 return "leaf" if not keys_left_out and _keyed_types_differ(actual, expected) else "strict"
-        if config.tolerance is not None and (
+        if (config.tolerance is not None or config.rel is not None) and (
             numpy_duration(as_held(actual)) and numpy_duration(as_held(expected))
             if config.duration
             else _is_real_number(as_held(actual)) and _is_real_number(as_held(expected))
@@ -805,7 +866,7 @@ def _tolerance_decision(actual, expected, config: _CompareConfig, *, at_root: bo
     if (actual is expected and not at_root) or _guarded_equal(actual, expected):
         return "equal"
     try:
-        within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
+        within = within_either(as_held(actual), as_held(expected), config.tolerance, config.rel)
     except UnorderableError:
         return _plain_decision(actual, expected, config, at_root=at_root)
     return "equal" if within else "leaf"
@@ -885,6 +946,8 @@ def _config_note(config: _CompareConfig | None) -> str:
     parts = []
     if config.tolerance is not None:
         parts.append(f"tolerance={config.tolerance!r}")
+    if config.rel is not None:
+        parts.append(f"rel={config.rel!r}")
     if config.comparators:
         keys = ", ".join(sorted(key.__name__ if isinstance(key, type) else str(key) for key in config.comparators))
         parts.append(f"comparators for {keys}")

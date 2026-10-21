@@ -347,6 +347,25 @@ if TYPE_CHECKING:
     assert_type(assert_that(lambda: int("1")).warns(), _ExpectedWarningAssertion[int])
     assert_type(assert_that(lambda: int("1")).does_not_raise(ValueError), _ExpectedCompletionAssertion[int])
     assert_type(assert_that(lambda: int("1")).does_not_warn(), _ExpectedCompletionAssertion[int])
+
+    def _fails() -> None: ...
+
+    # several classes, any one of which will do, as `except` takes a tuple: the call lands on no one class.  A union
+    # is held by what it assigns to, since pyrefly reads `ValueError | KeyError` as one class of either
+    assert_type(
+        assert_that(lambda: int("1")).raises((ValueError, KeyError)), _ExpectedRaiseAssertion[int, BaseException]
+    )
+    either: BaseException = assert_that(_fails).raises(ValueError | KeyError).when_called_with().raised().value
+    assert_type(assert_that(lambda: int("1")).does_not_raise((ValueError, KeyError)), _ExpectedCompletionAssertion[int])
+    assert_type(assert_that(lambda: int("1")).warns((DeprecationWarning, UserWarning)), _ExpectedWarningAssertion[int])
+    assert_type(
+        assert_that(lambda: int("1")).does_not_warn(UserWarning | DeprecationWarning), _ExpectedCompletionAssertion[int]
+    )
+    assert_type(polled.raises((ValueError, KeyError)).when_called_with(1), _SyncPollInvoked[BaseException])
+    assert_type(polled.does_not_raise(ValueError | KeyError).when_called_with(1), _SyncPollCompleted[int])
+    assert_that(_fails).eventually_sync(ignoring=ValueError | KeyError).ignoring((OSError, (LookupError,)))
+    assert_that(_fails).raises(Exception).when_called_with().contains_error((ValueError, KeyError), OSError)
+    assert_that(_fails).raises(Exception).when_called_with().does_not_contain_error(ValueError | KeyError)
     # the same four on a callable the umbrella claims, over `Any` since `_Callable` names no return
     assert_type(assert_that(_CallableResponse()).raises(ValueError), _ExpectedRaiseAssertion[Any, ValueError])
     assert_type(assert_that(_CallableResponse()).warns(), _ExpectedWarningAssertion[Any])
@@ -670,6 +689,11 @@ if TYPE_CHECKING:
     assert_type(assert_that(fractions.Fraction(3, 2)).is_close_to(1, 5), _ObjectAssertion[fractions.Fraction])
     assert_type(assert_that(decimal.Decimal(0)).is_zero(), _ObjectAssertion[decimal.Decimal])
     assert_type(assert_that(fractions.Fraction(0)).is_not_close_to(1, 5), _ObjectAssertion[fractions.Fraction])
+    # a matcher for the length, which is asked about the number `len()` gives
+    assert_that([1, 2]).is_length(match.greater_than(1)).satisfies(match.has_length(match.between(1, 2)))
+    # a tolerance relative to the larger of the two, alone or beside the absolute one
+    assert_type(assert_that(fractions.Fraction(3, 2)).is_close_to(1, rel=0.5), _ObjectAssertion[fractions.Fraction])
+    assert_that(1.5).is_close_to(1, 0.1, rel=0.5).is_not_close_to(9, rel=0.1)
 
     # `check()` hands back the twin of the view it was reached from, and the twins are generated. A view
     # returning somebody else's twin runs and reports a verdict about the wrong surface

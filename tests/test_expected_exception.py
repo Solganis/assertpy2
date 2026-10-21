@@ -260,7 +260,8 @@ class TestDoesNotRaise:
         with pytest.raises(TypeError) as exc_info:
             assert_that(lambda: None).does_not_raise(str)
         assert_that(str(exc_info.value)).is_equal_to(
-            "given exception arg must be an exception type, but was <<class 'str'>> (type)"
+            "given exception arg must be an exception type, or a union or a non-empty tuple of them,"
+            " but was <<class 'str'>> (type)"
         )
 
     def test_raises_expected_soft_mode(self):
@@ -747,12 +748,18 @@ class TestGroupPivots:
         with pytest.raises(AssertionError):
             caught.does_not_contain_error(ValueError)
 
-    @pytest.mark.parametrize("wrong", [str, 42, ValueError("instance"), (TypeError, KeyError)])
+    @pytest.mark.parametrize("wrong", [str, 42, ValueError("instance"), (TypeError, int), ()])
     def test_anything_but_an_exception_type_is_refused(self, wrong):
         caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
         for call in (caught.contains_error, caught.does_not_contain_error, caught.error_of):
             with pytest.raises(TypeError, match="must be an exception type"):
                 call(wrong)
+
+    def test_a_member_is_picked_by_one_class_where_several_are_any_of_them(self):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        caught.contains_error((TypeError, KeyError))
+        with pytest.raises(TypeError, match="must be an exception type"):
+            caught.error_of((TypeError, KeyError))
 
     def test_a_group_type_reaches_the_group_itself_from_every_form(self):
         caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
@@ -1202,3 +1209,97 @@ class TestNegationKeepsTheGroupRequirement:
         with pytest.raises(AssertionError) as exc_info:
             question(failing)
         assert_that(str(exc_info.value)).does_not_contain("to be an exception group")
+
+
+def _raise_key():
+    raise KeyError("k")
+
+
+def _raise_value():
+    raise ValueError("v")
+
+
+def _interrupted():
+    raise KeyboardInterrupt
+
+
+class TestSeveralClassesAnyOneOfWhichWillDo:
+    """A tuple or a union of classes, as `except`, `isinstance` and `pytest.raises` take one.
+
+    `caused_by` and `has_root_cause` took one since 2.27, and `raises`, `does_not_raise`, `contains_error`
+    and `does_not_contain_error` refused it, so the other spelling was `raises(BaseException)` and a check of
+    `raised()` afterwards.
+    """
+
+    @pytest.mark.parametrize(
+        "named",
+        [(TypeError, KeyError), TypeError | KeyError, (TypeError, (OSError | KeyError,))],
+        ids=["tuple", "union", "nested"],
+    )
+    def test_any_one_of_them_raised_is_caught(self, named):
+        assert_that(assert_that(_raise_key).raises(named).when_called_with().raised().value).is_instance_of(KeyError)
+
+    def test_none_of_them_raised_names_them_all(self):
+        with pytest.raises(AssertionError) as failure:
+            assert_that(_raise_value).raises((TypeError, KeyError)).when_called_with()
+        assert_that(str(failure.value)).starts_with(
+            "Expected <_raise_value> to raise <TypeError, KeyError> when called with (), but raised <ValueError>."
+        )
+        assert_that(failure.value.expected).is_equal_to((TypeError, KeyError))
+
+    def test_a_union_is_named_as_it_is_written(self):
+        with pytest.raises(AssertionError, match=r"to raise <TypeError \| KeyError> when called with \(\)\."):
+            assert_that(lambda: None).raises(TypeError | KeyError).when_called_with()
+
+    def test_the_classes_are_kept_as_written(self):
+        with pytest.raises(AssertionError) as failure:
+            assert_that(lambda: None).raises((KeyError,)).when_called_with()
+        assert_that(failure.value.expected).is_equal_to((KeyError,))
+
+    def test_a_runner_signal_still_leaves_unless_it_is_named(self):
+        with pytest.raises(KeyboardInterrupt):
+            assert_that(_interrupted).raises((TypeError, KeyError)).when_called_with()
+        assert_that(_interrupted).raises((TypeError, KeyboardInterrupt)).when_called_with()
+
+    def test_does_not_raise_any_of_them(self):
+        assert_that(_raise_value).does_not_raise((TypeError, KeyError)).when_called_with()
+        with pytest.raises(AssertionError) as failure:
+            assert_that(_raise_key).does_not_raise(TypeError | KeyError).when_called_with()
+        assert_that(str(failure.value)).starts_with(
+            "Expected <_raise_key> to not raise <TypeError | KeyError> when called with (), but did raise <KeyError>."
+        )
+
+    @pytest.mark.parametrize(
+        "wrong",
+        [(), ((),), (ValueError, int), ValueError | int, (ValueError, "KeyError")],
+        ids=["empty", "nested-empty", "a-class-that-is-no-exception", "a-union-with-one", "a-name"],
+    )
+    def test_every_member_is_read_before_anything_is_called(self, wrong):
+        called = []
+        for expect in (assert_that(called.append).raises, assert_that(called.append).does_not_raise):
+            with pytest.raises(TypeError) as refusal:
+                expect(wrong)
+            assert_that(str(refusal.value)).starts_with(
+                "given exception arg must be an exception type, or a union or a non-empty tuple of them, but was <"
+            )
+        assert_that(called).is_empty()
+
+    @needs_groups
+    def test_in_a_group_alternatives_sit_inside_one_argument_and_every_argument_is_asked(self):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        caught.contains_error((TypeError, KeyError)).contains_error(OSError | ValueError, KeyError)
+        with pytest.raises(AssertionError) as failure:
+            caught.contains_error((TypeError, KeyError), (OSError, LookupError | TypeError), OSError)
+        assert_that(str(failure.value)).starts_with(
+            "Expected the raised exception group to contain <OSError>, but it did not."
+        )
+
+    @needs_groups
+    def test_in_a_group_none_of_them_may_be_held(self):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        caught.does_not_contain_error((TypeError, OSError))
+        with pytest.raises(AssertionError) as failure:
+            caught.does_not_contain_error(TypeError | KeyError)
+        assert_that(str(failure.value)).starts_with(
+            "Expected the raised exception group to not contain <TypeError | KeyError>, but it did."
+        )

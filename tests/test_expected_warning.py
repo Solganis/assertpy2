@@ -249,3 +249,40 @@ def test_custom_logger_survives_collection_transform():
 
     assert_warn([1, -2, 3], logger=adapted).filtered_on(lambda item: item > 0).contains(999)
     assert_that(capture.getvalue()).contains("to contain")
+
+
+class TestSeveralCategoriesAnyOneOfWhichWillDo:
+    @pytest.mark.parametrize(
+        "named",
+        [(UserWarning, DeprecationWarning), UserWarning | DeprecationWarning, (RuntimeWarning, (DeprecationWarning,))],
+        ids=["tuple", "union", "nested"],
+    )
+    def test_a_warning_of_any_of_them_is_caught(self, named):
+        assert_that(warn_deprecation).warns(named).when_called_with().is_equal_to("deprecated since 2.6")
+
+    def test_none_of_them_warned_names_them_all(self):
+        with pytest.raises(AssertionError) as failure:
+            assert_that(warn_user).warns((DeprecationWarning, RuntimeWarning)).when_called_with()
+        assert_that(str(failure.value)).starts_with(
+            "Expected <warn_user> to warn <DeprecationWarning, RuntimeWarning> when called with (),"
+            " but warned <UserWarning>."
+        )
+
+    def test_does_not_warn_any_of_them(self):
+        assert_that(warn_user).does_not_warn((DeprecationWarning, RuntimeWarning)).when_called_with()
+        with pytest.raises(AssertionError) as failure:
+            assert_that(warn_user).does_not_warn(DeprecationWarning | UserWarning).when_called_with()
+        assert_that(str(failure.value)).starts_with(
+            "Expected <warn_user> to not warn <DeprecationWarning | UserWarning> when called with (), but did warn"
+            " <UserWarning>."
+        )
+
+    @pytest.mark.parametrize(
+        "wrong", [(), (UserWarning, ValueError), UserWarning | int], ids=["empty", "an-error", "int"]
+    )
+    def test_every_member_has_to_be_a_warning(self, wrong):
+        with pytest.raises(TypeError) as refusal:
+            assert_that(warn_user).warns(wrong)
+        assert_that(str(refusal.value)).starts_with(
+            "given warning arg must be a warning type, or a union or a non-empty tuple of them, but was <"
+        )

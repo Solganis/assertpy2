@@ -15,12 +15,13 @@ from ._engine._compare import _is_infinite, _is_nan
 from ._engine._operations import DESCRIBES, WITHOUT_A_VERDICT
 from ._engine._require import argument, refuse
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
-from .exception import _InertBuilder
+from .exception import _InertBuilder, named_classes
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
     from ._engine._compat import Self
+    from ._matcher_impls import RetriedInfo
 
 __tracebackhide__ = True
 
@@ -372,16 +373,14 @@ def _pair_kept(last_error: Exception | None) -> tuple[object, object] | None:
 
 
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
-    """Normalize an ``ignoring`` spec (one exception type or a tuple of them) to a validated tuple.
+    """Normalize an ``ignoring`` spec (one exception type, or a union or a tuple of them) to a flat validated tuple.
 
     Only ``Exception`` subclasses are accepted, so ``BaseException``-only classes such as
-    ``KeyboardInterrupt`` can never be swallowed by the polling loop.
+    ``KeyboardInterrupt`` can never be swallowed by the polling loop.  Flat because ``except`` takes a class
+    or a tuple of classes and no union, and ``()`` stays the default it always was: nothing is retried.
     """
-    exceptions = ignoring if isinstance(ignoring, tuple) else (ignoring,)
-    for exception_type in exceptions:
-        if not (isinstance(exception_type, type) and issubclass(exception_type, Exception)):
-            raise TypeError("given ignoring arg must be an Exception subclass or a tuple of Exception subclasses")
-    return exceptions
+    expectation = "an Exception subclass, or a union or a tuple of them"
+    return named_classes(ignoring, Exception, expectation, subject="ignoring", allow_empty=True)
 
 
 def _replay(builder_func: Callable, val: object, description: str, steps: tuple[_Step, ...]) -> Any:
@@ -532,7 +531,7 @@ class AsyncAssertionBuilder:
         self._interval = _duration(interval, "interval", endless=False)
         return self
 
-    def ignoring(self, *exceptions: type[Exception]) -> Self:
+    def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> Self:
         """Replace the exception types the polling loop retries instead of propagating.
 
         Examples:
@@ -760,7 +759,7 @@ class SyncAssertionBuilder:
         self._interval = _duration(interval, "interval", endless=False)
         return self
 
-    def ignoring(self, *exceptions: type[Exception]) -> Self:
+    def ignoring(self, *exceptions: type[Exception] | RetriedInfo) -> Self:
         """Replace the exception types the polling loop retries instead of propagating.
 
         Examples:

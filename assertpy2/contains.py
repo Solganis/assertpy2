@@ -21,6 +21,7 @@ from ._engine._membership import (
 )
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
+from ._engine._pairing import completed_pairing
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._hints import Roles, not_found, not_in_text, reads_as, under
@@ -109,16 +110,44 @@ def _late_run(values, items) -> int:
 
 
 def _walked_difference(val_items, given_items):
-    """``(extra, missing)`` by quadratic multiset subtraction through ``==``."""
-    missing = list(given_items)
-    extra = []
-    for item in val_items:
-        found = next((index for index, wanted in enumerate(missing) if wanted is item or equals(wanted, item)), None)
-        if found is None:
-            extra.append(item)
-        else:
-            del missing[found]
-    return extra, missing
+    """``(extra, missing)`` through ``==``, as a maximum pairing of the items held with the items given.
+
+    A first-fit walk alone answered by the order the items were written in: against ``[1, 5]`` it gave
+    the 1 to ``match.greater_than(0)`` and found no 1 left for ``1``, though the 5 takes the matcher.  It
+    still runs first, in the same order, and settles a pass alone.  What it leaves unpaired is then
+    offered every held item a chain of displacements reaches, compared only as that chain asks, and
+    never about a pair the walk already asked: an ``==`` that answers once is not asked twice.
+    """
+    wanted = list(given_items)
+    free = list(range(len(wanted)))
+    paired: dict[int, int] = {}
+    refused: dict[int, set[int]] = {}
+    for index, item in enumerate(val_items):
+        for at, entry in enumerate(free):
+            if wanted[entry] is item or equals(wanted[entry], item):
+                paired[index] = free.pop(at)
+                break
+            refused.setdefault(entry, set()).add(index)
+    if free:
+        walked = dict(paired)
+        accepted: dict[int, list[int]] = {}
+
+        def holders(entry: int) -> list[int]:
+            if entry not in accepted:
+                one, asked = wanted[entry], refused.get(entry, set())
+                accepted[entry] = [
+                    index
+                    for index, item in enumerate(val_items)
+                    if index not in asked and (walked.get(index) == entry or one is item or equals(one, item))
+                ]
+            return accepted[entry]
+
+        completed_pairing(paired, free, holders)
+    taken = set(paired.values())
+    return (
+        [item for index, item in enumerate(val_items) if index not in paired],
+        [one for entry, one in enumerate(wanted) if entry not in taken],
+    )
 
 
 def _multiset_diff_entries(val_items, given_items):

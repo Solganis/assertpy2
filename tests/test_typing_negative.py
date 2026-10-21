@@ -149,12 +149,13 @@ class TestWhatTheCheckersRefuse:
             # refused through a twin rung's `self`
             {checker: set(codes) for checker, codes in _NOT_THE_VALUES_VIEW.items()},
             # a class outside the bound of the variable it binds, which is how a polled `raises()` refuses what is
-            # no exception
+            # no exception.  Beside the rung taking several classes, mypy still names the bound of the first rung and
+            # the other three say that no rung matched
             {
-                "ty": {"invalid-argument-type"},
+                "ty": {"no-matching-overload"},
                 "mypy": {"type-var"},
-                "pyright": {"reportArgumentType"},
-                "pyrefly": {"bad-specialization"},
+                "pyright": {"reportArgumentType", "reportCallIssue"},
+                "pyrefly": {"no-matching-overload"},
             },
             # a keyword the signature does not have, where the call does not even bind
             {

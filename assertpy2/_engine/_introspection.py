@@ -16,6 +16,7 @@ import datetime
 import enum
 import itertools
 import numbers
+import os
 import pathlib
 import reprlib
 import sys
@@ -28,6 +29,13 @@ if TYPE_CHECKING:
     from types import CellType
 
 _T = TypeVar("_T")
+
+# absolute paths in a set: one hash lookup a frame, and a user file of the same name cannot shadow ours
+ASSERTPY_FILES: Final = frozenset(
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), name)
+    for name in os.listdir(os.path.dirname(os.path.dirname(__file__)))
+    if name.endswith(".py")
+)
 
 # exact builtins carrying no `__dict__`, so the isinstance is skipped; a subclass takes the structural check
 _ATOMIC_TYPES: Final = frozenset(

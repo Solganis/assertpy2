@@ -4,12 +4,13 @@ import warnings
 from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
-from ._engine._require import argument, refuse
-from .errors import _callable_name
-from .exception import _InertBuilder, _require_synchronous_result
+from ._engine._require import refuse
+from .errors import _callable_name, _type_expression_name
+from .exception import _InertBuilder, _require_synchronous_result, named_classes
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
+    from ._matcher_impls import WarningInfo
 
 __tracebackhide__ = True
 
@@ -25,7 +26,7 @@ class WarningMixin(_MixinBase):
     handlers below.
     """
 
-    def warns(self, warning: type[Warning] = Warning) -> Self:
+    def warns(self, warning: type[Warning] | WarningInfo = Warning) -> Self:
         """Asserts that val is callable and sets the expected warning category.
 
         Just records the expectation, but never calls val.  You must chain to
@@ -37,7 +38,8 @@ class WarningMixin(_MixinBase):
         (which matches any warning).
 
         Args:
-            warning: the expected warning category (a `Warning` subclass)
+            warning: the expected warning category (a `Warning` subclass), or a union or a tuple of
+                them any one of which will do
 
         Examples:
             Usage:
@@ -56,7 +58,7 @@ class WarningMixin(_MixinBase):
         """
         return self._warning_builder(warning)
 
-    def does_not_warn(self, warning: type[Warning] = Warning) -> Self:
+    def does_not_warn(self, warning: type[Warning] | WarningInfo = Warning) -> Self:
         """Asserts that val is callable and sets the not-expected warning category.
 
         Just records the expectation, but never calls val.  You must chain to
@@ -65,7 +67,8 @@ class WarningMixin(_MixinBase):
         `Warning` (which forbids any warning).
 
         Args:
-            warning: the warning category that should **not** be emitted (a `Warning` subclass)
+            warning: the warning category that should **not** be emitted (a `Warning` subclass), or a
+                union or a tuple of them
 
         Examples:
             Usage:
@@ -80,18 +83,17 @@ class WarningMixin(_MixinBase):
         new_builder._not_expected = True
         return new_builder
 
-    def _warning_builder(self, warning: type[Warning]) -> Self:
+    def _warning_builder(self, warning: type[Warning] | WarningInfo) -> Self:
         """Validate args and build a new instance carrying the expected warning category."""
         if not callable(self.val):
             refuse(self.val, "callable")
-        if not (isinstance(warning, type) and issubclass(warning, Warning)):
-            # `issubclass` on a non-class raises with a message about the builtin rather than the assertion
-            refuse(warning, "a warning type", subject=argument("warning"))
+        # every member asked here: `issubclass` on a non-class raises with a message about the builtin instead
+        named_classes(warning, Warning, "a warning type, or a union or a non-empty tuple of them", subject="warning")
         new_builder = self.builder(self.val, self.description, self.kind, logger=self.logger)
         new_builder._expected_warning = warning
         return new_builder
 
-    def _when_called_with_warning(self, expected: type[Warning], *some_args, **some_kwargs) -> Self:
+    def _when_called_with_warning(self, expected: type[Warning] | WarningInfo, *some_args, **some_kwargs) -> Self:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
@@ -104,20 +106,20 @@ class WarningMixin(_MixinBase):
         if caught:
             seen = ", ".join(sorted({warning.category.__name__ for warning in caught}))
             self.error(
-                f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
+                f"Expected <{_callable_name(self.val)}> to warn <{_type_expression_name(expected)}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                 f" but warned <{seen}>.",
                 expected=expected,
             )
             return cast("Self", _InertBuilder(self._value_taint_reason))
         self.error(
-            f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
+            f"Expected <{_callable_name(self.val)}> to warn <{_type_expression_name(expected)}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
             expected=expected,
         )
         return cast("Self", _InertBuilder(self._value_taint_reason))
 
-    def _when_called_with_not_warning(self, expected: type[Warning], *some_args, **some_kwargs) -> Self:
+    def _when_called_with_not_warning(self, expected: type[Warning] | WarningInfo, *some_args, **some_kwargs) -> Self:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
@@ -126,7 +128,7 @@ class WarningMixin(_MixinBase):
         if matched:
             seen = ", ".join(sorted({warning.category.__name__ for warning in matched}))
             self.error(
-                f"Expected <{_callable_name(self.val)}> to not warn <{expected.__name__}>"
+                f"Expected <{_callable_name(self.val)}> to not warn <{_type_expression_name(expected)}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                 f" but did warn <{seen}>."
             )

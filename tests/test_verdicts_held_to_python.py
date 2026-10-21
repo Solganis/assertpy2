@@ -127,7 +127,24 @@ class TestAMatcherRefusesWhatEveryTextHolds:
     def test_what_is_not_empty_is_taken_as_before(self):
         assert_that("foobar").satisfies(match.starts_with("foo") & match.ends_with("bar") & match.matches_regex("ob"))
         assert_that(b"foobar").satisfies(match.starts_with(b"foo") & match.ends_with(bytearray(b"bar")))
-        assert_that(match.starts_with(5).matches("5")).is_false()
+
+    @pytest.mark.parametrize(
+        ("build", "named", "shown"),
+        [
+            (lambda: match.starts_with(5), "prefix", "<5> (int)"),
+            (lambda: match.starts_with([1]), "prefix", "<[1]> (list)"),
+            (lambda: match.ends_with(None), "suffix", "<None> (NoneType)"),
+            (lambda: match.ends_with(memoryview(b"x")), "suffix", None),
+            (lambda: match.contains_string(["a"]), "substring", "<['a']> (list)"),
+        ],
+        ids=["int-prefix", "list-prefix", "none-suffix", "memoryview-suffix", "list-substring"],
+    )
+    def test_what_no_text_starts_ends_or_holds_is_refused_where_it_is_written(self, build, named, shown):
+        """A list or a number built a matcher that matched nothing at all and said nothing about why."""
+        said = assert_that(build).raises(TypeError).when_called_with().value
+        assert_that(said).starts_with(f"given {named} arg must be a string or bytes, but was ")
+        if shown is not None:
+            assert_that(said).ends_with(shown)
 
     @pytest.mark.parametrize("delta", [float("inf"), float("nan"), 1e20], ids=["inf", "nan", "past-a-timedelta"])
     def test_a_delta_no_timedelta_holds_is_refused(self, delta):

@@ -43,7 +43,7 @@ RECORDED: dict[str, int] = {
     # a mapping with a non-string key is written as pairs, since rendered as text `1` and `"1"` were one key
     "assertpy2/errors.py::_json_native": 14,
     "assertpy2/string.py::contains_ignoring_case": 13,
-    "assertpy2/_engine/_compare.py::_build_compare_config": 12,
+    "assertpy2/_engine/_compare.py::_build_compare_config": 11,
     "assertpy2/async_assertions.py::record": 12,
     "assertpy2/dynamic.py::__getattr__": 12,
     "assertpy2/_dangling.py::_survey": 11,

@@ -262,3 +262,51 @@ class TestEventuallyTraceOptOut:
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that(lambda: 7).eventually_sync(timeout=0.1, interval=0.02).is_equal_to(8)
         assert_that(exc_info.value.trace).is_not_none()
+
+
+class TestEventuallyIgnoresSeveralClasses:
+    @pytest.mark.parametrize(
+        "ignoring", [(ConnectionError, KeyError), ConnectionError | KeyError, ((KeyError,), ConnectionError)]
+    )
+    def test_any_one_of_them_is_retried(self, ignoring):
+        calls = {"n": 0}
+
+        def probe():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("not ready")
+            if calls["n"] == 2:
+                raise KeyError("not yet")
+            return 42
+
+        assert_that(probe).eventually_sync(timeout=2, interval=0.01, ignoring=ignoring).is_equal_to(42)
+        assert_that(calls["n"]).is_equal_to(3)
+
+    def test_the_method_takes_them_too(self):
+        calls = {"n": 0}
+
+        def probe():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise KeyError("not ready")
+            return "ok"
+
+        assert_that(probe).eventually_sync().within(2).every(0.01).ignoring(ConnectionError | KeyError).is_equal_to(
+            "ok"
+        )
+
+    def test_nothing_named_retries_nothing_as_before(self):
+        def probe():
+            raise ConnectionError("down")
+
+        for ignoring in ((), ((),)):
+            with pytest.raises(ConnectionError):
+                assert_that(probe).eventually_sync(timeout=2, interval=0.01, ignoring=ignoring).is_equal_to(42)
+
+    @pytest.mark.parametrize("wrong", [(ValueError, KeyboardInterrupt), ValueError | SystemExit, (ValueError, int)])
+    def test_a_member_the_loop_must_never_swallow_is_refused(self, wrong):
+        with pytest.raises(TypeError) as refusal:
+            assert_that(lambda: 1).eventually_sync(ignoring=wrong)
+        assert_that(str(refusal.value)).starts_with(
+            "given ignoring arg must be an Exception subclass, or a union or a tuple of them, but was <"
+        )

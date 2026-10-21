@@ -283,6 +283,9 @@ def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
     assert_that(1).is_greater_than(numpy.array([0, 1]))  # case: array-as-a-scalar-operand
     assert_that(5).is_close_to(5.5, True)  # case: bool-as-a-closeness-tolerance
     assert_that(2).is_close_to(True, 1)  # case: bool-as-a-closeness-operand
+    # a datetime has no size for a relative tolerance to be a fraction of
+    moment = datetime.datetime(2026, 1, 1)
+    assert_that(moment).is_close_to(moment, rel=0.1)  # case: relative-closeness-of-moments
 
 
 def _methods_that_do_not_fit_the_value() -> None:
@@ -353,6 +356,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     # `type[object]`, and the rung that would take it takes `raises(int)` under all four, so the chain leaves it off
     assert_that(_a_factory).eventually_sync().raises(_an_exception_class())  # case: bare-type-expectation-on-a-poll
     assert_that(_a_closed_factory).eventually_sync().raises(int)  # case: expectation-of-a-class-that-is-no-exception
+    # several classes are taken as `except` takes them, and each still has to be an exception
+    assert_that(_boom).raises((int, str))  # case: expectation-of-classes-that-are-no-exceptions
+    assert_that(_a_closed_factory).eventually_sync().raises((int, str))  # case: polled-classes-that-are-no-exceptions
+    assert_that(_noisy).warns((int,))  # case: warning-classes-that-are-no-warnings
     # a poll delivers its own failure, so `check()` is refused at run time and declared as not callable
     # a chain hands its value back under `val`; `value` is the builder's name and was recorded as an
     # assertion, which failed inside the replay rather than where it was written.  Read through a use,

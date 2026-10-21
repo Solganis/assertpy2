@@ -55,7 +55,7 @@ if TYPE_CHECKING:
         _PathAssertion,
         _StringAssertion,
     )
-    from ._matcher_impls import ClassInfo
+    from ._matcher_impls import ClassInfo, ExceptionInfo, RetriedInfo
     from .errors import PollTrace
     from .matchers import Matcher
 
@@ -63,7 +63,7 @@ from . import _hints
 from . import errors as _errors
 from ._engine._compat import _LoggerAdapter
 from ._engine._contract import exactness_failure, kept_apart, put_as_sent, put_back, runs_own_code, sent_record
-from ._engine._introspection import WarningLogger, is_same_implementation
+from ._engine._introspection import ASSERTPY_FILES, WarningLogger, is_same_implementation
 from ._engine._operations import (
     ALSO_ASSERTS,
     CONFIGURES,
@@ -152,13 +152,6 @@ if TYPE_CHECKING:
 
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
-
-# absolute paths in a set: one hash lookup a frame, and a user file of the same name cannot shadow ours
-ASSERTPY_FILES: Final = frozenset(
-    os.path.join(os.path.dirname(__file__), name)
-    for name in os.listdir(os.path.dirname(__file__))
-    if name.endswith(".py")
-)
 
 
 _run_as_written: contextvars.ContextVar[bool] = contextvars.ContextVar("assertpy2_run_as_written", default=False)
@@ -1441,7 +1434,7 @@ class NegatedBuilder(Generic[_S]):
         val: Any
         description: str
         kind: str | None
-        expected: type[BaseException] | None
+        expected: type[BaseException] | ExceptionInfo | None
         logger: WarningLogger
 
     def __init__(self, builder: AssertionBuilder[Any]) -> None:
@@ -1719,7 +1712,7 @@ class AssertionBuilder(
         val: Any,
         description: str = "",
         kind: str | None = None,
-        expected: type[BaseException] | None = None,
+        expected: type[BaseException] | ExceptionInfo | None = None,
         logger: WarningLogger | None = None,
     ) -> None:
         """Never call this constructor directly."""
@@ -1912,7 +1905,7 @@ class AssertionBuilder(
         val: Any,
         description: str = "",
         kind: str | None = None,
-        expected: type[BaseException] | None = None,
+        expected: type[BaseException] | ExceptionInfo | None = None,
         logger: WarningLogger | None = None,
         origin: str | None = None,
     ) -> Any:
@@ -2149,7 +2142,7 @@ class AssertionBuilder(
         *,
         timeout: float = 5.0,
         interval: float = 0.5,
-        ignoring: type[Exception] | tuple[type[Exception], ...] = (),
+        ignoring: type[Exception] | RetriedInfo = (),
         trace: bool = True,
     ) -> AsyncAssertionBuilder:
         """Switch to async polling mode for eventual-consistency assertions.
@@ -2174,7 +2167,7 @@ class AssertionBuilder(
             timeout: maximum seconds to keep retrying (default ``5.0``). Infinity, or a number past the
                 float range, retries until the assertion passes
             interval: seconds between retries (default ``0.5``), finite
-            ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
+            ignoring: an ``Exception`` subclass, or a union or a tuple of them, the polling loop retries instead of
                 propagating (default: none)
             trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
                 timeout failure (default ``True``); pass ``False`` to skip recording, for tight
@@ -2230,7 +2223,7 @@ class AssertionBuilder(
         *,
         timeout: float = 5.0,
         interval: float = 0.5,
-        ignoring: type[Exception] | tuple[type[Exception], ...] = (),
+        ignoring: type[Exception] | RetriedInfo = (),
         trace: bool = True,
     ) -> SyncAssertionBuilder:
         """Switch to blocking polling mode for eventual-consistency assertions, without asyncio.
@@ -2251,7 +2244,7 @@ class AssertionBuilder(
             timeout: maximum seconds to keep retrying (default ``5.0``). Infinity, or a number past the
                 float range, retries until the assertion passes
             interval: seconds between retries (default ``0.5``), finite
-            ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
+            ignoring: an ``Exception`` subclass, or a union or a tuple of them, the polling loop retries instead of
                 propagating (default: none)
             trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
                 timeout failure (default ``True``); pass ``False`` to skip recording, for tight

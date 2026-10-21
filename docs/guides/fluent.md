@@ -24,10 +24,20 @@ its own assertions read, and nothing else:
 
 - What you take from the iterator yourself the chain does not see, whether through `val`, through
   another name for it, or inside a function you pass to an assertion.
-- A matcher is handed the items. A predicate you pass to `satisfies()` is handed the iterator itself.
-  Where a link had read a part of the value by then, a read past that part is refused with a
-  `TypeError`, since what the predicate took can no longer be told: assert on `list(...)` of the value
-  instead.
+- A matcher that reads the items, such as `match.contains()` or `match.each_item()`, is handed the
+  items the chain keeps, the same for every link and for every matcher combined with it. One that asks
+  about the value itself, its type, identity, length or an attribute, is asked about the iterator, as
+  the assertion of the same name is: `match.is_instance_of(Iterator)` holds and `match.has_length(3)`
+  does not. A matcher of your own says which it is with
+  [`reads_items`](matchers.md#a-one-shot-value).
+- A predicate you pass to `satisfies()` is handed the iterator itself, and so is a matcher of your own
+  that asks about the value. Where a link had read a part of the value by then, a read past that part
+  is refused with a `TypeError`, since what the predicate took can no longer be told: assert on
+  `list(...)` of the value instead.
+- A matcher that is an operand of a comparison, as in `is_equal_to(match.contains(1))` or
+  `is_in(...)`, is handed the iterator as `==` hands it, and one that reads items takes them from it
+  beside the chain. Ask it through `satisfies()` instead: there `match.equal_to(match.contains(1))` is
+  the question `match.contains(1)` asks, and gets the chain's items.
 - A value that is not its own iterator and hands out one shared iterator each time it is asked is
   read once, as before.
 

@@ -28,7 +28,7 @@ from ._engine._ordering import require_integer
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
-from ._matcher_impls import _require_class_info
+from ._matcher_impls import _is_matcher, _outcome_of, _ReadOnce, _require_class_info
 from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
 from .errors import _capped, _capped_format, _disambiguated, _safe_str, _told_apart, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
@@ -36,11 +36,13 @@ from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 if TYPE_CHECKING:
     from ._engine._compare import _CompareConfig
     from ._engine._compat import Self
-    from ._matcher_impls import ClassInfo
+    from ._matcher_impls import ClassInfo, Matcher
 
 __tracebackhide__ = True
 
-_IS_EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "comparators", "ignore_null", "strict_types"})
+_IS_EQUAL_TO_OPTIONS = frozenset(
+    {"ignore", "include", "tolerance", "rel", "comparators", "ignore_null", "strict_types"}
+)
 
 
 class BaseMixin(SatisfiesMixin):
@@ -237,6 +239,7 @@ class BaseMixin(SatisfiesMixin):
                 kwargs.get("comparators"),
                 kwargs.get("ignore_null", False),
                 kwargs.get("strict_types", False),
+                kwargs.get("rel"),
             )
 
         operand = _ambiguous_array_operand(self.val, other)
@@ -765,13 +768,15 @@ class BaseMixin(SatisfiesMixin):
             )
         return self
 
-    def is_length(self, length: SupportsIndex) -> Self:
+    def is_length(self, length: SupportsIndex | Matcher[int]) -> Self:
         """Asserts that val is the given length.
 
-        Checks val is the given length using the ``len()`` built-in.
+        Checks val is the given length using the ``len()`` built-in.  A matcher in place of the number is
+        asked about the length, so a bound or a range reads as one assertion: ``is_length(match.between(2,
+        5))``.
 
         Args:
-            length (int): the expected length
+            length (int | Matcher): the expected length, or a matcher the length has to satisfy
 
         Examples:
             Usage:
@@ -781,6 +786,7 @@ class BaseMixin(SatisfiesMixin):
                 assert_that((1, 2, 3)).is_length(3)
                 assert_that({'a': 1, 'b': 2}).is_length(2)
                 assert_that({'a', 'b'}).is_length(2)
+                assert_that(['a', 'b']).is_length(match.greater_than(1))
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
@@ -788,6 +794,8 @@ class BaseMixin(SatisfiesMixin):
         Raises:
             AssertionError: if val is **not** the given length
         """
+        if _is_matcher(length):
+            return self._length_satisfies(length)
         wanted = length if type(length) is int else require_integer(length, "length")
         if wanted < 0:
             raise ValueError("given arg must be a positive int")
@@ -795,6 +803,20 @@ class BaseMixin(SatisfiesMixin):
             return self.error(
                 f"Expected <{_capped(self.val)}> to be of length <{length}>, but was <{sized_len(self.val)}>.",
                 expected=length,
+            )
+        return self
+
+    def _length_satisfies(self, matcher: Matcher[int]) -> Self:
+        """`is_length()` with a matcher for the length, which is asked about the number `len()` gives."""
+        size = sized_len(self.val)
+        outcome = _outcome_of(matcher, _ReadOnce(size))
+        if outcome is not None:
+            # the reason a leaf gives about a bare number is that number again
+            reason = "" if outcome.mismatch == f"was <{size}>" else f": {outcome.mismatch}"
+            return self.error(
+                f"Expected <{_capped(self.val)}> to have a length that is {outcome.description},"
+                f" but was <{size}>{reason}.",
+                expected=matcher,
             )
         return self
 

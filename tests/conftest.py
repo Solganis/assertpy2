@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from hypothesis import HealthCheck, settings
 
@@ -9,6 +11,10 @@ _UNINSTALLED: pytest.StashKey[str] = pytest.StashKey()
 
 # for a runner that calls pytest twice in one process: a `@given` method then meets a second instance of its class
 settings.register_profile("one_process_twice", suppress_health_check=[HealthCheck.differing_executors])
+
+# a mutation runner's trampoline sits between a test and the package, so the call site is read past it
+if (_trampoline := sys.modules.get("mutmut.mutation.trampoline")) is not None:
+    _snapshot.ASSERTPY_FILES = _snapshot.ASSERTPY_FILES | {_trampoline.__file__}
 
 
 @pytest.fixture(autouse=True)

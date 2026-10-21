@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Final, NoReturn
 from . import _inline
 from ._engine._compare import _build_compare_config
 from ._engine._contract import shape, shape_diff
+from ._engine._introspection import ASSERTPY_FILES
 from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
 from .errors import AssertionFailure, _safe_repr, _safe_str, _truncated
@@ -31,20 +32,42 @@ _UNSET: Final = object()
 
 
 def _require_caller(frame: types.FrameType | None) -> types.FrameType:
-    """The frame one level above ``frame``, which is what keys a snapshot by line and drives an
-    inline rewrite.
+    """The frame of the call as written: the first one outside this package, from ``frame`` outwards,
+    which is what keys a snapshot by line and drives an inline rewrite.
 
-    The frame is taken at the call site rather than in here on purpose: a helper that walked the
-    stack itself would fix the number of hops, and both the callers and mutmut's trampoline change
-    that count.
+    Read by file rather than by a count of hops.  One hop up answered the wrapper `check()` and `not_`
+    run an assertion through, so a snapshot under either was keyed by a line of this package, two tests
+    sharing one key, and an inline one was written into this package's source.  mutmut's trampoline
+    adds hops of its own too.
 
     Raises:
         RuntimeError: if the interpreter exposes no calling frame.
     """
-    caller = frame.f_back if frame is not None else None
+    caller = frame
+    while caller is not None and caller.f_code.co_filename in ASSERTPY_FILES:
+        caller = caller.f_back
     if caller is None:  # pragma: no cover - frame introspection always available in CPython
         raise RuntimeError("cannot determine caller frame")
     return caller
+
+
+def _calls_back(state: object) -> bool:
+    """Whether *state* holds something callable, which a copy hands back as itself, to answer as it likes later."""
+    if isinstance(state, dict):
+        return any(_calls_back(key) or _calls_back(item) for key, item in state.items())
+    if isinstance(state, (list, tuple, set, frozenset)):
+        return any(_calls_back(item) for item in state)
+    return callable(state)
+
+
+def _stale(builder: Callable[..., Any], value: object, stored: object, options: dict[str, Any]) -> bool:
+    """Whether *stored* no longer matches *value* under the comparison *options*, decided via a strict
+    throwaway builder (under soft/warn kinds ``self.is_equal_to`` would not raise)."""
+    try:
+        builder(value, "")._compared_to_stored(stored, **options)
+    except AssertionError:
+        return True
+    return False
 
 
 def register_snapshot_serializer(
@@ -483,15 +506,25 @@ class SnapshotMixin(_MixinBase):
         """
         raise self._failure(self._compose(message, actual=MISSING, expected=MISSING, diff=None, trace=None))
 
-    def _forbid_creation_in_ci(self, snapname: str) -> None:
+    def _forbid_creation(self, snapname: str) -> None:
         """In CI mode a missing snapshot is a hard failure, not a silent create - the golden was never
-        committed, so drift detection for this test would be silently off."""
+        committed, so drift detection for this test would be silently off.
+
+        Under `not_` as well, whose verdict is inverted: a snapshot created there holds the very value it
+        is asked to differ from, so the negation failed on the first run and on every run after it.
+        """
         if _ci_mode_enabled():
             self._refuse(
                 f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the"
                 " snapshot to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or"
                 " unset CI / ASSERTPY2_SNAPSHOT_CI)"
             )
+        if self._answering_another:
+            self._refuse(f"snapshot <{snapname}> does not exist, and not_ cannot create one; create it without not_")
+
+    def _rewriting(self) -> bool:
+        """Whether a stale snapshot is overwritten: under update mode, and never under `not_`, for the same reason."""
+        return _update_enabled() and not self._answering_another
 
     def _with_placeholder_tokens(self, placeholders):
         """A shallow copy of the dict-like val with placeholder keys replaced by descriptive tokens, so
@@ -501,15 +534,22 @@ class SnapshotMixin(_MixinBase):
             stored[key] = {"__placeholder__": _describe_matcher(matcher)}
         return stored
 
-    def _check_placeholders(self, placeholders) -> None:
-        """Assert each placeholder field of val is present and satisfies its matcher (shape, not value)."""
+    def _check_placeholders(self, placeholders) -> bool:
+        """Assert each placeholder field of val is present and satisfies its matcher (shape, not value).
+
+        Answers whether every one held, for a soft block, where a failure is collected and the caller
+        must still not record the value it failed on.
+        """
+        held = True
         for key, matcher in placeholders.items():
             present = key in self.val
             if not present or not _apply_matcher(matcher, self.val[key]):
+                held = False
                 actual = _safe_repr(self.val[key]) if present else "missing"
                 self.error(
                     f"Expected snapshot placeholder <{key}> to satisfy {_describe_matcher(matcher)}, but was {actual}."
                 )
+        return held
 
     def _compared_to_stored(self, stored: object, **options: object) -> Self:
         """`is_equal_to()` against what a snapshot stored, as an answer to the snapshot rather than the caller.
@@ -524,16 +564,68 @@ class SnapshotMixin(_MixinBase):
         finally:
             self._answering_another = answering
 
-    def _snapshot_stale(self, snapshot_value, *, ignore, include, tolerance, comparators) -> bool:
-        """Whether the stored snapshot no longer matches val, decided via a strict throwaway builder
-        (under soft/warn kinds ``self.is_equal_to`` would not raise)."""
-        try:
-            self.builder(self.val, "")._compared_to_stored(
-                snapshot_value, ignore=ignore, include=include, tolerance=tolerance, comparators=comparators
+    def _inline_recorded(self, expected: object, placeholders: object, options: dict[str, Any]) -> bool:
+        """Whether update mode took this run of `matches_inline()` as a value to write rather than to compare.
+
+        Every run under update mode is handed to the recorder, the ones that still match included, since
+        what one case asks to write has to suit every case reaching the call.  One whose placeholder fails
+        is taken too, with the failure reported and nothing recorded: it is no value to write.
+        """
+        if expected is _UNSET:
+            if _ci_mode_enabled():
+                self._refuse(
+                    "inline snapshot is empty and CI mode forbids recording it - record it locally with"
+                    " --assertpy2-snapshot-update and commit the source"
+                )
+            if not _update_enabled():
+                self._refuse("inline snapshot is empty; run --assertpy2-snapshot-update to record it")
+            if not self._rewriting():
+                self._refuse("inline snapshot is empty, and not_ cannot record one; record it without not_")
+            stale = True
+        elif self._rewriting():
+            stale = self._snapshot_stale(expected, **options)
+        else:
+            return False
+        if stale:
+            _inline_literal_or_raise(self.val)
+            if placeholders and not self._check_placeholders(placeholders):
+                return True
+        self._observed(creating=expected is _UNSET, stale=stale, options=options)
+        if stale:
+            warnings.warn(
+                "recorded inline snapshot: this run captured the value into the test source;"
+                " subsequent runs compare against it"
+                if expected is _UNSET
+                else "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
+                " subsequent runs compare against it",
+                SnapshotCreatedWarning if expected is _UNSET else SnapshotUpdatedWarning,
+                stacklevel=3,
             )
-        except AssertionError:
-            return True
-        return False
+        return stale
+
+    def _observed(self, *, creating: bool, stale: bool, options: dict[str, Any]) -> None:
+        """Hand this run of `matches_inline()` to the recorder, with the comparison it would pass by.
+
+        Options of plain data are copied as they are now, so the run can be asked again at the end of the
+        session.  Options holding a function, or ones that cannot be copied, are used as they are, and the
+        recorder asks that run only while it runs.
+        """
+        held = _inline.captured(options)
+        pure = not isinstance(held, _inline.Uncaptured) and not _calls_back(options)
+        compared = held if not isinstance(held, _inline.Uncaptured) and pure else options
+        _inline.observe(
+            _require_caller(inspect.currentframe()),
+            self.val,
+            creating=creating,
+            stale=stale,
+            accepts=lambda value, candidate: not _stale(self.builder, value, candidate, compared),
+            pure=pure,
+        )
+
+    def _snapshot_stale(self, snapshot_value, *, ignore, include, tolerance, comparators, rel=None) -> bool:
+        """Whether the stored snapshot no longer matches val."""
+        options = {"ignore": ignore, "include": include, "tolerance": tolerance, "rel": rel, "comparators": comparators}
+        return _stale(self.builder, self.val, snapshot_value, options)
 
     def snapshot(
         self,
@@ -543,6 +635,7 @@ class SnapshotMixin(_MixinBase):
         ignore: object = None,
         include: object = None,
         tolerance: float | None = None,
+        rel: float | None = None,
         comparators: dict[Any, Callable[[Any, Any], Any]] | None = None,
         placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = None,
     ) -> Self:
@@ -582,6 +675,8 @@ class SnapshotMixin(_MixinBase):
                 keys/fields) to compare, everything else ignored.
             tolerance (float | None): an absolute tolerance that widens ``==`` for every pair of real-number
                 leaves, as in ``is_equal_to()``.
+            rel (float | None): a tolerance relative to the larger of each pair of real-number leaves,
+                either of the two holding being enough, as in ``is_equal_to()``.
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
                 ``(actual, expected) -> bool`` predicate that decides every leaf it matches, as in
                 ``is_equal_to()``.
@@ -642,7 +737,8 @@ class SnapshotMixin(_MixinBase):
             SnapshotCreatedWarning: when this run captured a new snapshot instead of comparing
             SnapshotUpdatedWarning: when update mode overwrote a stale snapshot instead of failing
         """
-        _build_compare_config(tolerance, comparators)  # a bad tolerance must fail the capturing first run too
+        # a bad tolerance must fail the capturing first run too
+        _build_compare_config(tolerance, comparators, rel=rel)
         if placeholders:
             self._require_dict_like(self.val, name="val")  # placeholders address keys of a dict-like value
             for matcher in placeholders.values():
@@ -675,18 +771,19 @@ class SnapshotMixin(_MixinBase):
                 elif lineno in snap:
                     snapshot_value = snap[lineno]
                 else:
-                    self._forbid_creation_in_ci(snapname)
+                    self._forbid_creation(snapname)
                     snap[lineno] = stored_val
                     _save(snapname, snap)
 
                 if (
                     snapshot_value is not _UNSET
-                    and _update_enabled()
+                    and self._rewriting()
                     and self._snapshot_stale(
                         snapshot_value,
                         ignore=effective_ignore,
                         include=include,
                         tolerance=tolerance,
+                        rel=rel,
                         comparators=comparators,
                     )
                 ):
@@ -697,7 +794,7 @@ class SnapshotMixin(_MixinBase):
                         _save(snapname, snap)
                     updated = True
             else:
-                self._forbid_creation_in_ci(snapname)
+                self._forbid_creation(snapname)
                 _save(snapname, stored_val if id else {lineno: stored_val})
 
         if updated:
@@ -717,6 +814,7 @@ class SnapshotMixin(_MixinBase):
                     ignore=effective_ignore,
                     include=include,
                     tolerance=tolerance,
+                    rel=rel,
                     comparators=comparators,
                 )
             except AssertionFailure as mismatch:
@@ -742,6 +840,7 @@ class SnapshotMixin(_MixinBase):
         ignore: object = None,
         include: object = None,
         tolerance: float | None = None,
+        rel: float | None = None,
         comparators: dict[Any, Callable[[Any, Any], Any]] | None = None,
         placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = None,
     ) -> Self:
@@ -763,6 +862,8 @@ class SnapshotMixin(_MixinBase):
             ignore: key(s)/path(s) to skip in the comparison (as in ``is_equal_to``).
             include: restrict the comparison to these key(s)/path(s).
             tolerance: absolute numeric tolerance applied at every depth.
+            rel: numeric tolerance relative to the larger of each pair, applied at every depth; either
+                of the two holding is enough.
             comparators: per-type custom equality callables.
             placeholders: ``{key: matcher}`` for volatile fields - the key is ignored by the equality
                 comparison and its matcher asserted separately.
@@ -775,53 +876,34 @@ class SnapshotMixin(_MixinBase):
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
+        One call holds one literal: every case that reaches it under update mode has to pass against
+        the literal written there, or nothing is written and the run fails naming the call.  Under
+        ``not_`` nothing is recorded, since the literal would be the value the negation differs from.
+
         Raises:
             AssertionError: if val does not equal the recorded literal, or the snapshot is still empty
+            TypeError: if update mode has to rewrite an expected value that is not a literal written in
+                the call, such as a name or an unpacked argument
         """
         if placeholders:
             self._require_dict_like(self.val, name="val")  # placeholders address keys of a dict-like value
             for matcher in placeholders.values():
                 if not _is_matcher(matcher) and not callable(matcher):
                     raise TypeError("placeholder values must be Matcher instances or callables")
-        if expected is _UNSET:
-            if _ci_mode_enabled():
-                self._refuse(
-                    "inline snapshot is empty and CI mode forbids recording it - record it locally with"
-                    " --assertpy2-snapshot-update and commit the source"
-                )
-            if _update_enabled():
-                _inline_literal_or_raise(self.val)
-                caller = _require_caller(inspect.currentframe())
-                _inline.record_create(caller, self.val)
-                warnings.warn(
-                    "recorded inline snapshot: this run captured the value into the test source;"
-                    " subsequent runs compare against it",
-                    SnapshotCreatedWarning,
-                    stacklevel=2,
-                )
-                return self
-            self._refuse("inline snapshot is empty; run --assertpy2-snapshot-update to record it")
-
         effective_ignore = _combine_ignore(ignore, placeholders)
-        if _update_enabled() and self._snapshot_stale(
-            expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
-        ):
-            _inline_literal_or_raise(self.val)
-            caller = _require_caller(inspect.currentframe())
-            _inline.record_update(caller, self.val)
-            warnings.warn(
-                "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
-                " subsequent runs compare against it",
-                SnapshotUpdatedWarning,
-                stacklevel=2,
-            )
+        options: dict[str, Any] = {
+            "ignore": effective_ignore,
+            "include": include,
+            "tolerance": tolerance,
+            "rel": rel,
+            "comparators": comparators,
+        }
+        if self._inline_recorded(expected, placeholders, options):
             return self
         if placeholders:
             self._check_placeholders(placeholders)
         try:
-            return self._compared_to_stored(
-                expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
-            )
+            return self._compared_to_stored(expected, **options)
         except AssertionFailure as mismatch:
             # the stored snapshot lives in this very call, and updating rewrites it in place
             raise _rewrapped(
@@ -895,11 +977,11 @@ class SnapshotMixin(_MixinBase):
                 elif lineno in snap:
                     stored = snap[lineno]
                 else:
-                    self._forbid_creation_in_ci(snapname)
+                    self._forbid_creation(snapname)
                     snap[lineno] = contract
                     _save(snapname, snap)
 
-                if stored is not _UNSET and _update_enabled() and shape_diff(stored, contract):
+                if stored is not _UNSET and self._rewriting() and shape_diff(stored, contract):
                     if id:
                         _save(snapname, contract)
                     else:
@@ -907,7 +989,7 @@ class SnapshotMixin(_MixinBase):
                         _save(snapname, snap)
                     updated = True
             else:
-                self._forbid_creation_in_ci(snapname)
+                self._forbid_creation(snapname)
                 _save(snapname, contract if id else {lineno: contract})
 
         if updated:

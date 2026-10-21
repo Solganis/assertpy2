@@ -4,7 +4,7 @@ import datetime
 import numbers
 from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
-from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
+from ._engine._compare import _is_infinite, _is_nan, within_either
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds, require_integer
 from ._engine._require import _shown, argument, refuse, require_type
@@ -23,6 +23,15 @@ def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
     minutes, seconds = divmod(remainder, 60)
     fraction = f".{tolerance.microseconds:06d}" if tolerance.microseconds else ""
     return f"{hours}:{minutes:02d}:{seconds:02d}{fraction}"
+
+
+def _allowance(tolerance: object, rel: object) -> str:
+    """The tolerances a closeness was asked within, in the words of its message."""
+    relative = f"relative tolerance <{_capped_format(rel)}>"
+    if tolerance is None:
+        return relative
+    absolute = f"tolerance <{_capped_format(tolerance)}>"
+    return absolute if rel is None else f"{absolute} or {relative}"
 
 
 class NumericMixin(_MixinBase):
@@ -71,13 +80,13 @@ class NumericMixin(_MixinBase):
         """
         return self._holds(low, "ge", named or (low, "low")) and self._holds(high, "le", named or (high, "high"))
 
-    def _close(self, other, tolerance):
-        """Whether val is within *tolerance* of *other*, the same answer whichever of the two is val.
+    def _close(self, other, tolerance, rel):
+        """Whether val is within *tolerance* or *rel* of *other*, the same answer whichever of the two is val.
 
         A pair the ordering engine cannot order is refused, in the words the single relations use.
         """
         try:
-            return _within_tolerance(self.val, other, tolerance)
+            return within_either(self.val, other, tolerance, rel)
         except UnorderableError as unordered:
             self._refuse_unordered(unordered, other, "other")
 
@@ -568,7 +577,9 @@ class NumericMixin(_MixinBase):
     def is_close_to(
         self,
         other: SupportsFloat | SupportsIndex | datetime.datetime,
-        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta,
+        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta | None = None,
+        *,
+        rel: SupportsFloat | SupportsIndex | None = None,
     ) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 
@@ -576,15 +587,21 @@ class NumericMixin(_MixinBase):
         holding is enough, so the answer is the same whichever operand is val.  An infinity is close only
         to itself, whatever the tolerance, and a NaN to nothing.
 
+        ``rel`` is a tolerance relative to the larger of the two, as `math.isclose` scales it, so it reads
+        the same whichever operand is val.  Given beside ``tolerance``, either holding is enough, which is
+        what keeps a value near zero, where any fraction of its size is tiny, within reach.
+
         Args:
             other (object): the other value, expected to be close to val within tolerance
-            tolerance (object): the tolerance, zero or more
+            tolerance (object): the absolute tolerance, zero or more
+            rel (object): the tolerance as a fraction of the larger of the two, zero or more; for numbers
 
         Examples:
             Usage:
 
                 assert_that(123).is_close_to(100, 25)
                 assert_that(123.4).is_close_to(123, 0.5)
+                assert_that(101.5).is_close_to(100, rel=0.02)
 
             For dates, works as expected:
 
@@ -601,14 +618,15 @@ class NumericMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** close to other within tolerance
             TypeError: if val, other or tolerance is not a number (or a ``datetime`` and a ``timedelta``),
-                or is a bool, or if a numpy duration meets a number
-            ValueError: if tolerance is negative or NaN
+                or is a bool, or if a numpy duration meets a number, or if neither tolerance nor rel is given,
+                or rel is given for a datetime
+            ValueError: if tolerance or rel is negative or NaN
         """
-        self._validate_close_to_args(self.val, other, tolerance)
+        self._validate_close_to_args(self.val, other, tolerance, rel)
 
         # read through `math.isnan`, which converts the value: the gate the capable facade keys this on
         nan = not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other))
-        if nan or not self._close(other, tolerance):
+        if nan or not self._close(other, tolerance, rel):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_capped_format(self.val)}> to be close to"
@@ -619,16 +637,18 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_capped(self.val)}> to be close to <{_capped_format(other)}> within tolerance "
-                    f"<{_capped_format(tolerance)}>, but was not.",
-                    expected=(other, tolerance),
+                    f"Expected <{_capped(self.val)}> to be close to <{_capped_format(other)}> within"
+                    f" {_allowance(tolerance, rel)}, but was not.",
+                    expected=(other, tolerance) if rel is None else (other, tolerance, rel),
                 )
         return self
 
     def is_not_close_to(
         self,
         other: SupportsFloat | SupportsIndex | datetime.datetime,
-        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta,
+        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta | None = None,
+        *,
+        rel: SupportsFloat | SupportsIndex | None = None,
     ) -> Self:
         """Asserts that val is numeric and is *not* close to other within tolerance.
 
@@ -637,7 +657,8 @@ class NumericMixin(_MixinBase):
 
         Args:
             other (object): the other value
-            tolerance (object): the tolerance, zero or more
+            tolerance (object): the absolute tolerance, zero or more
+            rel (object): the tolerance as a fraction of the larger of the two, zero or more; for numbers
 
         Examples:
             Usage:
@@ -651,12 +672,13 @@ class NumericMixin(_MixinBase):
         Raises:
             AssertionError: if val **is** close to other within tolerance
             TypeError: if val, other or tolerance is not a number (or a ``datetime`` and a ``timedelta``),
-                or is a bool, or if a numpy duration meets a number
-            ValueError: if tolerance is negative or NaN
+                or is a bool, or if a numpy duration meets a number, or if neither tolerance nor rel is given,
+                or rel is given for a datetime
+            ValueError: if tolerance or rel is negative or NaN
         """
-        self._validate_close_to_args(self.val, other, tolerance)
+        self._validate_close_to_args(self.val, other, tolerance, rel)
 
-        if self._close(other, tolerance):
+        if self._close(other, tolerance, rel):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_capped_format(self.val)}> to not be close to"
@@ -666,7 +688,7 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_capped(self.val)}> to not be close to <{_capped_format(other)}> within tolerance "
-                    f"<{_capped_format(tolerance)}>, but was.",
+                    f"Expected <{_capped(self.val)}> to not be close to <{_capped_format(other)}> within"
+                    f" {_allowance(tolerance, rel)}, but was.",
                 )
         return self

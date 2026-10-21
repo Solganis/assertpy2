@@ -2416,9 +2416,15 @@ class TestTheEqualityProbeAsksWhatTheOperatorWouldAsk:
 class TestAnInfiniteWindowStillReadsItsTolerance:
     """(inf, inf) is the right window only where the tolerance is one, or an infinity matches anything."""
 
-    @pytest.mark.parametrize("tolerance", [object(), "wide", None], ids=["object", "string", "none"])
+    @pytest.mark.parametrize("tolerance", [object(), "wide"], ids=["object", "string"])
     def test_a_tolerance_that_is_not_a_number_has_no_window(self, tolerance):
         assert_that(match.close_to(float("inf"), tolerance).matches(float("inf"))).is_false()
+
+    def test_no_tolerance_and_no_rel_is_refused_where_it_is_written(self):
+        refused = assert_that(match.close_to).raises(TypeError).when_called_with(float("inf"), None).value
+        assert_that(refused).is_equal_to(
+            "given tolerance arg must be a number, or a rel given instead, but was <None> (NoneType)"
+        )
 
     def test_an_infinity_against_itself_within_a_real_tolerance_holds(self):
         assert_that(match.close_to(float("inf"), 0.5).matches(float("inf"))).is_true()

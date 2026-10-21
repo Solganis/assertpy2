@@ -6,6 +6,12 @@ from assertpy2 import AssertionFailure, assert_that, match
 from assertpy2._inline import is_literalable
 
 
+def _written(filename, start, end, text):
+    """A row as one process ships it: a call settled on *text*, every run of it taking that literal, located
+    in the file as it is now."""
+    return (filename, start, end, text, True, [text], [_inline._digest(_inline._read(filename)[0])], text)
+
+
 class TestCompare:
     def test_dict_pass_and_chains(self):
         assert_that({"id": 1, "name": "Alice"}).matches_inline({"id": 1, "name": "Alice"}).is_type_of(dict)
@@ -117,9 +123,9 @@ class TestLiteralable:
         source.write_bytes(b"a = matches_inline()\r\nb = 1\r\n")
         normalized = "a = matches_inline()\nb = 1\n"
         insert_at = normalized.index("matches_inline(") + len("matches_inline(")
-        _inline._RECORDS.clear()
-        _inline._RECORDS.append((str(source), insert_at, insert_at, "42"))
-        _inline.apply_inline_records()
+        assert_that(
+            _inline.apply_inline_records([_written(str(source), insert_at, insert_at, "42")], str(tmp_path))
+        ).is_empty()
         assert_that(source.read_bytes()).is_equal_to(b"a = matches_inline(42)\r\nb = 1\r\n")
 
 
@@ -203,10 +209,12 @@ class TestApplyRecordsWithSeveralEdits:
         text = source.read_text(encoding="utf-8")
         first = text.index("matches_inline(") + len("matches_inline(")
         second = text.index("matches_inline(", first) + len("matches_inline(")
-        _inline._RECORDS.clear()
-        _inline._RECORDS.append((str(source), first, first, "'first'"))
-        _inline._RECORDS.append((str(source), second, second, "'second'"))
-        _inline.apply_inline_records()
+        assert_that(
+            _inline.apply_inline_records(
+                [_written(str(source), first, first, "'first'"), _written(str(source), second, second, "'second'")],
+                str(tmp_path),
+            )
+        ).is_empty()
         assert_that(source.read_text(encoding="utf-8")).is_equal_to(
             "a = matches_inline('first')\nb = matches_inline('second')\n"
         )
@@ -216,9 +224,9 @@ class TestApplyRecordsWithSeveralEdits:
         source = tmp_path / "u.py"
         source.write_text("a = matches_inline()\n", encoding="utf-8", newline="")
         insert_at = source.read_text(encoding="utf-8").index("matches_inline(") + len("matches_inline(")
-        _inline._RECORDS.clear()
-        _inline._RECORDS.append((str(source), insert_at, insert_at, "'ключ'"))
-        _inline.apply_inline_records()
+        assert_that(
+            _inline.apply_inline_records([_written(str(source), insert_at, insert_at, "'ключ'")], str(tmp_path))
+        ).is_empty()
         assert_that(source.read_bytes()).is_equal_to("a = matches_inline('ключ')\n".encode())
 
 

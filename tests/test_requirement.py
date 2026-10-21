@@ -61,7 +61,7 @@ class TestWhatWasAsked:
 
     def test_the_parameters_are_keyed_by_name(self):
         asked = assert_that(1).check().is_close_to(9, 0.1).requirement
-        assert_that(asked.parameters).is_equal_to({"other": 9, "tolerance": 0.1})
+        assert_that(asked.parameters).is_equal_to({"other": 9, "tolerance": 0.1, "rel": None})
 
     def test_two_spellings_of_one_call_read_the_same(self):
         """Bound values, not the call as written, so a consumer groups them as the one requirement."""

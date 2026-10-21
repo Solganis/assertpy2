@@ -1,9 +1,12 @@
 import collections
 import decimal
+import itertools
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
-from assertpy2 import AssertionFailure, assert_that
+from assertpy2 import AssertionFailure, BaseMatcher, assert_that, match
 
 
 def test_is_length():
@@ -17,6 +20,43 @@ def test_is_length_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_length(4)
     assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b', 'c']> to be of length <4>, but was <3>.")
+
+
+class TestALengthMatcher:
+    """A matcher for the length, as `has_length(greater_than(2))` reads in PyHamcrest.
+
+    The size helpers cover one bound each, and a range or a composed condition needed two assertions.
+    """
+
+    def test_the_length_is_what_the_matcher_is_asked_about(self):
+        assert_that(["a", "b", "c"]).is_length(match.greater_than(2)).is_length(match.between(1, 3))
+        assert_that("foo").satisfies(match.has_length(match.less_than(4)) & match.is_length(match.is_odd()))
+
+    def test_a_failure_names_the_condition_and_the_length(self):
+        with pytest.raises(AssertionError) as failure:
+            assert_that(["a"]).is_length(match.greater_than(2))
+        assert_that(str(failure.value)).is_equal_to(
+            "Expected <['a']> to have a length that is a value greater than <2>, but was <1>."
+        )
+
+    def test_a_composed_condition_says_which_part_failed(self):
+        with pytest.raises(AssertionError) as failure:
+            assert_that(["a"]).is_length(match.greater_than(2) & match.less_than(9))
+        assert_that(str(failure.value)).is_equal_to(
+            "Expected <['a']> to have a length that is (a value greater than <2> and a value less than <9>),"
+            " but was <1>: <1> did not satisfy: a value greater than <2> (was <1>)."
+        )
+
+    def test_the_matcher_describes_the_condition(self):
+        assert_that(match.has_length(match.greater_than(2)).describe()).is_equal_to(
+            "a value with a length that is a value greater than <2>"
+        )
+        assert_that(match.is_length(match.greater_than(2)).matches([1])).is_false()
+
+    def test_a_value_with_no_length_is_refused_or_not_matched_as_before(self):
+        with pytest.raises(TypeError):
+            assert_that(5).is_length(match.greater_than(0))
+        assert_that(match.has_length(match.greater_than(0)).matches(iter([1]))).is_false()
 
 
 def test_is_length_between():
@@ -645,6 +685,85 @@ class TestContainsExactlyInAnyOrder:
         assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
 
+def _holds(wanted, held):
+    return wanted is held or wanted == held
+
+
+def _best(held, wanted):
+    """The size of a largest pairing, by trying every assignment: the oracle for small sides."""
+    if len(held) < len(wanted):
+        return max(
+            sum(_holds(one, item) for one, item in zip(arranged, held, strict=True))
+            for arranged in itertools.permutations(wanted, len(held))
+        )
+    return max(
+        sum(_holds(one, item) for one, item in zip(wanted, arranged, strict=True))
+        for arranged in itertools.permutations(held, len(wanted))
+    )
+
+
+class TestAnyOrderPairsRatherThanWalking:
+    """Items that cannot be counted were matched first-fit, in the order they were written.
+
+    Against ``[1, 5]``, ``match.greater_than(0)`` written first took the 1, and the ``1`` after it found none
+    left: "<1> is held 1 time and was asked for 2 times", while the other order of the same items passed.
+    """
+
+    def test_a_matcher_written_before_the_item_it_could_take(self):
+        assert_that([1, 5]).contains_exactly_in_any_order(match.greater_than(0), 1)
+        assert_that([1.0, 3.0]).contains_exactly_in_any_order(pytest.approx(1.0, abs=5), 1.0)
+
+    def test_every_order_of_both_sides_answers_as_trying_every_assignment_does(self):
+        pool = [match.greater_than(0), match.equal_to(1), match.less_than(6), 5, 9, match.greater_than(6)]
+        for held_size, wanted_size in itertools.product((1, 2, 3), repeat=2):
+            for held in itertools.permutations([1, 5, 9], held_size):
+                for wanted in itertools.permutations(pool, wanted_size):
+                    best = _best(held, wanted)
+                    try:
+                        assert_that(list(held)).contains_exactly_in_any_order(*wanted)
+                    except AssertionFailure as failure:
+                        entries = failure.diff.entries
+                        assert_that(best == held_size == wanted_size).described_as(f"{held} {wanted}").is_false()
+                        assert_that([entry.path for entry in entries].count("extra")).is_equal_to(held_size - best)
+                        assert_that([entry.path for entry in entries].count("missing")).is_equal_to(wanted_size - best)
+                    else:
+                        assert_that(best == held_size == wanted_size).described_as(f"{held} {wanted}").is_true()
+
+    def test_a_pass_costs_the_first_fit_walk_alone(self):
+        class Counted:
+            calls = 0
+            __hash__ = None
+
+            def __init__(self, value):
+                self.value = value
+
+            def __eq__(self, other):
+                Counted.calls += 1
+                return isinstance(other, Counted) and other.value == self.value
+
+        assert_that([Counted(i) for i in range(50)]).contains_exactly_in_any_order(*(Counted(i) for i in range(50)))
+        assert_that(Counted.calls).is_equal_to(50)
+
+    def test_no_pair_is_asked_twice_on_the_way_to_a_pairing(self):
+        asked = []
+
+        class Positive(BaseMatcher):
+            def matches(self, value):
+                asked.append(value)
+                return value > 0
+
+            def describe(self):
+                return "a positive value"
+
+        assert_that([1, 5]).contains_exactly_in_any_order(Positive(), 1)
+        assert_that(asked).is_equal_to([1, 5])
+
+    def test_the_order_message_names_the_place_once_the_items_pair(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 5]).contains_exactly(match.greater_than(0), 1)
+        assert_that(str(failure.value)).contains("Same items, but the order differs at index 1.")
+
+
 class TestContainsInOrder:
     def test_all_present(self):
         assert_that([1, 5, 2, 8, 3]).contains_in_order(1, 2, 3)
@@ -866,3 +985,28 @@ class TestDoesNotContainAcceptsMatchers:
         from assertpy2 import match
 
         assert_that(x for x in [1, 2, 3]).does_not_contain(match.greater_than(99), 9)
+
+
+_WANTED = st.one_of(
+    st.integers(0, 4),
+    st.builds(match.greater_than, st.integers(0, 4)),
+    st.builds(match.less_than, st.integers(0, 4)),
+    st.builds(match.equal_to, st.integers(0, 4)),
+)
+
+
+class TestAnyOrderOverAnyItems:
+    @settings(deadline=None)
+    @example(held=[1, 5], wanted=[match.greater_than(0), 1])
+    @given(held=st.lists(st.integers(0, 5), max_size=4), wanted=st.lists(_WANTED, min_size=1, max_size=4))
+    def test_the_verdict_and_the_counts_are_the_largest_pairing(self, held, wanted):
+        best = _best(held, wanted) if held else 0
+        try:
+            assert_that(list(held)).contains_exactly_in_any_order(*wanted)
+        except AssertionFailure as failure:
+            paths = [entry.path for entry in failure.diff.entries]
+            assert_that(best == len(held) == len(wanted)).is_false()
+            assert_that(paths.count("extra")).is_equal_to(len(held) - best)
+            assert_that(paths.count("missing")).is_equal_to(len(wanted) - best)
+        else:
+            assert_that(best == len(held) == len(wanted)).is_true()

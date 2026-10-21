@@ -312,17 +312,36 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "pivot-on-a-negated-poll": _NOT_CALLABLE,
     "expectation-on-a-negated-poll": _NOT_CALLABLE,
     "poll-on-a-sync-poll": _NOT_THE_CHAINS_VALUE,
+    # two rungs since a tuple or a union is taken, so ty and pyrefly answer that no rung matched
     "bare-type-expectation-on-a-poll": {
-        "ty": frozenset({"invalid-argument-type"}),
+        "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset(),
         "pyright": frozenset(),
         "pyrefly": frozenset(),
     },
     "expectation-of-a-class-that-is-no-exception": {
-        "ty": frozenset({"invalid-argument-type"}),
+        "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"type-var"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
+    },
+    "expectation-of-classes-that-are-no-exceptions": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
+    },
+    "polled-classes-that-are-no-exceptions": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
+    },
+    "warning-classes-that-are-no-warnings": {
+        "ty": frozenset({"invalid-argument-type"}),
+        "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType"}),
-        "pyrefly": frozenset({"bad-specialization"}),
+        "pyrefly": frozenset({"bad-argument-type"}),
     },
     "poll-on-an-async-poll": _NOT_THE_CHAINS_VALUE,
     # the call ladder: the expectation views carry `when_called_with()`, and each landing carries what
@@ -351,6 +370,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "array-as-a-scalar-operand": {},
     "bool-as-a-closeness-tolerance": {},
     "bool-as-a-closeness-operand": {},
+    # a datetime is declared with `rel` as nothing but `None`, so the argument is refused as one
+    "relative-closeness-of-moments": _ARGUMENT,
 }
 
 SPLIT: frozenset[str] = frozenset(
