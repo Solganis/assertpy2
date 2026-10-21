@@ -508,8 +508,8 @@ rather than the `0` above. The placeholder governs the comparison, not what is w
 
 Recording needs the `[inline]` extra (`pip install assertpy2[inline]`). The **comparison** does not.
 Below Python 3.11 a call written inside an `assert` statement, which pytest rewrites, cannot be found
-to record, and neither can one given its value through `**`. Write `matches_inline()` on a line of its
-own there, with its literal in the call.
+to record, and one given its value through `**` may not be found either, depending on the platform.
+Write `matches_inline()` on a line of its own there, with its literal in the call.
 
 It is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting.

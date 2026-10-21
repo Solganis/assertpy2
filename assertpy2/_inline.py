@@ -205,7 +205,7 @@ def observe(
     if not isinstance(call, ast.Call):  # pragma: no cover - reached below 3.11 alone, which the coverage run is not
         raise RuntimeError(
             "could not locate the matches_inline() call to record the inline snapshot; below Python 3.11 a call"
-            " inside an assert statement pytest rewrote, or one given its value through **, cannot be found,"
+            " inside an assert statement pytest rewrote, or one given its value through **, may not be found,"
             " so write it on a line of its own with its literal"
         )
     atok = source.asttokens()

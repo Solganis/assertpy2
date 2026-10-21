@@ -574,8 +574,10 @@ class TestTheRecorderReadsTheCallAsWritten:
         assert_that(helper.read_text(encoding="utf-8")).contains("matches_inline()\n")
 
     @pytest.mark.skipif(sys.version_info >= (3, 11), reason="from 3.11 the call is found and refused as unpacked")
-    def test_below_3_11_a_double_star_call_is_not_found(self):
-        with pytest.raises(RuntimeError, match=r"or one given its value through \*\*, cannot be found"):
+    def test_below_3_11_a_double_star_call_is_refused_found_or_not(self):
+        # executing finds it on Linux and not on Windows, with the same versions of both packages
+        refused = r"its value through \*\*, may not be found|its expected value is passed through unpacking"
+        with pytest.raises((RuntimeError, TypeError), match=refused):
             assert_that({"a": 2}).matches_inline(**_EXPECTED_BY_NAME)
         assert_that(_inline._SEEN).is_empty()
 
@@ -922,7 +924,7 @@ class TestARealUpdateRun:
             capture_output=True,
             text=True,
             timeout=180,
-            env={**os.environ, "PYTHONPATH": _CHECKOUT},
+            env={**os.environ, "PYTHONPATH": _CHECKOUT, "ASSERTPY2_SNAPSHOT_CI": "0"},
         )
 
     @staticmethod
