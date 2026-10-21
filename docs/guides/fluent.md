@@ -23,7 +23,8 @@ assert_that(iter([1, 2, 3])).contains(1).does_not_contain(9).is_sorted()
 its own assertions read, and nothing else:
 
 - What you take from the iterator yourself the chain does not see, whether through `val`, through
-  another name for it, or inside a function you pass to an assertion.
+  another name for it, inside a function you pass to an assertion, or in a method of the iterator's
+  own class, an `__eq__` or `__len__` that reads it when an assertion or a matcher compares or measures it.
 - A matcher that reads the items, such as `match.contains()` or `match.each_item()`, is handed the
   items the chain keeps, the same for every link and for every matcher combined with it. One that asks
   about the value itself, its type, identity, length or an attribute, is asked about the iterator, as
@@ -34,10 +35,10 @@ its own assertions read, and nothing else:
   that asks about the value. Where a link had read a part of the value by then, a read past that part
   is refused with a `TypeError`, since what the predicate took can no longer be told: assert on
   `list(...)` of the value instead.
-- A matcher that is an operand of a comparison, as in `is_equal_to(match.contains(1))` or
-  `is_in(...)`, is handed the iterator as `==` hands it, and one that reads items takes them from it
-  beside the chain. Ask it through `satisfies()` instead: there `match.equal_to(match.contains(1))` is
-  the question `match.contains(1)` asks, and gets the chain's items.
+- A matcher that is an operand of a comparison, as in `is_equal_to(match.contains(1))`,
+  `match.equal_to(match.contains(1))` or `is_in(...)`, is handed the iterator as `==` hands it, and one
+  that reads items takes them from it beside the chain, as a predicate does. Pass `match.contains(1)`
+  to `satisfies()` itself to have it read the chain's items.
 - A value that is not its own iterator and hands out one shared iterator each time it is asked is
   read once, as before.
 

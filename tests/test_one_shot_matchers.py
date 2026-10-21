@@ -107,10 +107,11 @@ def _verdict(ask):
 
 def _asked_everywhere(matcher, items):
     """The verdict of every place that hands *matcher* a value, each over a fresh one-shot iterator."""
+    return _everywhere(matcher, lambda: iter(list(items)))
 
-    def fresh():
-        return iter(list(items))
 
+def _everywhere(matcher, fresh):
+    """The verdict of every place that hands *matcher* a value, each over a value *fresh* makes."""
     never = match.is_none()
     return {
         "satisfies": _verdict(lambda: assert_that(fresh()).satisfies(matcher)),
@@ -178,6 +179,52 @@ class TestABuiltInTypeCheckTakesNothing:
         assert_that(all(kind.reads_items for kind in _WALKERS)).is_true()
 
 
+class _OwnEquality:
+    """A value whose `__eq__` answers every operand, a matcher included, rather than leaving it to the other side."""
+
+    def __eq__(self, other):
+        return isinstance(other, _OwnEquality)
+
+    __hash__ = object.__hash__
+
+    def __repr__(self):
+        return "own"
+
+
+class _Deferring:
+    """A value whose `__eq__` leaves a foreign operand to the other side."""
+
+    def __eq__(self, other):
+        return True if isinstance(other, _Deferring) else NotImplemented
+
+    __hash__ = object.__hash__
+
+    def __repr__(self):
+        return "deferring"
+
+
+class _Yes:
+    """A matcher by its three methods alone, with no `__eq__` of its own: `==` against it is identity."""
+
+    def matches(self, value):
+        return True
+
+    def describe(self):
+        return "anything"
+
+    def describe_mismatch(self, value):
+        return "never"
+
+
+class _HoldsTwo:
+    """No matcher: equal to an iterable that holds 2, read through its own `__eq__`."""
+
+    def __eq__(self, other):
+        return 2 in other
+
+    __hash__ = object.__hash__
+
+
 class _IsAnIterator(BaseMatcher):
     """A matcher of somebody else's that asks about the value itself, and says so."""
 
@@ -213,24 +260,52 @@ class TestAMatcherOfSomebodyElses:
             chain.contains(3)
 
 
-class TestEqualityToAMatcherIsThatMatcher:
-    """`equal_to(m)` asks *m* through `BaseMatcher.__eq__`, so it is handed what *m* would be handed."""
+_HANDING_ON = {
+    "walker": (lambda: match.equal_to(match.contains(2)), (True, False)),
+    "composite": (lambda: match.equal_to(match.all_of(match.contains(2))), (True, False)),
+    "negated": (lambda: match.not_(match.equal_to(match.contains(9))), (True, True)),
+    "among": (lambda: match.is_in(match.contains(2)), (True, False)),
+    "comparator": (
+        lambda: match.equal_to([2], comparators={type(iter([])): lambda actual, expected: 2 in actual}),
+        (True, False),
+    ),
+    "operand": (lambda: match.equal_to(_HoldsTwo()), (True, False)),
+    "operand among": (lambda: match.is_in(_HoldsTwo()), (True, False)),
+}
+"""Built-in matchers that hand a value on through `==` to code of the caller's, and what they say over 1, 2, 3 and
+over nothing."""
+
+
+class TestEqualityToAMatcherIsItsEquality:
+    """`equal_to(m)` is `value == m` wherever it is asked: the value's own `__eq__`, then `BaseMatcher.__eq__`."""
 
     @pytest.mark.parametrize(
-        "build",
-        [
-            lambda: match.equal_to(match.contains(1)),
-            lambda: match.equal_to(match.all_of(match.contains(1))),
-            lambda: match.not_(match.equal_to(match.contains(9))),
-        ],
-        ids=["walker", "composite", "negated"],
+        "value",
+        [_OwnEquality(), _Deferring(), 5, "text", None, [1]],
+        ids=["own", "deferring", "int", "str", "none", "list"],
     )
-    def test_the_items_it_reads_are_the_chain_s(self, build):
-        value = _Counting([1, 2])
-        chain = assert_that(value)
-        assert_that(chain.check().satisfies(build()).passed).is_true()
-        assert_that(chain.check().contains(1).passed).is_true()
-        assert_that(value.taken).is_equal_to(2)
+    @pytest.mark.parametrize(
+        "inner",
+        [match.is_not_none(), match.all_of(match.is_not_none()), _Yes(), match.is_instance_of(_OwnEquality)],
+        ids=["leaf", "composite", "duck", "type"],
+    )
+    def test_every_entry_point_answers_as_equality_does(self, value, inner):
+        answers = _everywhere(match.equal_to(inner), lambda: value)
+        assert_that(answers).described_as(f"{value!r} == {inner!r}").is_equal_to(
+            dict.fromkeys(answers, bool(value == inner))
+        )
+
+    @pytest.mark.parametrize(("build", "said"), list(_HANDING_ON.values()), ids=list(_HANDING_ON))
+    def test_over_a_fresh_one_shot_value_every_entry_point_answers_as_said(self, build, said):
+        for items, verdict in zip(((1, 2, 3), ()), said, strict=True):
+            answers = _asked_everywhere(build(), items)
+            assert_that(answers).described_as(f"over {items}").is_equal_to(dict.fromkeys(answers, verdict))
+
+    @pytest.mark.parametrize(("build", "said"), list(_HANDING_ON.values()), ids=list(_HANDING_ON))
+    def test_over_a_one_shot_value_it_is_handed_the_value_as_a_predicate_is(self, build, said):
+        chain = assert_that(iter([1, 2, 3])).starts_with(1).satisfies(build())
+        with pytest.raises(TypeError, match="a predicate was handed after a part of it was read"):
+            chain.contains(3)
 
     def test_equality_to_a_matcher_of_the_value_itself_is_handed_the_value(self):
         assert_that(match.equal_to(match.is_instance_of(Iterator)).matches(iter([1]))).is_true()
@@ -318,9 +393,6 @@ class TestEqualityToAMatcherIsThatMatcher:
         built = Never(match.is_none())
         assert_that(match.any_of(built).matches(5)).is_false()
         assert_that(assert_that(5).check().satisfies(match.all_of(built)).passed).is_false()
-
-    def test_with_options_it_is_an_object_reader_of_its_own(self):
-        assert_that(_impls._asked(match.equal_to(match.contains(1), ignore="x"))).is_instance_of(_impls.EqualToMatcher)
 
 
 class _Holding(BaseMatcher):

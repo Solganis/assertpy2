@@ -357,10 +357,19 @@ class _OfTheValueItself(BaseMatcher):
     Its type, identity, truthiness, length, an attribute, its equality to an operand.  A one-shot
     iterator is handed to it as it is, and without the guard a predicate gets, which refuses the links
     after it once a part of the value was read: nothing here walks what it is handed.  A subclass defined
-    elsewhere gets the guard, since its `matches()` may walk it.
+    elsewhere gets the guard, since its `matches()` may walk it, and so does one whose operand is code of
+    the caller's, an operand `==` hands the value to or a comparator (`_hands_the_value_on`).
     """
 
     reads_items: ClassVar[bool] = False
+
+    def _hands_the_value_on(self) -> bool:
+        """Whether code of the caller's is handed the value: the `__eq__` of an operand, or a comparator.
+
+        A built-in operand (`NON_MATCHER_TYPES`) compares a foreign value without reading it.  Any other one,
+        a matcher among them, is asked through its own `__eq__`, which may walk the value.
+        """
+        return False
 
 
 _UNREAD: Final = object()
@@ -369,20 +378,6 @@ _UNREAD: Final = object()
 def _reads_items(matcher: object) -> bool:
     """Whether *matcher* is handed a one-shot value's items rather than the value: what `reads_items` says, else so."""
     return getattr(type(matcher), "reads_items", True) is not False
-
-
-def _asked(matcher: Matcher[Any]) -> Matcher[Any]:
-    """The matcher that answers for *matcher*: plain `equal_to(m)` is *m*'s question, through `BaseMatcher.__eq__`.
-
-    The built-in class only: a subclass may answer otherwise, and is asked as it is.
-
-    So it is handed what *m* would be, through the same reader and the same guard: as an object reader of
-    its own, `equal_to(contains(1))` took items past the chain's, and `equal_to(m)` around a matcher of
-    somebody else's was handed the iterator without the guard *m* alone gets.
-    """
-    while type(matcher) is EqualToMatcher and matcher.plain and _is_matcher(matcher.expected):
-        matcher = matcher.expected
-    return matcher
 
 
 class _ReadOnce:
@@ -417,7 +412,11 @@ class _ReadOnce:
         """What a matcher that is not a composite is asked about."""
         if _reads_items(matcher):
             return self.items()
-        if self._itself is None or (isinstance(matcher, _OfTheValueItself) and type(matcher).__module__ == __name__):
+        if self._itself is None or (
+            isinstance(matcher, _OfTheValueItself)
+            and type(matcher).__module__ == __name__
+            and not matcher._hands_the_value_on()
+        ):
             return self.value
         return self._itself()
 
@@ -428,8 +427,6 @@ class _ReadOnce:
 
 def _verdict_of(matcher: Matcher[Any], read: _ReadOnce) -> bool:
     """`matches()` of *matcher*, asked about the value *read* holds as that matcher should see it."""
-    if type(matcher) is EqualToMatcher:
-        matcher = _asked(matcher)
     if isinstance(matcher, _COMPOSITES) and _composed(matcher):
         return matcher._holds(read)
     return bool(verdict(matcher.matches(read.handed(matcher)), subject="the matcher"))
@@ -441,8 +438,6 @@ def _outcome_of(matcher: Matcher[Any], read: _ReadOnce) -> MatchResult | None:
     One look through `evaluate()` where the matcher has its own, and otherwise the verdict from
     `matches()` and the reason after it, so a passing value builds no result at all.
     """
-    if type(matcher) is EqualToMatcher:
-        matcher = _asked(matcher)
     if _has_own_evaluate(matcher):
         if isinstance(matcher, _COMPOSITES) and _composed(matcher):
             outcome = matcher._evaluated(read)
@@ -467,8 +462,6 @@ def _failure(matcher: Matcher[Any], read: _ReadOnce) -> str | None:
     One look per leaf, through `evaluate()` where the leaf has its own, for the reason in `_refused`: a
     matcher over a one-shot value answers a second call from what the first walk left.
     """
-    if type(matcher) is EqualToMatcher:
-        matcher = _asked(matcher)
     if isinstance(matcher, _COMPOSITES) and _composed(matcher):
         held, failure = matcher._decided(read)
         return None if held else failure or matcher.describe()
@@ -668,6 +661,9 @@ class EqualToMatcher(_OfTheValueItself):
             if options or strict_types
             else None
         )
+
+    def _hands_the_value_on(self) -> bool:
+        return type(self.expected) not in NON_MATCHER_TYPES or bool(self.config is not None and self.config.comparators)
 
     def matches(self, value: Any) -> bool:
         if self.plain:
@@ -1204,6 +1200,9 @@ class IsInMatcher(_OfTheValueItself):
         self.values = values
         broadcasting = any(_sequence_or_numpy(candidate) for candidate in values)
         self._candidates: tuple[object, ...] | _SearchedByMember = _SearchedByMember(values) if broadcasting else values
+
+    def _hands_the_value_on(self) -> bool:
+        return any(type(candidate) not in NON_MATCHER_TYPES for candidate in self.values)
 
     def matches(self, value: Any) -> bool:
         try:

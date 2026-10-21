@@ -166,7 +166,6 @@ _ARGUMENTS: list[tuple[Any, ...]] = [
     (match.greater_than(0),),
     (match.contains(1),),
     (match.is_not_none() & (match.is_instance_of(list) | match.contains(9)),),
-    (match.equal_to(match.contains(1)),),
     (match.equal_to(1), match.equal_to(2), match.equal_to(3)),
     (int,),
     ("a",),

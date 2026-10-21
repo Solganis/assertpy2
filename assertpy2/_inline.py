@@ -149,6 +149,20 @@ def _expected_of(call: ast.Call) -> ast.expr | None:
 
 
 def _is_literal(node: ast.expr) -> bool:
+    """Whether *node* is a literal an update may replace: what `ast.literal_eval` reads, and what `_format_literal`
+    writes besides, ``set()`` and ``frozenset(...)`` of a literal, anywhere inside one."""
+    if isinstance(node, ast.Call):
+        return (
+            isinstance(node.func, ast.Name)
+            and node.func.id in ("set", "frozenset")
+            and not node.keywords
+            and len(node.args) <= 1
+            and all(_is_literal(argument) for argument in node.args)
+        )
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_is_literal(item) for item in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(key is not None and _is_literal(key) for key in node.keys) and all(map(_is_literal, node.values))
     try:
         ast.literal_eval(node)
     except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):

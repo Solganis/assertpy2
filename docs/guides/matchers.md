@@ -476,6 +476,8 @@ built-in matchers that ask about the value, `is_instance_of()`, `is_type_of()`, 
 `equal_to()` and the rest, say `False`. A matcher that says `False` and walks the value anyway takes the
 items from the iterator itself, so after a link that read a part of it the links that follow are
 refused, as they are after a predicate, and so is a matcher combined with it that reads the items.
+`equal_to()` or `is_in()` holding a matcher, and `equal_to()` given `comparators=`, are treated the
+same way, since `==` hands the value on to that code of yours.
 
 ### Registering one on the `match` namespace
 

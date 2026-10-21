@@ -195,6 +195,29 @@ class TestGuards:
         assert_that(_inline.is_literalable({"a": datetime.date(2020, 1, 1)})).is_false()
         assert_that(_inline.is_literalable([1, object()])).is_false()
 
+    @pytest.mark.parametrize(
+        ("source", "literal"),
+        [
+            ("frozenset({1, 2})", True),
+            ("frozenset()", True),
+            ("set()", True),
+            ("[frozenset([1])]", True),
+            ("{'k': frozenset({1})}", True),
+            ("(1, -2.5, 'a', None)", True),
+            ("frozenset(x)", False),
+            ("frozenset({1}, 2)", False),
+            ("frozenset(iterable={1})", False),
+            ("sorted({1})", False),
+            ("module.frozenset({1})", False),
+            ("{**base}", False),
+            ("{'k': x}", False),
+            ("[*items]", False),
+            ("NAME", False),
+        ],
+    )
+    def test_an_update_replaces_what_a_recording_writes(self, source, literal):
+        assert_that(_inline._is_literal(ast.parse(source, mode="eval").body)).is_equal_to(literal)
+
     def test_missing_tooling(self):
         with patch.dict(sys.modules, {"executing": None}), pytest.raises(ImportError, match=r"assertpy2\[inline\]"):
             _inline._ensure_inline_tooling()
@@ -979,6 +1002,38 @@ class TestARealUpdateRun:
         )
         assert_that(update.stdout).contains("not_ cannot record one")
         assert_that(written).is_equal_to(source.replace("check().matches_inline()", "check().matches_inline(1)"))
+
+    def test_every_kind_written_is_updated_and_read_back(self, tmp_path):
+        kinds = {
+            "text": ("'a'", "'bc'"),
+            "number": ("-1.5", "2"),
+            "flag": ("True", "False"),
+            "nothing": ("None", "1"),
+            "listed": ("[1, 2]", "[1, 3, 4]"),
+            "paired": ("(1, 2)", "(1, 2, 3)"),
+            "keyed": ("{'a': 1}", "{'a': 22}"),
+            "set": ("{1, 2}", "{1, 3, 4}"),
+            "empty_set": ("set()", "{3}"),
+            "frozen": ("frozenset({1})", "frozenset({2, 3})"),
+            "frozen_inside": ("[frozenset({1})]", "[frozenset({1, 2})]"),
+            "frozen_keyed": ("{'k': frozenset({1})}", "{'k': frozenset()}"),
+        }
+        tests = {
+            name: f"value = {first}\n    assert_that(value).matches_inline()" for name, (first, _) in kinds.items()
+        }
+        created, written, _ = self._recorded(tmp_path, tests)
+        assert_that(created.returncode).described_as(created.stdout + created.stderr).is_equal_to(0)
+        for first, second in kinds.values():
+            assert_that(written).contains(f"matches_inline({first})")
+            written = written.replace(f"value = {first}\n", f"value = {second}\n")
+        (tmp_path / "test_case.py").write_text(written, encoding="utf-8", newline="")
+        updated = self._run(tmp_path, "--assertpy2-snapshot-update")
+        assert_that(updated.returncode).described_as(updated.stdout + updated.stderr).is_equal_to(0)
+        rewritten = (tmp_path / "test_case.py").read_text(encoding="utf-8")
+        assert_that(rewritten).contains(*(f"matches_inline({second})" for _, second in kinds.values()))
+        rerun = self._run(tmp_path)
+        assert_that(rerun.returncode).described_as(rerun.stdout + rerun.stderr).is_equal_to(0)
+        assert_that(rerun.stdout).contains(f"{len(kinds)} passed")
 
 
 _SCALARS = st.one_of(
