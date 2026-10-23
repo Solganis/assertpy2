@@ -45,31 +45,31 @@ The [full documentation](https://solganis.github.io/assertpy2/) covers every ass
 <tr>
 <td valign="top" width="50%">
 <a href="#why-fluent-assertions"><b>Failures that point at the difference</b></a><br>
-A recursive diff names the exact path that differs, in color, instead of dumping both structures.
+A recursive diff names the exact path that differs, in color, instead of dumping both structures
 </td>
 <td valign="top" width="50%">
 <a href="#type-aware-autocomplete"><b>Type-aware autocomplete</b></a><br>
-<code>assert_that()</code> returns a protocol per value type, so your IDE offers the methods that fit.
+<code>assert_that()</code> returns a protocol per value type, so your IDE offers the methods that fit
 </td>
 </tr>
 <tr>
 <td valign="top">
 <a href="#typed-narrowing"><b>Typed narrowing</b></a><br>
-An assertion hands the value back statically narrowed, with no <code>cast</code> and no bare <code>assert</code>.
+An assertion hands the value back statically narrowed, with no <code>cast</code> and no bare <code>assert</code>
 </td>
 <td valign="top">
 <a href="#features"><b>Composable matchers</b></a><br>
-45 matchers that combine with <code>&amp;</code>, <code>|</code>, <code>~</code> and nest inside the expected structure itself.
+45 matchers that combine with <code>&amp;</code>, <code>|</code>, <code>~</code> and nest inside the expected structure itself
 </td>
 </tr>
 <tr>
 <td valign="top">
 <a href="#features"><b>Built for test suites</b></a><br>
-Soft assertions, polling for eventual consistency, snapshots, and expected-exception chains.
+Soft assertions, polling for eventual consistency, snapshots, and expected-exception chains
 </td>
 <td valign="top">
 <a href="#integrations"><b>Integrations</b></a><br>
-Allure, Behave, JSON Path and Schema, pandas, polars, numpy, and OpenAPI response contracts.
+Allure, Behave, JSON Path and Schema, pandas, polars, numpy, and OpenAPI response contracts
 </td>
 </tr>
 </table>
@@ -155,8 +155,8 @@ Your IDE shows only methods relevant to the value you're testing, not the whole 
 - `assert_that(my_dict).` &rarr; dict methods: `contains_key`, `contains_entry`, `has_json_path`, ...
 - `assert_that(b"\x89PNG").` &rarr; bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
 
-15 type-specific Protocols instead of one `Any`.<br>
-Works in PyCharm, VS Code, and any editor that runs a type checker.
+15 type-specific Protocols instead of one `Any`<br>
+Works in PyCharm, VS Code, and any editor that runs a type checker
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
@@ -206,64 +206,64 @@ Anything else you build can too.
 
 **Fluent API**
 
-- [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation.
-- [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph.
-- [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion, no dedicated `is_not_*` methods.
-- [**Collection pipeline**](https://solganis.github.io/assertpy2/guides/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
-- [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/guides/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants.
+- [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation
+- [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph
+- [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion, no dedicated `is_not_*` methods
+- [**Collection pipeline**](https://solganis.github.io/assertpy2/guides/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`
+- [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/guides/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants
 
 **Type safety**
 
-- [**Refinement predicates**](https://solganis.github.io/assertpy2/concepts/type-safety/#refinement-narrowing-with-a-typeis-predicate-advanced): `satisfies()` takes a `TypeIs` predicate, so a domain check narrows the chain too.
-- [**Contract testing**](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms): `assert_conforms()` validates a raw payload against a Pydantic model and narrows to it. [`exact=True`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-drift-with-exacttrue) catches contract drift, `each=True` validates list endpoints.
+- [**Refinement predicates**](https://solganis.github.io/assertpy2/concepts/type-safety/#refinement-narrowing-with-a-typeis-predicate-advanced): `satisfies()` takes a `TypeIs` predicate, so a domain check narrows the chain too
+- [**Contract testing**](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms): `assert_conforms()` validates a raw payload against a Pydantic model and narrows to it. [`exact=True`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-drift-with-exacttrue) catches contract drift, `each=True` validates list endpoints
 
 **Built-in types**
 
-- [Strings](https://solganis.github.io/assertpy2/guides/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/guides/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/guides/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/guides/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/guides/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/guides/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/guides/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/guides/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/guides/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/guides/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions).
-- [**Bytes assertions**](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
-- [**Dynamic assertions**](https://solganis.github.io/assertpy2/guides/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
-- [**Dict comparison**](https://solganis.github.io/assertpy2/guides/assertions/#selective-comparison-ignore--include): `is_equal_to(ignore=..., include=...)` for selective key/field matching by name, regex, or type.
-- [**Recursive comparison**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance`, `comparators`, or `ignore_null` for nested structures.
-- [**Extracting**](https://solganis.github.io/assertpy2/guides/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
-- [**Regex group extraction**](https://solganis.github.io/assertpy2/guides/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
+- [Strings](https://solganis.github.io/assertpy2/guides/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/guides/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/guides/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/guides/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/guides/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/guides/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/guides/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/guides/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/guides/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/guides/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions)
+- [**Bytes assertions**](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`
+- [**Dynamic assertions**](https://solganis.github.io/assertpy2/guides/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method
+- [**Dict comparison**](https://solganis.github.io/assertpy2/guides/assertions/#selective-comparison-ignore--include): `is_equal_to(ignore=..., include=...)` for selective key/field matching by name, regex, or type
+- [**Recursive comparison**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance`, `comparators`, or `ignore_null` for nested structures
+- [**Extracting**](https://solganis.github.io/assertpy2/guides/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support
+- [**Regex group extraction**](https://solganis.github.io/assertpy2/guides/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures
 
 **Testing**
 
-- [**Soft assertions**](https://solganis.github.io/assertpy2/guides/testing/#soft-assertions): thread-safe and async-safe via `contextvars`, each failure reported with its `file:line`. Group with `sa.group()` or `assert_all()`.
-- [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace on timeout.
-- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), search an `ExceptionGroup` (`contains_error()`, `errors()`, `error_of()`), or pivot to the object (`raised()`).
-- [**HTTP responses**](https://solganis.github.io/assertpy2/recipes/#test-an-http-api-response): assert on the response itself and every failure names the request it came from, with `decoded_as_json()` to step into the body. No client library is a dependency.
-- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): an external JSON file, an [inline](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) value recorded into the test source, or a [value-tolerant contract](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots), all updated with `--assertpy2-snapshot-update`.
-- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi()` checks a JSON body against an operation's response schema, reporting every violation with its JSON path.
+- [**Soft assertions**](https://solganis.github.io/assertpy2/guides/testing/#soft-assertions): thread-safe and async-safe via `contextvars`, each failure reported with its `file:line`. Group with `sa.group()` or `assert_all()`
+- [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace on timeout
+- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), search an `ExceptionGroup` (`contains_error()`, `errors()`, `error_of()`), or pivot to the object (`raised()`)
+- [**HTTP responses**](https://solganis.github.io/assertpy2/recipes/#test-an-http-api-response): assert on the response itself and every failure names the request it came from, with `decoded_as_json()` to step into the body. No client library is a dependency
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): an external JSON file, an [inline](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) value recorded into the test source, or a [value-tolerant contract](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots), all updated with `--assertpy2-snapshot-update`
+- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi()` checks a JSON body against an operation's response schema, reporting every violation with its JSON path
 
 **Failure reporting**
 
-- [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected` and `.diff`, and the diff renders into the message, so it shows off pytest too.
-- [**Assertions as values**](https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting): `check()` runs the next assertion for its verdict instead of raising, handing back an `AssertionOutcome`.
-- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings.
-- [**Failures that say why**](https://solganis.github.io/assertpy2/guides/errors/#some-failures-say-why-not-only-what): where one fact explains a failure, a line under the message says it. An id the payload holds as text (`7` against `"7"`), a NaN, two instances compared by identity, surrounding whitespace. A failed `contains()` or `is_in()` names the closest row, and forty rows that differ in one field are named as one place.
+- [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected` and `.diff`, and the diff renders into the message, so it shows off pytest too
+- [**Assertions as values**](https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting): `check()` runs the next assertion for its verdict instead of raising, handing back an `AssertionOutcome`
+- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings
+- [**Failures that say why**](https://solganis.github.io/assertpy2/guides/errors/#some-failures-say-why-not-only-what): where one fact explains a failure, a line under the message says it. An id the payload holds as text (`7` against `"7"`), a NaN, two instances compared by identity, surrounding whitespace. A failed `contains()` or `is_in()` names the closest row, and forty rows that differ in one field are named as one place
 
 **Plugin for pytest**
 
-Set from the command line or from `[tool.pytest.ini_options]`, not from a call.
+Set from the command line or from `[tool.pytest.ini_options]`, not from a call
 
-- [**Failure clustering**](https://solganis.github.io/assertpy2/guides/errors/#what-the-failures-had-in-common): forty failing tests are usually not forty problems. Where three or more differ at the same place, the run ends with a line saying where. On by default, `assertpy2_failure_clusters = "off"` turns it off.
-- [**IDE comparison window**](https://solganis.github.io/assertpy2/guides/errors/#the-comparison-window-of-an-ide): a failed `is_equal_to()` or `has_<name>()` gets PyCharm's "Click to see difference" link, as a plain `assert` does, and the window shows the two values it compared. Under `ignore=` or `include=` those go without the keys left out. The plugin hands them to `pytest_assertrepr_compare`, the hook the IDE's runner listens to. On by default, `assertpy2_comparison = "off"` turns it off.
-- [**Diagnostic profiles**](https://solganis.github.io/assertpy2/guides/errors/#configuration): `assertpy2_profile` turns the guards below on in one line. `compatible` (default) leaves them off, `safe` warns, `strict` fails the tests they find. A setting you name yourself still wins.
-- [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing.
-- [**Dangling-assertion detector**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-never-ran): `--assertpy2-dangling` warns when a chain builds an assertion and never runs it. `assert assert_that(x).is_positive` passes on any value, and neither ruff nor coverage sees it.
+- [**Failure clustering**](https://solganis.github.io/assertpy2/guides/errors/#what-the-failures-had-in-common): forty failing tests are usually not forty problems. Where three or more differ at the same place, the run ends with a line saying where. On by default, `assertpy2_failure_clusters = "off"` turns it off
+- [**IDE comparison window**](https://solganis.github.io/assertpy2/guides/errors/#the-comparison-window-of-an-ide): a failed `is_equal_to()` or `has_<name>()` gets PyCharm's "Click to see difference" link, as a plain `assert` does, and the window shows the two values it compared. Under `ignore=` or `include=` those go without the keys left out. The plugin hands them to `pytest_assertrepr_compare`, the hook the IDE's runner listens to. On by default, `assertpy2_comparison = "off"` turns it off
+- [**Diagnostic profiles**](https://solganis.github.io/assertpy2/guides/errors/#configuration): `assertpy2_profile` turns the guards below on in one line. `compatible` (default) leaves them off, `safe` warns, `strict` fails the tests they find. A setting you name yourself still wins
+- [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing
+- [**Dangling-assertion detector**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-never-ran): `--assertpy2-dangling` warns when a chain builds an assertion and never runs it. `assert assert_that(x).is_positive` passes on any value, and neither ruff nor coverage sees it
 
 **Extensibility**
 
-- [**Custom matchers**](https://solganis.github.io/assertpy2/guides/matchers/#custom-matchers): `register_matcher()` composes existing ones, `BaseMatcher` carries its own predicate. Both compose with `&`, `|`, `~`.
-- [**Custom assertions**](https://solganis.github.io/assertpy2/extending/custom-assertions/): `add_extension()` adds a method to the builder.
+- [**Custom matchers**](https://solganis.github.io/assertpy2/guides/matchers/#custom-matchers): `register_matcher()` composes existing ones, `BaseMatcher` carries its own predicate. Both compose with `&`, `|`, `~`
+- [**Custom assertions**](https://solganis.github.io/assertpy2/extending/custom-assertions/): `add_extension()` adds a method to the builder
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/extending/integrations/">Integrations</a></h2>
 
-- [**Allure**](https://solganis.github.io/assertpy2/extending/integrations/#allure) (`pip install assertpy2[allure]`): the pytest plugin auto-attaches structured diff and actual/expected data to Allure reports, in three configurable modes.
-- [**Behave**](https://solganis.github.io/assertpy2/extending/integrations/#behave) (`pip install assertpy2[behave]`): ready-made parameter types (`PositiveInt`, `NonEmptyString`, ...) for step definitions like `{age:PositiveInt}`.
-- [**JSON**](https://solganis.github.io/assertpy2/guides/data/#json-path--schema) (`pip install assertpy2[json]`): JSONPath navigation (`at_json_path()`, `has_json_path()`) and JSON Schema validation (`matches_json_schema()`).
-- [**Data frames**](https://solganis.github.io/assertpy2/extending/integrations/#data-frames-and-arrays) (`pip install assertpy2[pandas]` / `[polars]` / `[numpy]`): fluent equality for pandas/polars frames and numpy arrays, carrying each library's own diff.
+- [**Allure**](https://solganis.github.io/assertpy2/extending/integrations/#allure) (`pip install assertpy2[allure]`): the pytest plugin auto-attaches structured diff and actual/expected data to Allure reports, in three configurable modes
+- [**Behave**](https://solganis.github.io/assertpy2/extending/integrations/#behave) (`pip install assertpy2[behave]`): ready-made parameter types (`PositiveInt`, `NonEmptyString`, ...) for step definitions like `{age:PositiveInt}`
+- [**JSON**](https://solganis.github.io/assertpy2/guides/data/#json-path--schema) (`pip install assertpy2[json]`): JSONPath navigation (`at_json_path()`, `has_json_path()`) and JSON Schema validation (`matches_json_schema()`)
+- [**Data frames**](https://solganis.github.io/assertpy2/extending/integrations/#data-frames-and-arrays) (`pip install assertpy2[pandas]` / `[polars]` / `[numpy]`): fluent equality for pandas/polars frames and numpy arrays, carrying each library's own diff
 
 ---
 
