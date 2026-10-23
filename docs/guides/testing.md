@@ -630,7 +630,8 @@ assert_that(response).snapshot(
 
 The golden reads `"id": {"__placeholder__": "a valid UUID string"}` instead of a specific id, and each
 run asserts the actual field is present and satisfies the matcher (a `Matcher` or a callable predicate)
-rather than comparing it for equality.
+rather than comparing it for equality. That includes the run that creates the snapshot and an update
+that rewrites it: a field that fails its placeholder fails the run, and nothing is written.
 
 Every other field is still compared exactly, so drift outside the placeholders is caught. Placeholders
 apply to top-level keys of a *dict-like* value and combine with `ignore`.

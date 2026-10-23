@@ -534,6 +534,17 @@ class SnapshotMixin(_MixinBase):
             stored[key] = {"__placeholder__": _describe_matcher(matcher)}
         return stored
 
+    def _recorded(self, placeholders, record: Callable[[], None]) -> bool:
+        """Record through *record* where the placeholders hold, checked as every other run checks them.
+
+        Answers whether it recorded.  It does not where a soft block collected a placeholder that failed: a
+        value a placeholder refused is never written, on the run that creates a snapshot or on an update.
+        """
+        if placeholders and not self._check_placeholders(placeholders):
+            return False
+        record()
+        return True
+
     def _check_placeholders(self, placeholders) -> bool:
         """Assert each placeholder field of val is present and satisfies its matcher (shape, not value).
 
@@ -763,6 +774,7 @@ class SnapshotMixin(_MixinBase):
         # serialised so parallel workers do not lose each other's entries; the rewrite decision stays inside the lock
         snapshot_value = _UNSET
         updated = False
+        held = True
         with _file_lock(snapname):
             if os.path.isfile(snapname):
                 snap = _load(snapname)
@@ -772,8 +784,7 @@ class SnapshotMixin(_MixinBase):
                     snapshot_value = snap[lineno]
                 else:
                     self._forbid_creation(snapname)
-                    snap[lineno] = stored_val
-                    _save(snapname, snap)
+                    held = self._recorded(placeholders, lambda: _save(snapname, {**snap, lineno: stored_val}))
 
                 if (
                     snapshot_value is not _UNSET
@@ -787,16 +798,16 @@ class SnapshotMixin(_MixinBase):
                         comparators=comparators,
                     )
                 ):
-                    if id:
-                        _save(snapname, stored_val)
-                    else:
-                        snap[lineno] = stored_val
-                        _save(snapname, snap)
-                    updated = True
+                    held = updated = self._recorded(
+                        placeholders, lambda: _save(snapname, stored_val if id else {**snap, lineno: stored_val})
+                    )
             else:
                 self._forbid_creation(snapname)
-                _save(snapname, stored_val if id else {lineno: stored_val})
+                held = self._recorded(placeholders, lambda: _save(snapname, stored_val if id else {lineno: stored_val}))
 
+        if not held:
+            # a soft block collected the placeholder that failed, and a value it failed on is never recorded
+            return self
         if updated:
             warnings.warn(
                 f"updated snapshot <{snapname}>: this run overwrote the stored value instead of comparing;"

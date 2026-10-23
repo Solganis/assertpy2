@@ -13,6 +13,7 @@ import textwrap
 import threading
 import time
 import uuid
+import warnings
 
 import pytest
 
@@ -803,6 +804,112 @@ class TestSnapshotPlaceholders:
     def test_non_matcher_value_raises(self, tmp_path):
         with pytest.raises(TypeError, match="Matcher instances or callables"):
             assert_that({"id": _UUID_A}).snapshot(id="ph12", path=str(tmp_path), placeholders={"id": "not a matcher"})
+
+
+def _recording(category, ask):
+    """Run *ask* and return the warnings of *category* it raised, so an absence is asserted, not raised."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ask()
+    return [warning for warning in caught if issubclass(warning.category, category)]
+
+
+_NOT_A_UUID = {"id": "not-a-uuid", "name": "Alice"}
+_UUID_ONLY = {"id": match.is_uuid()}
+
+
+class TestAPlaceholderHoldsBeforeASnapshotIsRecorded:
+    """The run that created a snapshot, or overwrote one in update mode, wrote the value without checking it."""
+
+    def test_a_failing_placeholder_creates_no_file(self, tmp_path):
+        def ask():
+            assert_that(_NOT_A_UUID).snapshot(id="new", path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        assert_that(ask).raises(AssertionFailure).when_called_with().contains("placeholder <id>")
+        assert_that(str(tmp_path / "snap-new.json")).does_not_exist()
+
+    def test_a_missing_key_creates_no_file(self, tmp_path):
+        def ask():
+            assert_that({"name": "Alice"}).snapshot(id="gone", path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        assert_that(ask).raises(AssertionFailure).when_called_with().contains("but was missing")
+        assert_that(str(tmp_path / "snap-gone.json")).does_not_exist()
+
+    @pytest.mark.parametrize("soft", [False, True], ids=["asserted", "soft"])
+    def test_a_failing_placeholder_adds_no_line_to_a_file_that_has_others(self, tmp_path, soft):
+        # keyed by the line of the call, so the second call is a new entry in the file the first one wrote
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": _UUID_A, "name": "Alice"}).snapshot(path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        def second():
+            with soft_assertions() if soft else contextlib.nullcontext():
+                assert_that(_NOT_A_UUID).snapshot(path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        assert_that(second).raises(AssertionError).when_called_with().contains("placeholder <id>")
+        stored = _load(str(next(tmp_path.glob("snap-*.json"))))
+        assert_that(stored).is_length(1)
+
+    def test_a_soft_block_collects_it_and_creates_nothing(self, tmp_path):
+        def collected():
+            with soft_assertions():
+                assert_that(_NOT_A_UUID).snapshot(id="soft", path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        created = _recording(
+            SnapshotCreatedWarning,
+            lambda: assert_that(collected).raises(AssertionError).when_called_with().contains("placeholder <id>"),
+        )
+        assert_that(created).is_empty()
+        assert_that(str(tmp_path / "snap-soft.json")).does_not_exist()
+
+    @pytest.mark.parametrize("soft", [False, True], ids=["asserted", "soft"])
+    def test_update_mode_leaves_the_stored_one_as_it_was(self, tmp_path, monkeypatch, soft):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": _UUID_A, "name": "Alice"}).snapshot(
+                id="kept", path=str(tmp_path), placeholders=_UUID_ONLY
+            )
+        before = (tmp_path / "snap-kept.json").read_bytes()
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+
+        def update():
+            with soft_assertions() if soft else contextlib.nullcontext():
+                assert_that({"id": "not-a-uuid", "name": "Bob"}).snapshot(
+                    id="kept", path=str(tmp_path), placeholders=_UUID_ONLY
+                )
+
+        updated = _recording(
+            SnapshotUpdatedWarning, lambda: assert_that(update).raises(AssertionError).when_called_with()
+        )
+        assert_that(updated).is_empty()
+        assert_that((tmp_path / "snap-kept.json").read_bytes()).is_equal_to(before)
+
+    def test_ci_mode_refuses_to_create_before_the_placeholder_is_asked(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+
+        def ask():
+            assert_that(_NOT_A_UUID).snapshot(id="ci", path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        assert_that(ask).raises(AssertionFailure).when_called_with().contains("CI mode forbids creating it")
+
+    def test_not_refuses_to_create_before_the_placeholder_is_asked(self, tmp_path):
+        def ask():
+            assert_that(_NOT_A_UUID).not_.snapshot(id="neg", path=str(tmp_path), placeholders=_UUID_ONLY)
+
+        assert_that(ask).raises(AssertionFailure).when_called_with().contains("not_ cannot create one")
+        assert_that(str(tmp_path / "snap-neg.json")).does_not_exist()
+
+    def test_a_stored_one_is_still_compared_after_a_collected_placeholder(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": _UUID_A, "name": "Alice"}).snapshot(
+                id="both", path=str(tmp_path), placeholders=_UUID_ONLY
+            )
+
+        def collected():
+            with soft_assertions():
+                assert_that({"id": "not-a-uuid", "name": "Bob"}).snapshot(
+                    id="both", path=str(tmp_path), placeholders=_UUID_ONLY
+                )
+
+        assert_that(collected).raises(AssertionError).when_called_with().contains("placeholder <id>", "Bob")
 
 
 class TestARefusalIsStillAFailureYouCanRead:
