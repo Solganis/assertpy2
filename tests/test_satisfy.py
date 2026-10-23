@@ -1,6 +1,91 @@
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2 import AssertionFailure, BaseMatcher, assert_that, match
+
+_NO_MATCHER = r"given matcher arg must be a Matcher or a callable, but was <123> \(int\)"
+
+
+class TestAnArgumentThatIsNoMatcherIsRefusedWhateverTheLength:
+    """`satisfies_exactly` compared the lengths first, so `123` failed as a length on `[]` and `not_` passed it."""
+
+    @pytest.mark.parametrize("value", [[], [1], [1, 2]], ids=["shorter", "as-long", "longer"])
+    @pytest.mark.parametrize(
+        "ask",
+        [
+            lambda builder: builder.satisfies_exactly(123),
+            lambda builder: builder.not_.satisfies_exactly(123),
+            lambda builder: builder.check().satisfies_exactly(123),
+        ],
+        ids=["asserted", "negated", "checked"],
+    )
+    def test_satisfies_exactly_refuses_it(self, value, ask):
+        with pytest.raises(TypeError, match=_NO_MATCHER):
+            ask(assert_that(value))
+
+    @pytest.mark.parametrize(
+        "arguments",
+        [(match.is_positive(), match.is_positive()), (lambda x: x > 0, lambda x: x > 0), (match.is_positive(), bool)],
+        ids=["matchers", "predicates", "both"],
+    )
+    def test_what_is_a_matcher_or_a_callable_still_fails_on_the_length(self, arguments):
+        assert_that(lambda: assert_that([1]).satisfies_exactly(*arguments)).raises(
+            AssertionFailure
+        ).when_called_with().is_equal_to("Expected collection length <2>, but was <1>.")
+
+    def test_it_is_refused_before_a_predicate_that_raises(self):
+        with pytest.raises(TypeError, match=_NO_MATCHER):
+            assert_that([1, 2]).satisfies_exactly(lambda _: 1 / 0, 123)
+
+    def test_it_is_refused_before_the_value_is_read(self):
+        items = iter([1])
+        with pytest.raises(TypeError, match=_NO_MATCHER):
+            assert_that(items).satisfies_exactly(123)
+        assert_that(list(items)).is_equal_to([1])
+
+    def test_it_is_refused_before_a_value_that_cannot_be_walked(self):
+        with pytest.raises(TypeError, match=_NO_MATCHER):
+            assert_that(5).satisfies_exactly(123)
+
+    def test_a_matcher_written_to_the_protocol_alone_is_taken(self):
+        class Positive:
+            def matches(self, value):
+                return value > 0
+
+            def describe(self):
+                return "positive"
+
+            def describe_mismatch(self, value):
+                return f"was <{value}>"
+
+        assert_that(lambda: assert_that([1]).satisfies_exactly(Positive())).does_not_raise(TypeError).when_called_with()
+        assert_that(lambda: assert_that([]).satisfies_exactly(Positive())).raises(AssertionFailure).when_called_with()
+
+    def test_a_base_matcher_that_disables_matches_is_still_taken_for_one(self):
+        # a recorded boundary of `_is_matcher`: the protocol refuses it, and asking the members costs 60 times as much
+        class Disabled(BaseMatcher):
+            matches = None
+
+            def describe(self):
+                return "disabled"
+
+        assert_that(lambda: assert_that([]).satisfies_exactly(Disabled())).raises(AssertionFailure).when_called_with()
+        with pytest.raises(TypeError, match="'NoneType' object is not callable"):
+            assert_that([1]).satisfies_exactly(Disabled())
+        # the pairing counts a probe that raises `TypeError` as a non-match, this one included
+        assert_that(lambda: assert_that([1]).satisfies_exactly_in_any_order(Disabled())).raises(
+            AssertionFailure
+        ).when_called_with().is_equal_to(
+            "Expected items to satisfy the given matchers in any order, but no pairing covers 1 item."
+        )
+        assert_that([1]).not_.satisfies_exactly_in_any_order(Disabled())
+
+    def test_the_refused_one_is_named_among_matchers_that_are_fine(self):
+        with pytest.raises(TypeError, match=r"but was <'x'> \(str\)"):
+            assert_that([]).satisfies_exactly(match.is_odd(), "x")
+
+    def test_a_poll_is_refused_rather_than_retried_on_the_length(self):
+        with pytest.raises(TypeError, match=_NO_MATCHER):
+            assert_that(list).eventually_sync(timeout=1, interval=0.01).satisfies_exactly(123)
 
 
 class TestAnySatisfy:

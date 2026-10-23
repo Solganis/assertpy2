@@ -60,9 +60,11 @@ positive_and_small = match.is_positive() & match.less_than(10)
 extreme = match.less_than(-100) | match.greater_than(100)
 not_empty = ~match.is_empty()
 complex_check = (match.greater_than(0) & match.less_than(100)) | match.equal_to(-1)
+a_final_title = match.starts_with("Release") & ~match.contains_string("draft")
 
 assert_that(50).satisfies(complex_check)
 assert_that(-1).satisfies(complex_check)
+assert_that("Release 2.33").satisfies(a_final_title)
 ```
 
 A failure reports the part that failed, not the whole expression, and each part keeps the reason its own

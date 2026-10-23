@@ -145,6 +145,21 @@ class Matcher(Protocol[_M_contra]):
     def describe_mismatch(self, value: _M_contra) -> str: ...
 
 
+class _Composable(Matcher[_M_contra], Protocol[_M_contra]):
+    """A built-in matcher bound to the value it judges that keeps the operators of `BaseMatcher`.
+
+    A factory typed as the bare `Matcher` lost ``&``, ``|`` and ``~`` to every checker, though its
+    runtime object has them.  The operators are declared the way `BaseMatcher` declares them, so what
+    they return judges anything, as every composition does.
+    """
+
+    def __and__(self, other: Matcher[Any]) -> AllOfMatcher: ...
+
+    def __or__(self, other: Matcher[Any]) -> AnyOfMatcher: ...
+
+    def __invert__(self) -> NotMatcher: ...
+
+
 def _refused(matcher: Matcher[Any], value: object) -> MatchResult:
     """The result for a value a matcher has already turned down, without asking it again.
 
@@ -202,11 +217,16 @@ def _is_matcher(obj: object) -> TypeIs[Matcher[Any]]:
     """Fast membership test for the runtime_checkable ``Matcher`` protocol.
 
     ``isinstance(x, Matcher)`` is expensive: the runtime_checkable check walks every protocol member
-    through ``getattr_static``.  Two fast paths skip it while staying *strictly equivalent* to
-    ``isinstance(obj, Matcher)``: a builtin operand is never a matcher (frozenset membership), and a
-    ``BaseMatcher`` subclass instance always satisfies the protocol (a cheap C-level ``isinstance``,
+    through ``getattr_static``.  Two fast paths skip it: a builtin operand is never a matcher (frozenset
+    membership), and a ``BaseMatcher`` subclass instance is taken as one (a cheap C-level ``isinstance``,
     ~5x faster than the protocol walk).  Any other object - including a duck-typed custom matcher that
     does not inherit ``BaseMatcher`` - falls through to the full protocol check unchanged.
+
+    The second path takes a subclass by inheritance.  One that sets a member to ``None``, which the
+    protocol refuses and mypy, Pyright and Pyrefly refuse where it is written, is still a matcher here:
+    one that raises ``TypeError`` when the member is called, treated as any matcher that raises, a
+    non-match in the any-order pairing.  Asking the three members statically measured about 2.4 us
+    against 40 ns per call on a `BaseMatcher`.
     """
     if type(obj) in NON_MATCHER_TYPES:
         return False

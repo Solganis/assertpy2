@@ -3414,7 +3414,7 @@
      "required": false
     }
    ],
-   "returns": "Matcher[Iterable[_Item]]"
+   "returns": "_Composable[Iterable[_Item]]"
   },
   "contains_only": {
    "kind": "callable",
@@ -3427,7 +3427,7 @@
      "required": false
     }
    ],
-   "returns": "Matcher[Iterable[_Item]]"
+   "returns": "_Composable[Iterable[_Item]]"
   },
   "contains_string": {
    "kind": "callable",
@@ -3440,7 +3440,7 @@
      "required": true
     }
    ],
-   "returns": "Matcher[str | bytes]"
+   "returns": "_Composable[str | bytes]"
   },
   "each_item": {
    "kind": "callable",
@@ -3466,7 +3466,7 @@
      "required": true
     }
    ],
-   "returns": "Matcher[str | bytes]"
+   "returns": "_Composable[str | bytes]"
   },
   "equal_to": {
    "kind": "callable",
@@ -3723,7 +3723,7 @@
      "required": false
     }
    ],
-   "returns": "Matcher[Iterable[Any]]"
+   "returns": "_Composable[Iterable[Any]]"
   },
   "is_subset_of": {
    "kind": "callable",
@@ -3736,7 +3736,7 @@
      "required": false
     }
    ],
-   "returns": "Matcher[Iterable[Any]]"
+   "returns": "_Composable[Iterable[Any]]"
   },
   "is_truthy": {
    "kind": "callable",
@@ -3803,7 +3803,7 @@
      "required": true
     }
    ],
-   "returns": "Matcher[str]"
+   "returns": "_Composable[str]"
   },
   "not_": {
    "kind": "callable",
@@ -3829,7 +3829,7 @@
      "required": true
     }
    ],
-   "returns": "Matcher[str | bytes]"
+   "returns": "_Composable[str | bytes]"
   },
   "structure": {
    "kind": "callable",

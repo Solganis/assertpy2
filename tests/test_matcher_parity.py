@@ -20,7 +20,7 @@ import datetime
 
 import pytest
 
-from assertpy2 import assert_that, match
+from assertpy2 import BaseMatcher, assert_that, match
 
 _NAN = float("nan")
 
@@ -130,9 +130,24 @@ class TestARelationAnswersTheSameWhicheverWayItIsCalled:
     def test_a_matcher_is_total(self, name, build_matcher, call_fluent, corpus):
         # `BaseMatcher.__eq__` is what a structural spec compares with, and `==` may not raise
         for value in [*corpus, *HOSTILE]:
-            assert_that(_matcher_verdict(build_matcher(), value)).described_as(f"{name} on {value!r}").is_not_equal_to(
-                "refused"
+            assert_that(_matcher_verdict(build_matcher(), value)).described_as(f"{name} on {value!r}").is_in(
+                "held", "failed"
             )
+
+
+class _Raising(BaseMatcher):
+    def matches(self, value):
+        raise TypeError("planted")
+
+    def describe(self):
+        return "planted"
+
+
+class TestTheTotalityGuardCanFail:
+    def test_a_matcher_that_raises_fails_it(self):
+        # it compared with "refused" while the verdict read "refused:TypeError", so no matcher could fail it
+        guard = TestARelationAnswersTheSameWhicheverWayItIsCalled().test_a_matcher_is_total
+        assert_that(guard).raises(AssertionError).when_called_with("planted", _Raising, None, [1])
 
 
 class TestAnEmptySubjectAgainstARefusedArgument:

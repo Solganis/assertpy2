@@ -247,8 +247,9 @@ class TestThePublicSurfaceHasNotMoved:
         assert_that(breaking).described_as("BREAKING changes to the public surface").is_empty()
         assert_that(other).described_as("surface changed and the snapshot was not re-recorded").is_empty()
 
-    def test_the_snapshot_holds_no_private_names(self):
-        # capturing privates would make every internal rename a red gate, teaching everyone to re-record unread
+    def test_the_snapshot_holds_no_private_members(self):
+        # capturing privates would make every internal rename a red gate, teaching everyone to re-record unread.
+        # Annotations are text and may name a private class, as `_SoftAssertions` and `_Composable` are named
         stored = _stored()
         leaked = [
             f"{section}.{name}"
@@ -256,7 +257,7 @@ class TestThePublicSurfaceHasNotMoved:
             for name in stored[section]
             if name.startswith("_") and not name.startswith("__")
         ]
-        assert_that(leaked).described_as("private names in the compatibility snapshot").is_empty()
+        assert_that(leaked).described_as("private members in the compatibility snapshot").is_empty()
 
 
 class TestTheClassificationItself:

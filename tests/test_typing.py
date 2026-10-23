@@ -83,6 +83,7 @@ if TYPE_CHECKING:
         _TextAssertion,
         _WarnedAssertion,
     )
+    from assertpy2._matcher_impls import AllOfMatcher, AnyOfMatcher, NotMatcher, _Composable
     from assertpy2.assertpy import AssertionBuilder
     from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher, Matcher
 
@@ -182,7 +183,15 @@ if TYPE_CHECKING:
     assert_type(assert_that("text").extracting_group(word, 0), _StringAssertion)
     assert_type(assert_that("text").matches_with_groups(word), AssertionBuilder[Any])
     assert_type(assert_that(str).eventually_sync().matches(word), _SyncPoll[str])
-    assert_type(match.matches_regex(word), Matcher[str])
+    assert_type(match.matches_regex(word), _Composable[str])
+    # bound to the value they judge, and composed the way every other matcher is
+    assert_type(match.starts_with("a") & match.ends_with("z"), AllOfMatcher)
+    assert_type(match.contains_string("b") | match.matches_regex(word), AnyOfMatcher)
+    assert_type(~match.starts_with("z"), NotMatcher)
+    assert_type(match.contains(1) & match.contains_only(1, 2), AllOfMatcher)
+    assert_type(match.is_subset_of([1, 2]) | ~match.is_sorted(), AnyOfMatcher)
+    assert_type(~match.is_subset_of(1, 2), NotMatcher)
+    assert_type(assert_that("abz").satisfies(match.starts_with("a") & ~match.ends_with("q")), _StringAssertion)
 
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
     assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion[int])

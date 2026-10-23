@@ -49,6 +49,7 @@ from ._matcher_impls import (
     NotMatcher,
     StartsWithMatcher,
     StructureMatcher,
+    _Composable,
     _is_matcher,
     _refused,
 )
@@ -119,15 +120,14 @@ def _resolved(matcher: Matcher[Any] | Callable[..., object]) -> _Resolved:
 def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object) -> bool:
     """Evaluate a ``Matcher`` or one-arg callable against ``value``.
 
-    Shared resolution for every assertion that accepts either a `Matcher` or a callable
-    predicate, mirroring the dispatch in ``satisfies``/``each``: a `Matcher` is checked via
-    ``matches``, a callable via its return value, and anything else raises ``TypeError``.
+    Shared resolution for an assertion that accepts either a `Matcher` or a callable predicate,
+    mirroring the dispatch in ``satisfies``/``each``: a `Matcher` is checked via ``matches``, a callable
+    via its return value.  Its callers, ``satisfies_exactly`` and the snapshot placeholders, refuse
+    anything else before the value is read, so that a refusal does not wait on the data.
     """
     if _is_matcher(matcher):
         return bool(verdict(matcher.matches(value), subject="the matcher"))
-    if callable(matcher):
-        return bool(verdict(cast("Callable[..., object]", matcher)(value)))
-    refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
+    return bool(verdict(cast("Callable[..., object]", matcher)(value)))
 
 
 def _evaluate_matcher(matcher: Matcher[Any], value: object) -> MatchResult:
@@ -459,22 +459,22 @@ class _MatchNamespace:
         return HasPropertyMatcher(name, matcher)
 
     @staticmethod
-    def contains_string(substring: str | bytes) -> Matcher[str | bytes]:
+    def contains_string(substring: str | bytes) -> _Composable[str | bytes]:
         """Matcher for text containing ``substring``, on `str` and on `bytes` alike."""
         return ContainsStringMatcher(substring)
 
     @staticmethod
-    def matches_regex(pattern: str | re.Pattern[str]) -> Matcher[str]:
+    def matches_regex(pattern: str | re.Pattern[str]) -> _Composable[str]:
         """Matcher for a string in which ``pattern`` (a string, or compiled from one) is found (``re.search``)."""
         return MatchesRegexMatcher(pattern)
 
     @staticmethod
-    def starts_with(prefix: str | bytes) -> Matcher[str | bytes]:
+    def starts_with(prefix: str | bytes) -> _Composable[str | bytes]:
         """Matcher for text starting with ``prefix``, on `str` and on `bytes` alike."""
         return StartsWithMatcher(prefix)
 
     @staticmethod
-    def ends_with(suffix: str | bytes) -> Matcher[str | bytes]:
+    def ends_with(suffix: str | bytes) -> _Composable[str | bytes]:
         """Matcher for text ending with ``suffix``, on `str` and on `bytes` alike."""
         return EndsWithMatcher(suffix)
 
@@ -544,7 +544,7 @@ class _MatchNamespace:
         return IsAfterMatcher(other)
 
     @staticmethod
-    def contains(*items: _Item) -> Matcher[Iterable[_Item]]:
+    def contains(*items: _Item) -> _Composable[Iterable[_Item]]:
         """Matcher for a collection containing every one of ``items``.
 
         The spec spelling of [`contains()`][assertpy2.contains.ContainsMixin.contains], with the same
@@ -559,7 +559,7 @@ class _MatchNamespace:
         return ContainsMatcher(*items)
 
     @staticmethod
-    def contains_only(*items: _Item) -> Matcher[Iterable[_Item]]:
+    def contains_only(*items: _Item) -> _Composable[Iterable[_Item]]:
         """Matcher for a collection holding these items and nothing else.
 
         The spec spelling of [`contains_only()`][assertpy2.contains.ContainsMixin.contains_only].
@@ -568,14 +568,14 @@ class _MatchNamespace:
 
     @overload
     @staticmethod
-    def is_subset_of(superset: Iterable[_Item], /) -> Matcher[Iterable[_Item]]: ...
+    def is_subset_of(superset: Iterable[_Item], /) -> _Composable[Iterable[_Item]]: ...
 
     @overload
     @staticmethod
-    def is_subset_of(*superset: _Item) -> Matcher[Iterable[_Item]]: ...
+    def is_subset_of(*superset: _Item) -> _Composable[Iterable[_Item]]: ...
 
     @staticmethod
-    def is_subset_of(*superset: object) -> Matcher[Iterable[Any]]:
+    def is_subset_of(*superset: object) -> _Composable[Iterable[Any]]:
         """Matcher for a collection whose items all appear in ``superset``.
 
         The spec spelling of [`is_subset_of()`][assertpy2.collection.CollectionMixin.is_subset_of].
@@ -589,7 +589,7 @@ class _MatchNamespace:
         return IsSubsetOfMatcher(*superset)
 
     @staticmethod
-    def is_sorted(key: Callable[[Any], Any] | None = None, reverse: bool = False) -> Matcher[Iterable[Any]]:
+    def is_sorted(key: Callable[[Any], Any] | None = None, reverse: bool = False) -> _Composable[Iterable[Any]]:
         """Matcher for a collection in order, optionally by ``key`` and optionally reversed.
 
         The spec spelling of [`is_sorted()`][assertpy2.collection.CollectionMixin.is_sorted].

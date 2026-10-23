@@ -179,6 +179,8 @@ def _incompatible_operands() -> None:
     assert_that(1).satisfies(match.contains_only("x"))  # case: only-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_subset_of(["x"]))  # case: subset-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_sorted())  # case: sorted-matcher-for-a-scalar
+    # a composition judges anything, as `BaseMatcher` declares it, so the binding of its parts does not reach it
+    assert_that(1).satisfies(match.starts_with("a") & match.ends_with("z"))  # case: composed-text-matchers-for-a-number
     # the pairwise quantifier names both sides, so a character operation on the other element is refused
     assert_that("ab").zip_satisfies([1], lambda _character, number: number.isalpha())  # case: zip-reads-the-wrong-side
     # a pattern compiled from bytes is never found in a string, and the runtime refuses it as well
@@ -601,6 +603,13 @@ def _relations_that_must_keep_working() -> None:
     assert_that("ab").is_subset_of([1, 2, "a", "b"])  # case: valid-subset-of-mixed-items
     assert_that([1, 2]).satisfies(match.is_sorted())  # case: valid-sorted-matcher
     assert_that([{"n": 1}]).satisfies(match.is_sorted(key=lambda row: row["n"]))  # case: valid-sorted-by-key
+    # typed as the bare protocol, the eight matchers bound to their value lost the operators their objects have
+    assert_that("abz").satisfies(match.starts_with("a") & match.ends_with("z"))  # case: valid-text-matchers-joined
+    assert_that("abz").satisfies(~match.ends_with("q") & ~match.contains_string("q"))  # case: valid-text-inverted
+    assert_that("abz").satisfies(match.matches_regex("^a") | match.starts_with("q"))  # case: valid-pattern-or-prefix
+    assert_that([1, 2]).satisfies(match.contains(1) & ~match.is_sorted(reverse=True))  # case: valid-collection-joined
+    assert_that([1]).satisfies(match.contains_only(1) | ~match.is_subset_of(2, 3))  # case: valid-collection-either
+    assert_that([1]).satisfies(~match.is_subset_of([2]))  # case: valid-subset-inverted
     assert_that(1.05).satisfies(match.equal_to(1.0, tolerance=0.1))  # case: valid-equal-to-tolerance
     assert_that({"a": 1}).satisfies(match.equal_to({"a": 2}, ignore="a"))  # case: valid-equal-to-ignore
     # `Iterable` is covariant and `Matcher` contravariant, so these three ordinary calls must keep type-checking

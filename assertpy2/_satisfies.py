@@ -30,6 +30,7 @@ from .errors import (
 )
 from .helpers import _ELIDED, _entry_part, _field_part, _joined_parts, _Part
 from .matchers import (
+    BaseMatcher,
     IsNotNoneMatcher,
     Matcher,
     StructureMatcher,
@@ -662,6 +663,10 @@ class SatisfiesMixin(_MixinBase):
         """
         if len(matchers) == 0:
             raise ValueError("one or more args must be given")
+        # before the value is read, as the any-order twin: the length decided, and `not_` passed an argument like `123`
+        for matcher in matchers:
+            if not isinstance(matcher, BaseMatcher) and not callable(matcher) and not _is_matcher(matcher):
+                refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
         items = list(self._walked())

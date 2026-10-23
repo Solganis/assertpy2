@@ -368,6 +368,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "ordering-matcher-judges-any-subject": {},
     "convertible-but-not-a-number": {},
     "array-as-a-scalar-operand": {},
+    # `&`, `|` and `~` return a matcher for anything, so each part's binding to the value is not carried through
+    "composed-text-matchers-for-a-number": {},
     "bool-as-a-closeness-tolerance": {},
     "bool-as-a-closeness-operand": {},
     # a datetime is declared with `rel` as nothing but `None`, so the argument is refused as one
@@ -476,6 +478,12 @@ VALID: frozenset[str] = frozenset(
         "valid-subset-of-mixed-items",
         "valid-sorted-matcher",
         "valid-sorted-by-key",
+        "valid-text-matchers-joined",
+        "valid-text-inverted",
+        "valid-pattern-or-prefix",
+        "valid-collection-joined",
+        "valid-collection-either",
+        "valid-subset-inverted",
         "valid-equal-to-tolerance",
         "valid-equal-to-ignore",
         "valid-membership-in-a-union-collection",
