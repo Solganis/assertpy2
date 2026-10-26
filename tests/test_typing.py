@@ -700,7 +700,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(fractions.Fraction(0)).is_not_close_to(1, 5), _ObjectAssertion[fractions.Fraction])
     # a matcher for the length, which is asked about the number `len()` gives
     assert_that([1, 2]).is_length(match.greater_than(1)).satisfies(match.has_length(match.between(1, 2)))
-    # a tolerance relative to the larger of the two, alone or beside the absolute one
+    # a tolerance relative to the expected value, alone or beside the absolute one
     assert_type(assert_that(fractions.Fraction(3, 2)).is_close_to(1, rel=0.5), _ObjectAssertion[fractions.Fraction])
     assert_that(1.5).is_close_to(1, 0.1, rel=0.5).is_not_close_to(9, rel=0.1)
 

@@ -1,8 +1,9 @@
 """A tolerance relative to the size of the numbers, beside the absolute one, wherever a tolerance is taken.
 
-Scaled by the larger of the two, as `math.isclose` scales, so the answer does not depend on which side is
-the value: `pytest.approx(98, rel=0.02)` refuses 100 while `math.isclose(100, 98, rel_tol=0.02)` takes it.
-Given beside an absolute tolerance, either holding is enough, which keeps a value near zero within reach.
+Scaled by the expected side, as `pytest.approx` scales: scaled by the larger of the two, as `math.isclose`
+scales a pair with no expected side, the value under test widened its own allowance, and 10 was within
+`rel=1` of 1.  Given beside an absolute tolerance, either holding is enough, which keeps an expected value
+near zero within reach.
 """
 
 import datetime
@@ -11,31 +12,53 @@ import fractions
 import math
 
 import pytest
-from hypothesis import example, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, assert_that, match
 
-_SYMMETRIC = [
-    (100.0, 98.0, 0.02, True),
+_DIRECTED = [
+    (102.0, 100.0, 0.02, True),
     (98.0, 100.0, 0.02, True),
-    (100.0, 97.9, 0.02, False),
-    (97.9, 100.0, 0.02, False),
+    (100.0, 98.0, 0.02, False),
+    (102.1, 100.0, 0.02, False),
+    (-102.0, -100.0, 0.02, True),
+    (-102.1, -100.0, 0.02, False),
+    (10, 1, 1, False),
+    (2, 1, 1, True),
+    (2, 1, 0.5, False),
+    (1, 0, 1, False),
+    (0, 1, 1, True),
 ]
 
 
-class TestTheScaleIsTheLargerOfTheTwo:
-    @pytest.mark.parametrize(("value", "other", "rel", "close"), _SYMMETRIC)
-    def test_either_way_round(self, value, other, rel, close):
-        assert_that(assert_that(value).check().is_close_to(other, rel=rel).passed).is_equal_to(close)
-        assert_that(assert_that(value).check().is_not_close_to(other, rel=rel).passed).is_equal_to(not close)
-        assert_that(match.close_to(other, rel=rel).matches(value)).is_equal_to(close)
-        assert_that(close).is_equal_to(math.isclose(value, other, rel_tol=rel))
+def _verdicts(value, other, rel):
+    """What each spelling of a relative closeness answers for one pair."""
+    return {
+        "is_close_to": assert_that(value).check().is_close_to(other, rel=rel).passed,
+        "is_not_close_to": not assert_that(value).check().is_not_close_to(other, rel=rel).passed,
+        "close_to": match.close_to(other, rel=rel).matches(value),
+        "is_equal_to": assert_that([value]).check().is_equal_to([other], rel=rel).passed,
+    }
 
-    def test_the_boundary_holds_from_both_sides(self):
-        assert_that(110).is_close_to(100, rel=0.1 / 1.1 * 1.0000001)
-        assert_that(100).is_close_to(110, rel=0.1 / 1.1 * 1.0000001)
-        assert_that(110).is_not_close_to(100, rel=0.09)
+
+class TestTheScaleIsTheExpectedSide:
+    @pytest.mark.parametrize(("value", "other", "rel", "close"), _DIRECTED)
+    def test_as_pytest_approx_scales_it(self, value, other, rel, close):
+        verdicts = _verdicts(value, other, rel)
+        assert_that(verdicts).is_equal_to(dict.fromkeys(verdicts, close))
+        assert_that(close).is_equal_to(value == pytest.approx(other, rel=rel, abs=0))
+
+    @pytest.mark.parametrize(("value", "other", "rel", "close"), _DIRECTED)
+    def test_as_exact_numbers_scale_it_too(self, value, other, rel, close):
+        verdicts = _verdicts(*(fractions.Fraction(number) for number in (value, other, rel)))
+        assert_that(verdicts).is_equal_to(dict.fromkeys(verdicts, close))
+
+    def test_the_boundary_is_a_fraction_of_the_expected_side(self):
+        assert_that(110).is_close_to(100, rel=0.1)
+        assert_that(100).is_close_to(110, rel=0.091)
+        assert_that(110).is_not_close_to(100, rel=0.091)
+        assert_that(100).is_not_close_to(110, rel=0.09)
 
     def test_either_tolerance_is_enough_and_they_are_not_added(self):
         assert_that(0.0).is_close_to(0.001, 0.01, rel=0.02)
@@ -45,10 +68,41 @@ class TestTheScaleIsTheLargerOfTheTwo:
         assert_that(match.close_to(1019.0, 0.01, rel=0.02).matches(1000.0)).is_true()
         assert_that(match.close_to(103, 1, rel=0.02).matches(100)).is_false()
 
-    def test_zero_is_close_relatively_only_to_zero(self):
+    def test_an_expected_zero_is_reached_relatively_only_by_zero(self):
         assert_that(0).is_close_to(0, rel=0.5)
-        assert_that(0.0).is_not_close_to(1e-300, rel=0.5)
         assert_that(-0.0).is_close_to(0.0, rel=0)
+        assert_that(1e-300).is_not_close_to(0.0, rel=1e300)
+        assert_that(0.0).is_not_close_to(1e-300, rel=0.5)
+        assert_that(0.0).is_close_to(1e-300, rel=1)
+
+    def test_an_infinite_rel_covers_every_finite_pair_a_zeros_too(self):
+        assert_that(5).is_close_to(0, rel=math.inf)
+        assert_that(-1e308).is_close_to(1e-300, rel=math.inf)
+
+    @pytest.mark.parametrize(
+        ("value", "other", "rel", "close"),
+        [
+            (math.inf, decimal.Decimal("1e9"), decimal.Decimal(10), False),
+            (decimal.Decimal("9e9"), decimal.Decimal("-9e9"), math.inf, True),
+        ],
+    )
+    def test_a_rule_answers_before_any_arithmetic_a_decimal_context_may_trap(self, value, other, rel, close):
+        with decimal.localcontext() as context:
+            context.Emax = 9
+            context.traps[decimal.Overflow] = True
+            verdicts = assert_that(_verdicts).does_not_raise(decimal.Overflow).when_called_with(value, other, rel)
+        verdicts.returned().is_equal_to(
+            dict.fromkeys(("is_close_to", "is_not_close_to", "close_to", "is_equal_to"), close)
+        )
+
+    def test_a_decimal_context_trapping_its_overflow_raises_it_as_the_absolute_tolerance_does(self):
+        with decimal.localcontext() as context:
+            context.Emax = 9
+            context.traps[decimal.Overflow] = True
+            with pytest.raises(decimal.Overflow):
+                assert_that(decimal.Decimal(0)).is_close_to(decimal.Decimal("1e9"), rel=decimal.Decimal(10))
+            with pytest.raises(decimal.Overflow):
+                assert_that(decimal.Decimal("9e9")).is_close_to(decimal.Decimal("-9e9"), decimal.Decimal("1e9"))
 
     def test_an_infinity_and_a_nan_are_read_as_the_absolute_tolerance_reads_them(self):
         assert_that(math.inf).is_close_to(math.inf, rel=0.1)
@@ -63,6 +117,24 @@ class TestTheScaleIsTheLargerOfTheTwo:
         assert_that(decimal.Decimal("1.02")).is_close_to(decimal.Decimal("1.00"), rel=0.02)
         assert_that(decimal.Decimal("1.03")).is_not_close_to(decimal.Decimal("1.00"), rel=0.02)
         assert_that(10**400).is_close_to(10**400 + 10**398, rel=0.01)
+        assert_that(1e300).is_close_to(10**400, rel=1)
+        assert_that(1e300).is_not_close_to(10**400, rel=0)
+
+    @pytest.mark.parametrize(
+        ("value", "other", "rel", "close"),
+        [
+            (1e308, -1e308, 1.9, False),
+            (1.7e308, -1.7e308, 1.5, False),
+            (1e308, -1e308, 2.5, True),
+            (-1e308, 1.7e308, 1.6, True),
+            (1.7e308, 1e308, 1.8, True),
+        ],
+    )
+    def test_an_allowance_past_the_float_range_is_measured_exactly(self, value, other, rel, close):
+        exact = fractions.Fraction
+        assert_that(abs(exact(value) - exact(other)) <= exact(rel) * abs(exact(other))).is_equal_to(close)
+        verdicts = _verdicts(value, other, rel)
+        assert_that(verdicts).is_equal_to(dict.fromkeys(verdicts, close))
 
 
 class TestTheMessageNamesWhatWasAsked:
@@ -109,6 +181,17 @@ class TestEveryComparisonTakesIt:
         with pytest.raises(AssertionFailure):
             assert_that({"latency": 103.0}).matches_inline({"latency": 100.0}, rel=0.02)
 
+    def test_a_snapshot_and_an_inline_one_scale_by_what_they_hold(self, tmp_path):
+        for name, stored in (("low", 98.0), ("high", 100.0)):
+            with pytest.warns(UserWarning):
+                assert_that({"latency": stored}).snapshot(id=name, path=str(tmp_path))
+        assert_that({"latency": 98.0}).snapshot(id="high", path=str(tmp_path), rel=0.02)
+        with pytest.raises(AssertionFailure):
+            assert_that({"latency": 100.0}).snapshot(id="low", path=str(tmp_path), rel=0.02)
+        assert_that({"latency": 98.0}).matches_inline({"latency": 100.0}, rel=0.02)
+        with pytest.raises(AssertionFailure):
+            assert_that({"latency": 100.0}).matches_inline({"latency": 98.0}, rel=0.02)
+
 
 class TestWhatIsRefused:
     @pytest.mark.parametrize(
@@ -150,6 +233,14 @@ class TestWhatIsRefused:
         with pytest.raises(TypeError, match="its own subtraction"):
             assert_that(Unsubtractable(1.0)).is_close_to(2.0, rel=0.1)
 
+    def test_an_expected_number_whose_own_size_raises_is_not_answered_for(self):
+        class Sizeless(float):
+            def __abs__(self):
+                raise TypeError("its own size")
+
+        with pytest.raises(TypeError, match="its own size"):
+            assert_that(1.0).is_close_to(Sizeless(2.0), rel=0.1)
+
     def test_no_tolerance_at_all(self):
         with pytest.raises(TypeError) as refusal:
             assert_that(1.0).is_close_to(1.0)
@@ -173,12 +264,29 @@ _RELS = st.floats(min_value=0, max_value=10, allow_nan=False)
 class TestTheRuleHeldOverAnyNumbers:
     @settings(deadline=None)
     @example(value=100.0, other=98.0, rel=0.02)
+    @example(value=98.0, other=100.0, rel=0.02)
+    @given(value=_FINITE, other=_FINITE, rel=_RELS)
+    def test_it_is_the_absolute_tolerance_its_fraction_of_the_expected_side_gives(self, value, other, rel):
+        allowance = rel * abs(other)
+        assume(math.isfinite(allowance))
+        expected = assert_that(value).check().is_close_to(other, allowance).passed
+        verdicts = _verdicts(value, other, rel)
+        assert_that(verdicts).is_equal_to(dict.fromkeys(verdicts, expected))
+
+    @settings(deadline=None)
+    @example(value=100.0, other=98.0, rel=0.02)
+    @example(value=1e308, other=-1e308, rel=1.9)
     @example(value=1e308, other=-1e308, rel=10.0)
     @given(value=_FINITE, other=_FINITE, rel=_RELS)
-    def test_it_is_math_isclose_with_no_absolute_tolerance(self, value, other, rel):
-        expected = math.isclose(value, other, rel_tol=rel, abs_tol=0)
-        assert_that(assert_that(value).check().is_close_to(other, rel=rel).passed).is_equal_to(expected)
-        assert_that(match.close_to(other, rel=rel).matches(value)).is_equal_to(expected)
+    def test_it_is_the_exact_answer_wherever_rounding_cannot_decide(self, value, other, rel):
+        exact = fractions.Fraction
+        distance, allowance = abs(exact(value) - exact(other)), exact(rel) * abs(exact(other))
+        # a float rounds the allowance and the windows by an ulp of the numbers measured, and a subnormal by more
+        assume(
+            abs(distance - allowance) > (abs(exact(value)) + abs(exact(other)) + allowance) / 2**40 + exact(2) ** -1000
+        )
+        verdicts = _verdicts(value, other, rel)
+        assert_that(verdicts).is_equal_to(dict.fromkeys(verdicts, distance <= allowance))
 
     @settings(deadline=None)
     @example(value=100.0, other=103.0, tolerance=1.0, rel=0.02)

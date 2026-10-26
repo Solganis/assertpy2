@@ -120,13 +120,15 @@ The last line is the trap. `is_in(allowed)` fails for a member and shows the lis
 `is_close_to()` takes the distance three ways, the difference and the window around each side, and
 passes when any of them is within the tolerance. Float rounding differs between the three at the
 boundary, so `-1.1` is close to `-0.9` within `0.2`, although `-0.9 - -1.1` comes out as
-`0.20000000000000007`. The answer is the same whichever operand is the value. `match.close_to()` gives
-the same one, `is_not_close_to()` its opposite, and `is_equal_to(..., tolerance=)` measures the same way
-each pair it measures.
+`0.20000000000000007`. Under an absolute tolerance the answer is the same whichever operand is the
+value. `match.close_to()` gives the same one, `is_not_close_to()` its opposite, and
+`is_equal_to(..., tolerance=)` measures the same way each pair it measures.
 
 A pair that Python's own arithmetic refuses or overflows is measured by exact value rather than
 refused: a `Decimal` against a `float` or a `numpy` integer, or an `int` past the float range against a
-`float`. A `numpy` integer scalar is measured and ordered as the `int` it holds, since its own
+`float`. A `Decimal` context that traps `Overflow` still raises it, under either tolerance, since that
+is the arithmetic it asked for. A `numpy` integer scalar is measured and ordered as the `int` it
+holds, since its own
 arithmetic wraps at its width: `numpy.uint8(3)` is 247 away from `250`, where `numpy.uint8(3) - 250` is
 `9` and a warning. A `numpy` float beside one is read as the `float` it holds wherever a `float` holds
 the same number, so the pair is measured as Python measures an `int` against a `float`. A subclass of a
@@ -144,17 +146,20 @@ assert_that(float("inf")).is_not_close_to(1e308, float("inf"))
 assert_that(float("nan")).is_not_close_to(float("nan"), 1)
 ```
 
-A tolerance relative to the size of the numbers is `rel=`, a fraction of the larger of the two, as
-`math.isclose()` scales it, so it reads the same whichever operand is the value. `pytest.approx()` scales
-by the expected side alone, and refuses `100` against `98` within `0.02` one way round only. Given beside
-an absolute tolerance, either holding is enough, which keeps a value near zero within reach of a
-relative one. They are not added: `100` is not close to `103` within `1` and `rel=0.02`, which their
-sum would cover. A datetime has no size to take a fraction of and refuses `rel`. `match.close_to()`,
-`match.equal_to()` and `is_equal_to()` take it too:
+A tolerance relative to the size of the numbers is `rel=`, a fraction of the expected value, as
+`pytest.approx()` and `numpy.testing.assert_allclose()` scale it: `rel=0.02` allows `2` either side of
+`100`, whatever the value is. Scaled by the larger of the two, as `math.isclose()` scales a pair with
+no expected side, the value under test would widen its own allowance, and `10` would be within `rel=1`
+of `1`. Given beside an absolute tolerance, either holding is enough, which keeps an expected value
+near zero within reach. They are not added: `100` is not close to `103` within `1` and `rel=0.02`,
+which their sum would cover. A datetime has no size to take a fraction of and refuses `rel`.
+`match.close_to()`, `match.equal_to()` and `is_equal_to()` take it too:
 
 ```python
 assert_that(101.5).is_close_to(100, rel=0.02)
 assert_that(98.0).is_close_to(100.0, rel=0.02)
+assert_that(100.0).is_not_close_to(98.0, rel=0.02)
+assert_that(10).is_not_close_to(1, rel=1)
 assert_that(0.0).is_close_to(0.001, 0.01, rel=0.02)
 assert_that(100).is_not_close_to(103, 1, rel=0.02)
 ```
@@ -580,7 +585,7 @@ comparators, anywhere in the graph:
   duration leaves, and a numeric one measures no duration leaf. It reaches a leaf inside a mapping, a
   sequence, a deque or a record. An [object compared by its own `==`](#what-the-walk-takes-apart) is
   not opened for it.
-- `rel` - a tolerance relative to the larger of each pair of real-number leaves, beside or instead of
+- `rel` - a tolerance relative to the expected leaf of each pair of real-number leaves, beside or instead of
   `tolerance`, either holding being enough, as `is_close_to(..., rel=)` has it. `snapshot()` and
   `matches_inline()` take both.
 - `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a

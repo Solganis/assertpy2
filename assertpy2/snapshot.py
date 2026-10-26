@@ -686,7 +686,7 @@ class SnapshotMixin(_MixinBase):
                 keys/fields) to compare, everything else ignored.
             tolerance (float | None): an absolute tolerance that widens ``==`` for every pair of real-number
                 leaves, as in ``is_equal_to()``.
-            rel (float | None): a tolerance relative to the larger of each pair of real-number leaves,
+            rel (float | None): a tolerance relative to the stored leaf of each pair of real-number leaves,
                 either of the two holding being enough, as in ``is_equal_to()``.
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
                 ``(actual, expected) -> bool`` predicate that decides every leaf it matches, as in
@@ -873,8 +873,8 @@ class SnapshotMixin(_MixinBase):
             ignore: key(s)/path(s) to skip in the comparison (as in ``is_equal_to``).
             include: restrict the comparison to these key(s)/path(s).
             tolerance: absolute numeric tolerance applied at every depth.
-            rel: numeric tolerance relative to the larger of each pair, applied at every depth; either
-                of the two holding is enough.
+            rel: numeric tolerance relative to the leaf the literal holds, applied at every depth, either
+                of the two holding being enough.
             comparators: per-type custom equality callables.
             placeholders: ``{key: matcher}`` for volatile fields - the key is ignored by the equality
                 comparison and its matcher asserted separately.

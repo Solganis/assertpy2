@@ -110,7 +110,7 @@ class _CompareConfig:
 
     tolerance: float | None = None
     rel: float | None = None
-    """A tolerance relative to the larger of the two numbers, held beside the absolute one: either is enough."""
+    """A tolerance relative to the expected number, held beside the absolute one: either is enough."""
     # `dict` and not `Mapping`: the runtime refuses anything else, so a checker-approved `MappingProxyType` would fail
     comparators: dict[Any, Callable[[Any, Any], Any]] | None = None
     ignore_null: bool = False
@@ -369,28 +369,53 @@ def within_either(actual, expected, tolerance, rel) -> bool:
 
 
 def relatively_within(actual, expected, rel) -> bool:
-    """Whether two numbers differ by at most *rel* of the larger of their sizes, the same answer either way round.
+    """Whether *actual* is within *rel* of the size of *expected*, measured as that absolute tolerance is.
 
-    Scaled by the larger, as `math.isclose` scales.  `pytest.approx` scales by the expected side alone and
-    answers ``100`` against ``98`` within ``0.02`` one way round and not the other.  A NaN is within nothing and
-    an infinity only of an equal one, as under the absolute tolerance, and an infinite *rel* covers every finite
-    pair.  Taken in the operands' own arithmetic, and exactly as fractions where that refuses or overflows a
-    float, as a `Decimal` or a bignum does.
+    Scaled by the expected side, as `pytest.approx`, `numpy.testing.assert_allclose` and AssertJ scale it.
+    Scaled by the larger of the two, as `math.isclose` scales a pair with no expected side, the value under
+    test widened its own allowance: any two numbers of one sign were within ``1`` of each other, and ``2``
+    was within ``0.5`` of ``1``.  The allowance is then measured as `_within_tolerance` measures any, so a NaN
+    is within nothing, an infinity only of an equal one, and an infinite *rel* covers every finite pair, a
+    zero's too, where ``inf * 0`` would be a NaN.
     """
+    if type(actual) in (int, float) and type(expected) in (int, float) and type(rel) in (int, float):
+        try:
+            allowance = rel * abs(expected)
+        except OverflowError:
+            allowance = math.inf
+        # an overflowed or infinite allowance, or the NaN of `inf * 0`, is the general path's
+        if allowance - allowance == 0:
+            within = plainly_within(actual, expected, allowance)
+            if within is not None:
+                return within
     actual, expected, rel = _as_measured(actual, expected, rel)
+    # answered by rule before any arithmetic, which a trapping `Decimal` context may refuse
     actual_kind, expected_kind = _non_finite(actual), _non_finite(expected)
     if actual_kind or expected_kind:
         return actual_kind == expected_kind == "inf" and bool(actual == expected)
     if _non_finite(rel) == "inf":
         return True
+    return _within_tolerance(actual, expected, _fraction_of(expected, rel))
+
+
+def _fraction_of(expected, rel):
+    """*rel* of the size of *expected*, in their own arithmetic, and exactly where that refuses or overflows a float.
+
+    Overflowed to an infinity, the allowance covered every finite pair: ``1e308`` was within ``1.9`` of
+    ``-1e308``, when ``2e308`` exceeds ``1.9e308``.  A `Decimal` refuses a `float` and a bignum overflows
+    one, and those are taken as fractions too.  A `Decimal` context that traps its own overflow raises it
+    here, as it does in the difference an absolute tolerance takes.
+    """
     try:
-        return bool(abs(actual - expected) <= rel * max(abs(actual), abs(expected)))
+        allowance = rel * abs(expected)
     except (TypeError, OverflowError) as error:
-        # their own `__sub__` or `__abs__` raised: a bug in the value, not a refusal
+        # their own `__abs__` or `__mul__` raised: a bug in the value, not a refusal
         if raised_inside(error) and not rational_overflow(error):
             raise
-        exact, other = _as_fraction(actual), _as_fraction(expected)
-        return abs(exact - other) <= _as_fraction(rel) * max(abs(exact), abs(other))
+    else:
+        if _non_finite(allowance) != "inf":
+            return allowance
+    return _as_fraction(rel) * abs(_as_fraction(expected))
 
 
 def _within_tolerance(actual, expected, tolerance) -> bool:

@@ -328,16 +328,18 @@ class _MatchNamespace:
 
     @staticmethod
     def close_to(expected: object, tolerance: object = None, *, rel: object = None) -> CloseToMatcher:
-        """Matcher for a value within ``tolerance`` of ``expected`` (``abs(value - expected) <= tolerance``).
+        """Matcher for a value within ``tolerance`` of ``expected``, measured as `is_close_to()` measures it.
 
-        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.  ``rel`` measures
-        as [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to] does, a fraction of the larger of the
-        two, and beside ``tolerance`` either holding is enough.
+        The distance is taken three ways, the difference and the window around each side, and any of them
+        holding is enough, which a float rounds differently at the boundary.  An infinity is close only to
+        itself, whatever the tolerance, and a NaN to nothing.  ``rel`` measures as
+        [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to] does, a fraction of the size of
+        ``expected``, and beside ``tolerance`` either holding is enough.
 
         Args:
             expected: the target value
-            tolerance: the maximum allowed absolute difference from ``expected``
-            rel: the maximum allowed difference as a fraction of the larger of the two, for numbers
+            tolerance: the allowed distance from ``expected``
+            rel: the maximum allowed difference as a fraction of the size of ``expected``, for numbers
         """
         return CloseToMatcher(expected, tolerance, rel)
 

@@ -81,7 +81,7 @@ class NumericMixin(_MixinBase):
         return self._holds(low, "ge", named or (low, "low")) and self._holds(high, "le", named or (high, "high"))
 
     def _close(self, other, tolerance, rel):
-        """Whether val is within *tolerance* or *rel* of *other*, the same answer whichever of the two is val.
+        """Whether val is within *tolerance* or *rel* of *other*, *rel* being a fraction of the size of *other*.
 
         A pair the ordering engine cannot order is refused, in the words the single relations use.
         """
@@ -584,17 +584,19 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is close to other within tolerance.
 
         The distance is taken three ways, the difference and the window around each side, and any of them
-        holding is enough, so the answer is the same whichever operand is val.  An infinity is close only
-        to itself, whatever the tolerance, and a NaN to nothing.
+        holding is enough, so under ``tolerance`` the answer is the same whichever operand is val.  An
+        infinity is close only to itself, whatever the tolerance, and a NaN to nothing.
 
-        ``rel`` is a tolerance relative to the larger of the two, as `math.isclose` scales it, so it reads
-        the same whichever operand is val.  Given beside ``tolerance``, either holding is enough, which is
-        what keeps a value near zero, where any fraction of its size is tiny, within reach.
+        ``rel`` is a tolerance relative to the size of other, the expected value, as `pytest.approx` scales
+        it, and so it reads one way round: ``rel=0.02`` allows ``2`` either side of ``100``, which ``98`` is
+        within, while ``100`` is not within ``rel=0.02`` of ``98``.  It is then measured as ``tolerance`` is.
+        Given beside ``tolerance``, either holding is enough, which is what keeps an expected value near
+        zero, where any fraction of its size is tiny, within reach.
 
         Args:
             other (object): the other value, expected to be close to val within tolerance
             tolerance (object): the absolute tolerance, zero or more
-            rel (object): the tolerance as a fraction of the larger of the two, zero or more; for numbers
+            rel (object): the tolerance as a fraction of the size of other, zero or more; for numbers
 
         Examples:
             Usage:
@@ -658,7 +660,7 @@ class NumericMixin(_MixinBase):
         Args:
             other (object): the other value
             tolerance (object): the absolute tolerance, zero or more
-            rel (object): the tolerance as a fraction of the larger of the two, zero or more; for numbers
+            rel (object): the tolerance as a fraction of the size of other, zero or more; for numbers
 
         Examples:
             Usage:
