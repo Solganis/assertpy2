@@ -13,6 +13,7 @@ concurrency:
 permissions:
   contents: read
 
+# every suite runs on four workers by file: split by test, a pair in test_snapshots.py races on the cwd __snapshots
 jobs:
   test:
     timeout-minutes: 15
@@ -57,9 +58,10 @@ jobs:
         if: matrix.full-deps
         run: uv sync --locked --extra json --extra data --extra inline --group integrations --group docs-examples --group oracle
 
-      - name: Test with coverage
+      - name: Test
+        # no coverage: only the full-deps cell reports it, and on 3.12 its tracer made this the slowest cell of the run
         if: '!matrix.full-deps'
-        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml --ignore=tests/test_docs_examples.py tests
+        run: uv run pytest -v -n 4 --dist loadfile --ignore=tests/test_docs_examples.py tests
 
       - name: The oracle is installed
         # its module skips where a package is absent, so an absence here would pass for a green run
@@ -72,7 +74,7 @@ jobs:
         # is reporting on top, not the sole guard (it uploads async and can fail open).
         # The doc-example guard is excluded here so its runs never pad the coverage number.
         if: matrix.full-deps
-        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml --cov-fail-under=100 --ignore=tests/test_docs_examples.py tests
+        run: uv run pytest -v -n 4 --dist loadfile --cov=assertpy2 --cov-report=term-missing --cov-report=xml --cov-fail-under=100 --ignore=tests/test_docs_examples.py tests
 
       - name: Guard doc examples
         # Runs once (docs are platform-independent) and without coverage, so executing the
@@ -231,7 +233,7 @@ jobs:
         # `--no-sync` is load bearing here and nowhere else: a bare `uv run` restores the environment
         # from the lockfile, which would put the newest of everything back and leave this job testing
         # what the matrix above already tests
-        run: uv run --no-sync pytest -q --ignore=tests/test_docs_examples.py tests
+        run: uv run --no-sync pytest -q -n 4 --dist loadfile --ignore=tests/test_docs_examples.py tests
 
   floors-reached:
     # The cross-cell half of the floor job, and it has to be cross-cell: `typing-extensions` reaches its
@@ -337,7 +339,7 @@ jobs:
       - name: The rest of the suite must also pass with both installed
         # Installing allure flips `_HAS_ALLURE`, so every failing assertion in the suite takes the
         # real attach path. That must not change any other test's outcome.
-        run: uv run pytest -q --ignore=tests/test_docs_examples.py tests
+        run: uv run pytest -q -n 4 --dist loadfile --ignore=tests/test_docs_examples.py tests
 
   lint:
     timeout-minutes: 10
@@ -393,61 +395,21 @@ jobs:
       - name: Type check (pyrefly, the object matches the promise)
         run: uv run pyrefly check tests/typing_promises.py
 
-      # the package itself carries diagnostics that are not defects (values typed `object`, guarded
-      # optional imports, deliberate overloads). They are recorded per rule with a reason, so a new
-      # one fails here instead of hiding in a count nobody reads.
-      - name: Type check (pyright, package baseline)
-        run: uv run pytest tests/test_pyright_baseline.py -q
-
-      # the outside view of the same package: what a user of the installed wheel can see a type for.
-      # A package checks clean and still hands out `Unknown` on a public method, which is a different
-      # defect and needs its own gate
-      - name: Type check (pyright, completeness of the exported surface)
-        run: uv run pytest tests/test_typing_completeness.py -q
-
-      # the one gate that reads the value rather than another declaration, and the only place its
-      # static half runs: the test matrix has no checkers, so the three checker cases skip there
-      - name: Type check (the object matches the promise)
-        run: uv run pytest tests/test_typing_promises.py -q
-
-      # the other direction: which incompatible operands the checkers actually refuse. Recorded per
-      # relation, so tightening a signature shows up here as a deliberate change rather than as a
-      # number, and loosening one shows up at all
-      - name: Type check (rejections, all three checkers)
-        run: uv run pytest tests/test_typing_negative.py -q
-
-      # the chain model's chains to two pivots, as typed calls: any change in what a checker says fails
-      - name: Type check (the chain model's corpus, all four checkers)
-        run: uv run pytest tests/test_typing_chain_corpus.py -q
-
-      # the stand-in classes in `test_typing.py` prove the overloads are written correctly and cannot
-      # prove the real libraries still match them. This runs the same question against real pandas,
-      # polars and numpy values, with each checker given its interpreter and target explicitly
-      - name: Type check (real library values, all three checkers)
-        run: uv run pytest tests/test_typing_integrations.py -q
-
-      # an ASGI or a WSGI response is a callable, so which overload claims one is decided by the order
-      # of the two. Two clients were reaching the callable view and refusing their own assertions, and
-      # only a real response says whether a client still matches the capability that describes it
-      - name: Type check (real HTTP responses, all three checkers)
-        run: uv run pytest tests/test_typing_http.py -q
-
-      # every gate above reads the working tree, where `py.typed` and every subpackage are present
-      # because they are files on disk. A consumer gets the wheel, and the two agree only for as long
-      # as the packaging says so
-      - name: Type check (the typed surface as an installed wheel carries it)
-        run: uv run pytest tests/test_typing_from_a_wheel.py -q
-
-      # the verdict twins are generated from the protocols; this is where an edit to the generated
-      # file, or a protocol change the twins did not follow, stops being invisible
-      - name: Type check (the generated verdict twins are in step)
-        run: uv run pytest tests/test_check_protocols.py tests/test_operation_contract.py -q
-
-      # the two halves of every signature: the runtime and the type it is described by. Parity asks
-      # whether a declared method exists; this asks whether the two agree about its parameters, how
-      # they may be passed, and which of them are required
-      - name: Type check (the runtime and the typed surface agree, parameter by parameter)
-        run: uv run pytest tests/test_typing_conformance.py -q
+      # the gates that need the checkers this job installs: each file's docstring says what it holds
+      - name: Type check (pytest gates, all four checkers)
+        run: >
+          uv run pytest -q -n 4 --dist loadfile
+          tests/test_pyright_baseline.py
+          tests/test_typing_completeness.py
+          tests/test_typing_promises.py
+          tests/test_typing_negative.py
+          tests/test_typing_chain_corpus.py
+          tests/test_typing_integrations.py
+          tests/test_typing_http.py
+          tests/test_typing_from_a_wheel.py
+          tests/test_check_protocols.py
+          tests/test_operation_contract.py
+          tests/test_typing_conformance.py
 
   ci-ok:
     timeout-minutes: 5
