@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from collections import namedtuple
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -693,7 +694,7 @@ class TestPytestPluginDiffRendering:
         )
         (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
-            ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
+            [sys.executable, "-m", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -708,7 +709,7 @@ class TestPytestPluginDiffRendering:
         )
         (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
-            ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
+            [sys.executable, "-m", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -722,7 +723,17 @@ class TestPytestPluginDiffRendering:
         )
         (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
-            ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short", "-o", "assertpy2_diff=off"],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                str(test_file),
+                "-v",
+                "--no-header",
+                "--tb=short",
+                "-o",
+                "assertpy2_diff=off",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -741,7 +752,7 @@ class TestPytestPluginDiffRendering:
         )
         (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
-            ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
+            [sys.executable, "-m", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,
             text=True,
             timeout=60,
