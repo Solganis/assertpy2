@@ -38,7 +38,7 @@ BASELINE: dict[tuple[str, str], int] = {
     # refused: `_E` sits in a contravariant `Matcher` where flips cancel, and the warned view's parameter stays
     # covariant under the invariant builder `returned()` hands back, as the views that lead to it are
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 2,
-    ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
+    ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 1,
     # what a dynamic hook hands back: two of a former four went when the implementation's return became `Any`
     ("assertpy2/assertpy.py", "reportReturnType"): 2,
     # the failure record is `| None` in general and never None at this call, as the comment there says

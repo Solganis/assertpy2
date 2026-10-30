@@ -3144,6 +3144,33 @@
    ],
    "returns": "NoReturn"
   },
+  "log_passes": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "PassLogger | None",
+     "default": "None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "logger",
+     "required": false
+    },
+    {
+     "annotation": "int",
+     "default": "20",
+     "kind": "KEYWORD_ONLY",
+     "name": "level",
+     "required": false
+    },
+    {
+     "annotation": "Callable[[AssertionOutcome], object] | None",
+     "default": "None",
+     "kind": "KEYWORD_ONLY",
+     "name": "on_pass",
+     "required": false
+    }
+   ],
+   "returns": "contextlib.AbstractContextManager[None]"
+  },
   "match": {
    "kind": "assertpy2.matchers._MatchNamespace",
    "parameters": []
@@ -3279,6 +3306,7 @@
   "clear_custom_matchers",
   "contents_of",
   "fail",
+  "log_passes",
   "match",
   "register_matcher",
   "register_snapshot_serializer",

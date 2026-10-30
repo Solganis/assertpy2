@@ -37,6 +37,21 @@ ASSERTPY_FILES: Final = frozenset(
     if name.endswith(".py")
 )
 
+
+def caller_stacklevel() -> int:
+    """The ``stacklevel`` that points a warning its caller raises at the first frame outside the package.
+
+    Counted, not fixed: a builder a `log_passes()` block made runs each assertion through frames of its own, and a
+    fixed count pointed into them.
+    """
+    frame = sys._getframe(1)  # the caller, which `warnings.warn(stacklevel=1)` names
+    level = 1
+    while frame is not None and frame.f_code.co_filename in ASSERTPY_FILES:
+        frame = frame.f_back
+        level += 1
+    return level
+
+
 # exact builtins carrying no `__dict__`, so the isinstance is skipped; a subclass takes the structural check
 _ATOMIC_TYPES: Final = frozenset(
     {type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, set, frozenset}

@@ -23,11 +23,12 @@ if TYPE_CHECKING:
     import re
     import sys
     from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+    from contextlib import AbstractContextManager
     from typing import Any, cast
 
     from typing_extensions import TypeIs, assert_type
 
-    from assertpy2 import AssertionOutcome, assert_conforms, assert_that, assert_warn, match
+    from assertpy2 import AssertionOutcome, assert_conforms, assert_that, assert_warn, log_passes, match
     from assertpy2._engine._builder_check_typing import _CheckAnyValue
     from assertpy2._engine._capable_typing import _CapableAssertion, _NegatedCapableAssertion
     from assertpy2._engine._check_typing import (
@@ -667,6 +668,20 @@ if TYPE_CHECKING:
     assert_type(assert_warn("foo", logger=logging.LoggerAdapter(logging.getLogger("app"), None)), Any)
     assert_type(assert_warn("foo", logger=_OwnLogger()), Any)
     assert_type(assert_warn("foo"), Any)
+
+    # a logger for `log_passes` is anything that answers `isEnabledFor()` and takes `log()`, as both stdlib shapes do
+    class _OwnPassLogger:
+        def isEnabledFor(self, level: int) -> bool: ...  # noqa: N802 - the name `logging` gives it
+
+        def log(self, level: int, msg: str) -> None: ...
+
+    def _take(outcome: AssertionOutcome) -> None: ...
+
+    assert_type(log_passes(), AbstractContextManager[None])
+    assert_type(log_passes(logging.getLogger("app")), AbstractContextManager[None])
+    assert_type(log_passes(logging.LoggerAdapter(logging.getLogger("app"), None)), AbstractContextManager[None])
+    assert_type(log_passes(_OwnPassLogger(), level=logging.DEBUG), AbstractContextManager[None])
+    assert_type(log_passes(on_pass=_take), AbstractContextManager[None])
 
     # tables built before the call, as the docs show them. `dict` is invariant in both halves, so a table
     # declared `dict[str, ...]` is not a `dict[object, ...]`; `Mapping[Any, ...]` accepts them and is only read

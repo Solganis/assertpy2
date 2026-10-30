@@ -56,10 +56,11 @@ if TYPE_CHECKING:
         _StringAssertion,
     )
     from ._matcher_impls import ClassInfo, ExceptionInfo, RetriedInfo
+    from ._passes import PassLogger
     from .errors import PollTrace
     from .matchers import Matcher
 
-from . import _hints
+from . import _hints, _passes
 from . import errors as _errors
 from ._engine._compat import _LoggerAdapter
 from ._engine._contract import exactness_failure, kept_apart, put_as_sent, put_back, runs_own_code, sent_record
@@ -85,7 +86,7 @@ from .contains import ContainsMixin
 from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
-from .dynamic import DynamicMixin
+from .dynamic import DynamicMixin, _one_operand
 from .errors import (
     AssertionFailure,
     DiffEntry,
@@ -689,6 +690,122 @@ def assert_all(*callables: Callable[[], object]) -> None:
                 _run_as_written.reset(located)
 
 
+def _build_with(open_blocks: int) -> None:
+    """Point `_builder()` at `_scoped_builder` while a block is open anywhere, called under the count's lock.
+
+    A global swapped here rather than a test in `_builder()`, which outside every block cost `assert_that()` 9%.
+    """
+    global _made_builder
+    _made_builder = _scoped_builder if open_blocks else _ExtendedBuilder
+
+
+def _scoped_builder(val, description="", kind=None, expected=None, logger=None):
+    """A builder whose assertions are observed when it is made inside an entry of a block, a plain one otherwise.
+
+    Asked of the context that makes it, so a builder made in a thread with no block of its own is plain whatever
+    another thread has open, and one made before its block opened stays plain inside it.  An observed builder
+    reports into the entry it was made in, and into no other once that one has closed.
+    """
+    entered = _passes.active_scope()
+    if entered is None or _passes.logged_class is None:
+        return _ExtendedBuilder(val, description, kind, expected, logger)
+    made = _passes.logged_class(val, description, kind, expected, logger)
+    made._reports_to = entered
+    return made
+
+
+class _LogPasses:
+    """The context `log_passes()` hands back.  Each entry reports into a scope of its own, so it may be reentered."""
+
+    __slots__ = ("_level", "_logger", "_on_pass")
+
+    def __init__(self, logger: PassLogger, level: int, on_pass: Callable[[AssertionOutcome], object] | None) -> None:
+        self._logger, self._level, self._on_pass = logger, level, on_pass
+
+    def __enter__(self) -> None:
+        _passes.open_block(_logged_builder_class, _build_with)
+        _passes.scope.set(_passes.PassScope(self._logger, self._level, self._on_pass, _passes.scope.get()))
+
+    def __exit__(self, *_exc: object) -> None:
+        try:
+            # the entry `__enter__` set in this context, which is the one a `with` statement exits in
+            entered = cast("_passes.PassScope", _passes.scope.get())
+            # a task outliving the entry reads it from its own context copy, and stops here
+            entered.active = False
+            _passes.scope.set(entered.previous)
+        finally:
+            _passes.close_block(_build_with)
+
+
+def log_passes(
+    logger: PassLogger | None = None,
+    *,
+    level: int = logging.INFO,
+    on_pass: Callable[[AssertionOutcome], object] | None = None,
+) -> contextlib.AbstractContextManager[None]:
+    """Report every assertion that passes inside the block, with the value it held for.
+
+    An assertion that holds says nothing by default.  Inside this block each one logs a line naming the call, the
+    value and the file and line it was asked at, and, for a comparison against a bound, how far the value was from
+    it.  Nothing else changes: a failure is raised, collected or logged exactly as it would be outside.
+
+    One line per assertion the test asked.  What an assertion asks underneath (`is_positive()` asking
+    `is_greater_than(0)`, an assertion inside a `satisfies()` predicate) is part of it and not reported again.  A
+    soft or warn assertion that failed is not a pass, nor is one run under `check()`.  A poll reports the steps of
+    the attempt that passed, once.
+
+    Uses `contextvars`, so each thread and task has its own: a task started inside the block reports into it while
+    the block is open.  A builder reports into the block it was made in, while that block is open: one made before
+    it reports nothing, and one kept past its end reports nothing, in a later block too.  A pivot reports where the
+    builder it came from reports.
+
+    Args:
+        logger: where the lines go, any object with ``isEnabledFor()`` and ``log()``.  Defaults to the
+            ``assertpy2.passes`` logger
+        level: the level of each line.  Defaults to ``logging.INFO``
+        on_pass: called with each pass's [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] in place of
+            logging it: ``passed`` set, the value, the requirement, the ``(file, line)`` and, as ``hint``, how far
+            the value was from its bound.  Not together with ``logger``
+
+    Examples:
+        Log the passes of a block:
+
+            from assertpy2 import assert_that, log_passes
+
+            with log_passes():
+                assert_that(latency).is_less_than(0.5)
+                assert_that(status).is_equal_to(200)
+
+        Each pass is one line at ``INFO`` on the ``assertpy2.passes`` logger:
+
+            [test_api.py:5]: is_less_than(0.5) passed for <0.42>, the value is about 0.08 below the number given
+            [test_api.py:6]: is_equal_to(200) passed for <200>
+
+        Under pytest a passing test shows its log only when asked, so turn on live logging, for one run with
+        ``pytest -o log_cli=true --log-cli-level=INFO`` or for good in the configuration:
+
+            [tool.pytest.ini_options]
+            log_cli = true
+            log_cli_level = "INFO"
+
+    Raises:
+        TypeError: if ``level`` is not an ``int``, ``logger`` has no ``isEnabledFor()`` or ``log()``, ``on_pass``
+            is not callable, or both ``logger`` and ``on_pass`` are given
+    """
+    if on_pass is not None:
+        if logger is not None:
+            refuse(logger, "None when on_pass is given, which takes each pass in its place", subject=argument("logger"))
+        if not callable(on_pass):
+            refuse(on_pass, "callable", subject=argument("on_pass"))
+    if logger is not None and not (
+        callable(getattr(logger, "isEnabledFor", None)) and callable(getattr(logger, "log", None))
+    ):
+        refuse(logger, "a logger, with isEnabledFor() and log()", subject=argument("logger"))
+    if type(level) is not int:
+        refuse(level, "an int logging level", subject=argument("level"))
+    return _LogPasses(logger if logger is not None else _passes.default_logger, level, on_pass)
+
+
 @overload
 def assert_that(val: str, description: str = "") -> _StringAssertion: ...
 
@@ -931,6 +1048,28 @@ def assert_conforms(
         raise TypeError("assert_conforms requires a pydantic v2 model class")
     kind = "soft" if _collecting() is not None else None
     builder = _builder(val, description, kind)
+    if type(builder) is _passes.logged_class:
+        asked: dict[str, object] = {"model": model, "description": description, "exact": exact, "each": each}
+        written: dict[str, object] = {name: True for name in ("exact", "each") if asked[name]}
+        return _observe(
+            builder,
+            lambda: _conforming(builder, val, model, description, exact=exact, each=each, kind=kind),
+            lambda: ("assert_conforms", (model,), written, Requirement("assert_conforms", asked)),
+        )
+    return _conforming(builder, val, model, description, exact=exact, each=each, kind=kind)
+
+
+def _conforming(
+    builder: AssertionBuilder[Any],
+    val: object,
+    model: Any,
+    description: str,
+    *,
+    exact: bool,
+    each: bool,
+    kind: str | None,
+) -> AssertionBuilder[Any]:
+    """The body of `assert_conforms()`, run beneath its frame, which is the one a failure reads its requirement off."""
     pydantic = sys.modules.get("pydantic")  # loaded already, since model exposes model_validate
     catchable: tuple[type[BaseException], ...] = (pydantic.ValidationError,) if pydantic is not None else ()
     # only a model with code of its own can change the payload it validates; what it is sent is kept for the check
@@ -941,7 +1080,7 @@ def assert_conforms(
         validated_items = []
         for index, item in enumerate(val):
             try:
-                validated_items.append(model.model_validate(item))  # ty: ignore[call-non-callable]  # dynamic
+                validated_items.append(model.model_validate(item))
             except catchable as exc:  # noqa: PERF203  # per-element catch reports which item failed; ~0 cost on 3.11+
                 return builder.error(
                     f"Expected item [{index}] to conform to <{model.__name__}>, but it did not:\n{exc}",
@@ -962,7 +1101,7 @@ def assert_conforms(
                 )
         return builder.builder(validated_items, description, kind)
     try:
-        validated = model.model_validate(val)  # ty: ignore[call-non-callable]  # model_validate is dynamic
+        validated = model.model_validate(val)
     except catchable as exc:
         return builder.error(
             f"Expected <{_truncated(_safe_str(val))}> to conform to <{model.__name__}>, but it did not:\n{exc}",
@@ -1108,6 +1247,8 @@ def soft_fail(msg: str = "") -> None:
 
     """
     if (block := _collecting()) is not None:
+        if _passes.open_blocks:
+            _passes.mark_failed()
         block.failures.append(
             AssertionOutcome(
                 message=f"Fail: {msg}!" if msg else "Fail!",
@@ -1296,12 +1437,29 @@ def _named_extension(name: str, func: Callable[..., object]) -> Callable[..., ob
         call = _ExtensionCall(self, name, func, args, kwargs)
         token = _asked_of.set(call)
         try:
+            if _passes.open_blocks and type(self) is _passes.logged_class:
+                return _observe_extension(cast("AssertionBuilder[Any]", self), func, args, kwargs, call)
             return func(self, *args, **kwargs)
         finally:
             call.alive = False
             _asked_of.reset(token)
 
     return named
+
+
+def _observe_extension(
+    builder: AssertionBuilder[Any],
+    func: Callable[..., object],
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+    call: _ExtensionCall,
+) -> object:
+    """An extension's call, observed.  Apart from `named`: a closure there made its locals cells on every call."""
+    return _observe(
+        builder,
+        lambda: func(builder, *args, **kwargs),
+        lambda: (call.name, args, kwargs, _extension_requirement(call)),
+    )
 
 
 def _extension_requirement(asked: _ExtensionCall) -> Requirement:
@@ -1319,18 +1477,176 @@ def _extension_requirement(asked: _ExtensionCall) -> Requirement:
     return Requirement(name, {"args": args, "kwargs": kwargs})
 
 
+def _call_text(name: str, args: tuple[object, ...], kwargs: Mapping[str, object]) -> str:
+    """*name* called with *args* and *kwargs* as a call is written: ``key=value``, keywords in the caller's order."""
+    rendered = ", ".join(
+        [_capped_repr(arg) for arg in args] + [f"{key}={_capped_repr(value)}" for key, value in kwargs.items()]
+    )
+    return f"{name}({rendered})"
+
+
+def _bound_requirement(
+    attr: Callable[..., object],
+    name: str,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+    *,
+    negated: bool = False,
+) -> Requirement:
+    """What a call asked, bound to the parameter names of *attr*, as the positive path reads them off the frame."""
+    found = _signature_of(attr)
+    if found is None:
+        # a builtin with no introspectable signature, or a call the assertion itself will refuse
+        return Requirement(name, {"args": args, "kwargs": kwargs}, negated=negated)
+    try:
+        bound = found.bind(*args, **kwargs)
+    except TypeError:
+        return Requirement(name, {"args": args, "kwargs": kwargs}, negated=negated)
+    bound.apply_defaults()
+    return Requirement(name, dict(bound.arguments), negated=negated)
+
+
+_Ran = TypeVar("_Ran")
+
+
+def _observe(
+    builder: AssertionBuilder[Any],
+    run: Callable[[], _Ran],
+    describe: Callable[[], tuple[str, tuple[object, ...], dict[str, object], Requirement]],
+) -> _Ran:
+    """Run one assertion of a builder a `log_passes()` block made, and report it if it held.
+
+    Not reported: one asked inside another being observed, which is the outer one's to report, one run for its
+    verdict (`check()`, and the run `not_` inverts), and one that delivered a failure without raising.
+    *describe* is asked only for a pass that is reported.
+    """
+    if _passes.current_call() is not None:
+        return run()
+    found: _passes.PassScope | None = getattr(builder, "_reports_to", None)
+    if found is None or not found.active:
+        return run()
+    # a verdict asked for is not reported, and neither is anything asked inside it
+    asked_for_a_verdict = builder.kind == "check"
+    call = _passes.Observed()
+    token = _passes.observed.set(call)
+    try:
+        result = run()
+        # still inside the call, so an assertion the logger or the callback makes is its, and reports nothing
+        if not (asked_for_a_verdict or call.failed) and _passes.wants(found):
+            _report_pass(found, builder, *describe())
+    finally:
+        call.alive = False
+        _passes.observed.reset(token)
+    return result
+
+
+def _report_pass(
+    found: _passes.PassScope,
+    builder: AssertionBuilder[Any],
+    name: str,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+    requirement: Requirement,
+) -> None:
+    """Hand one pass to the block: the record now, its line only if a logger is to print it."""
+    location = _caller_location()
+    val, description = builder.val, builder.description
+    hint = _hints.passed_by(requirement.operation, val, requirement.parameters, negated=requirement.negated)
+    outcome = AssertionOutcome(passed=True, actual=val, requirement=requirement, location=location, hint=hint)
+    step = f"not_.{name}" if requirement.negated else name
+
+    def line() -> str:
+        where = f"[{os.path.basename(location[0])}:{location[1]}]: " if location is not None else ""
+        desc = f"[{description}] " if description else ""
+        margin = f", {hint}" if hint else ""
+        text = f"{where}{desc}{_call_text(step, args, kwargs)} passed for <{_capped(val)}>{margin}"
+        # one record, one line; and a lone surrogate cannot be encoded, which pytest-xdist does to captured logs
+        text = text.replace("\r", "\\r").replace("\n", "\\n").encode("utf-8", "backslashreplace").decode("utf-8")
+        return _errors._ends_kept(text)
+
+    _passes.emit(found, outcome, line)
+
+
+def _observing(name: str) -> Callable[..., object]:
+    """The built-in assertion *name*, observed on a builder a `log_passes()` block made."""
+    own = getattr(AssertionBuilder, name)
+
+    @functools.wraps(own)
+    def observed(self: AssertionBuilder[Any], *args: object, **kwargs: object) -> object:
+        taken = vars(_ExtendedBuilder).get(name)
+        if taken is not None:
+            # an extension took the name over, and reports itself as one
+            return taken(self, *args, **kwargs)
+        return _observe(
+            self,
+            lambda: own(self, *args, **kwargs),
+            lambda: (name, args, kwargs, _bound_requirement(types.MethodType(own, self), name, args, kwargs)),
+        )
+
+    return observed
+
+
+def _observed_dynamic(self: AssertionBuilder[Any], name: str) -> object:
+    """A dynamic ``has_`` assertion, observed as the built-ins are; anything else is refused as it always was."""
+    found = DynamicMixin.__getattr__(self, name)
+
+    # wrapped, so `not_` binds the operand to the name the assertion gives it
+    @functools.wraps(found)
+    def observed(*args: object, **kwargs: object) -> object:
+        return _observe(
+            self,
+            lambda: found(*args, **kwargs),
+            lambda: (name, args, kwargs, Requirement(name, _one_operand(args, kwargs))),
+        )
+
+    return observed
+
+
+def _logged_builder_class() -> type[Any]:
+    """The class a `log_passes()` block builds with: every operation of `_ASSERTS` observed, nothing else changed."""
+    namespace: dict[str, object] = {name: _observing(name) for name in _ASSERTS if name != "assert_conforms"}
+    namespace["__getattr__"] = _observed_dynamic
+    namespace["_reports_to"] = None
+    namespace["__doc__"] = "A builder made inside a `log_passes()` block, whose assertions report themselves."
+    return type("_LoggedBuilder", (_ExtendedBuilder,), namespace)
+
+
 def _builder(val, description="", kind=None, expected=None, logger=None):
     """Internal helper to build a new `AssertionBuilder` instance and glue on any extension methods.
 
     Function extensions already live on `_ExtendedBuilder`; only non-function callables (which the
-    descriptor protocol cannot bind) still need per-instance grafting here.
+    descriptor protocol cannot bind) still need per-instance grafting here.  Grafted in place rather than through
+    `_grafted()`, whose call cost `assert_that()` 3%.
     """
-    builder = _ExtendedBuilder(val, description, kind, expected, logger)
+    builder = _made_builder(val, description, kind, expected, logger)
     if _extensions:
         for name, func in _extensions.items():
             meth = types.MethodType(func, builder)
             setattr(builder, name, meth)
     return builder
+
+
+def _grafted(builder):
+    """*builder* with every non-function extension bound to it."""
+    if _extensions:
+        for name, func in _extensions.items():
+            meth = types.MethodType(func, builder)
+            setattr(builder, name, meth)
+    return builder
+
+
+def _builder_like(parent, val, description, kind, expected, logger):
+    """A pivot of *parent* while a block is open: observed exactly when *parent* is, into the entry it reports to.
+
+    A pivot made through `_builder()` asked the context that made it, so a builder made before its block took an
+    observed pivot inside it, and one made in a closed entry handed its pivot to the entry open now.
+    """
+    observed = _passes.logged_class
+    if observed is None or type(parent) is not observed:
+        return _grafted(_ExtendedBuilder(val, description, kind, expected, logger))
+    made = observed(val, description, kind, expected, logger)
+    made._reports_to = parent._reports_to
+    return _grafted(made)
 
 
 class WarningLoggingAdapter(_LoggerAdapter):
@@ -1458,6 +1774,17 @@ class NegatedBuilder(Generic[_S]):
                 return self._negated_check(name, attr, *args, **kwargs)
             return self._negated_strict(name, attr, *args, **kwargs)
 
+        if _passes.open_blocks and type(self._builder) is _passes.logged_class:
+            # chosen here, so a negation outside every block pays no frame of its own
+            def _observed(*args: object, **kwargs: object) -> Any:
+                return _observe(
+                    self._builder,
+                    lambda: _negated(*args, **kwargs),
+                    lambda: (name, args, kwargs, self._asked(attr, name, *args, **kwargs)),
+                )
+
+            return _observed
+
         # every branch hands back the wrapped builder, unsayable without `_builder: _S`, and an unbound TypeVar has none
         return _negated  # ty: ignore[invalid-return-type]  # see above
 
@@ -1473,10 +1800,7 @@ class NegatedBuilder(Generic[_S]):
         like.  Keyword order is the caller's, which Python preserves, so it is stable without sorting.
         """
         desc = f"[{self._builder.description}] " if self._builder.description else ""
-        rendered = ", ".join(
-            [_capped_repr(arg) for arg in args] + [f"{key}={_capped_repr(value)}" for key, value in kwargs.items()]
-        )
-        return f"{desc}Expected <{_capped(self._builder.val)}> to NOT satisfy: {name}({rendered})"
+        return f"{desc}Expected <{_capped(self._builder.val)}> to NOT satisfy: {_call_text(name, args, kwargs)}"
 
     def _asked(self, attr: Callable[..., object], name: str, *args: object, **kwargs: object) -> Requirement:
         """What the negated call asked for, bound to the underlying assertion's parameter names.
@@ -1485,16 +1809,7 @@ class NegatedBuilder(Generic[_S]):
         it inverted has already returned, so its frame is gone by then.  Bound through the signature
         so the parameters read the same as on the positive path, where they come out of the frame.
         """
-        found = _signature_of(attr)
-        if found is None:
-            # a builtin with no introspectable signature, or a call the assertion itself will refuse
-            return Requirement(name, {"args": args, "kwargs": kwargs}, negated=True)
-        try:
-            bound = found.bind(*args, **kwargs)
-        except TypeError:
-            return Requirement(name, {"args": args, "kwargs": kwargs}, negated=True)
-        bound.apply_defaults()
-        return Requirement(name, dict(bound.arguments), negated=True)
+        return _bound_requirement(attr, name, args, kwargs, negated=True)
 
     def _verdict(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
@@ -1581,6 +1896,8 @@ class NegatedBuilder(Generic[_S]):
             raise self._builder._failure(outcome)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
+        if _passes.open_blocks:
+            _passes.mark_failed()
         block.failures.append(outcome)
         return self._builder
 
@@ -1921,7 +2238,9 @@ class AssertionBuilder(
             expected (Error, optional): the expected exception.  Defaults to ``None``
             logger (Logger, optional): the logger for warning messages.  Defaults to ``None``
         """
-        pivoted = _builder(val, description, kind, expected, logger)
+        pivoted = _builder_like(self, val, description, kind, expected, logger) if _passes.open_blocks else None
+        if pivoted is None:
+            pivoted = _builder(val, description, kind, expected, logger)
         pivoted._value_origin = origin
         if kind == "check":
             holder = self._verdict_holder()
@@ -2091,6 +2410,8 @@ class AssertionBuilder(
             collected = replace(outcome, group=_soft_group.get(), location=_caller_location())
             if compared is not None:
                 block.compared[id(collected)] = compared
+            if _passes.open_blocks:
+                _passes.mark_failed()
             block.failures.append(collected)
             return None
         if self.kind == "check":
@@ -2109,6 +2430,8 @@ class AssertionBuilder(
         """
         if self._value_taint_reason is None:
             self._value_taint_reason = outcome.message
+        if _passes.open_blocks:
+            _passes.mark_failed()
         logger = self.logger
         if isinstance(logger, _Subscribed):
             logger.callback(replace(outcome, location=_caller_location()))
@@ -2296,6 +2619,10 @@ class AssertionBuilder(
 class _ExtendedBuilder(AssertionBuilder[Any]):
     """Host for user extensions: `add_extension()` installs plain functions here, so binding happens
     once at registration and `AssertionBuilder` itself stays pristine when an extension is removed."""
+
+
+_made_builder: Callable[..., Any] = _ExtendedBuilder
+"""What `_builder()` makes: `_ExtendedBuilder`, or while any `log_passes()` block is open, the class it hands out."""
 
 
 _ASSERTS: Final = frozenset(

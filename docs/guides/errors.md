@@ -1342,3 +1342,110 @@ runs, as it is when a failure is logged. An exception your callable raises comes
 that failed, as one a logger raises does, an `AssertionError` included. `on_failure` takes the place of `logger`, and
 passing both is a `TypeError`. Through a `LoggerAdapter` the record keeps your `extra` only with
 `merge_extra=True`, which arrived in Python 3.13.
+
+### Logging the assertions that pass
+
+An assertion that holds says nothing. Inside a [`log_passes()`][assertpy2.assertpy.log_passes] block each one
+logs a line: the call, the value it held for, the file and line it was asked at and, for a comparison against a
+bound, how far the value was from it. Nothing else changes, and a failure is raised, collected or logged as it
+would be outside.
+
+```python
+from assertpy2 import assert_that, log_passes
+
+latency, status = 0.42, 200
+with log_passes():
+    assert_that(latency).is_less_than(0.5)
+    assert_that(status).is_equal_to(200)
+    assert_that(98.7).is_close_to(100, 2)
+```
+
+Each line goes to the `assertpy2.passes` logger at `INFO`:
+
+```
+[test_api.py:5]: is_less_than(0.5) passed for <0.42>, the value is about 0.08 below the number given
+[test_api.py:6]: is_equal_to(200) passed for <200>
+[test_api.py:7]: is_close_to(100, 2) passed for <98.7>, the two are about 1.3 apart, about 0.7 less than the tolerance
+```
+
+pytest shows the log of a passing test only when asked. Live logging prints the lines as the test runs, for one
+run with `pytest -o log_cli=true --log-cli-level=INFO` or for good in the configuration:
+
+```toml
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+```
+
+Outside pytest the `INFO` level reaches a handler once your program configures one, `logging.basicConfig(level=
+logging.INFO)` for a script. Pass `logger=` and `level=` to send the lines elsewhere. The logger is a child of
+`assertpy2`, so turning off that one's propagation, as the section above suggests for warnings, keeps these
+lines from your handlers as well.
+
+The distance is said for the bounds a threshold is written with: `is_less_than()`, `is_greater_than()` and their
+`_or_equal_to` forms, `is_before()` and `is_after()` and theirs, `is_between()` and `is_not_between()`,
+`is_close_to()` and `is_not_close_to()`. It is measured on numbers of the standard library, `datetime`, `date`
+and `timedelta`, and between the values the comparison compared: a float is the binary number it holds, so
+`0.5 - 0.42` is `0.0800000000000000155...` and the line says `about 0.08`. A distance 34 digits hold is printed
+exactly. Anything else gets the line without a distance: a `numpy` scalar or a subclass of `int`, a range of
+dates, a number larger than about `10**1000` or smaller than about `10**-1000`, a `Fraction` whose numerator or
+denominator is that long, a `Decimal` written with more than a thousand digits, and two durations whose distance a
+`timedelta` cannot hold.
+
+What makes a line:
+
+- One line per assertion the test asked. `is_positive()` asks `is_greater_than(0)` underneath and is one line,
+  and so is `all_satisfy()` with the assertions its predicate makes, and an extension with the ones in its body.
+  Under an assertion that reports nothing, of a builder made before the block or kept past it, an assertion made
+  inside the block reports on its own.
+- A pass is a verdict, not a return. A failure a soft block collects, or one `assert_warn()` logs, is not
+  reported, nor is anything run under `check()`. A negation that held reads `not_.is_less_than(2) passed`.
+- A chain is a line per link, up to the link that failed.
+- A poll reports the steps of the attempt that passed, each once, with the value that attempt read. A blocking
+  `eventually_sync()` chain polls again at every call and reports the step that call added.
+
+The block is a context of its own, as a soft block is: each thread and `asyncio` task has its own, and a task
+started inside reports into the block while it is open. A builder reports into the block it was made in, while
+that block is open. One made before the block opened reports nothing, and one kept past the block's end reports
+nothing, in a later block too. A pivot such as `extracting()` reports where the builder it came from reports.
+
+While no block is open anywhere, `assert_that()` makes the builder it made before, and a pivot and each poll
+attempt check one counter. While a block is open in some thread, each `assert_that()` asks its own context once
+whether it is inside one. An assertion made inside a block pays for being observed, and a builder kept past its
+block still runs through the observation, reporting nothing.
+
+#### Handing each pass to your own code
+
+`on_pass` takes a callable and hands it each pass as its [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome]
+in place of logging it: `passed` set, the value, the [`requirement`](#what-was-asked-as-data), the
+`(file, line)` and, as `hint`, the distance line. `message` is empty, as on every passing outcome.
+
+```python
+from assertpy2 import AssertionOutcome, assert_that, log_passes
+
+checked: list[AssertionOutcome] = []
+with log_passes(on_pass=checked.append):
+    assert_that(0.42).is_less_than(0.5)
+
+assert checked[0].requirement is not None
+assert checked[0].requirement.operation == "is_less_than"
+assert checked[0].hint == "the value is about 0.08 below the number given"
+```
+
+An exception your callable raises, or your logger raises when it is asked for its level or given a line, comes out
+of the assertion that passed, as one from `on_failure` comes out of the assertion that failed. Out of a poll it
+comes once and is not retried, for a block that was open before the poll's attempt began: the attempt holds those
+passes and hands them on once the poll has passed. A block entered while an attempt runs, by the probe or beside
+it, hands its passes on as they come, and what its callable or logger raises, once it reaches the probe, is part
+of that attempt, which the poll retries. So does an assertion the probe runs in a context of its own, through
+`Context.run()` or in another thread: the attempt holds what runs in its own context and in the tasks it starts.
+An exception raised in another thread reaches the probe only if the probe passes it on: `Thread.join()` does not. An assertion your callable or
+your logger makes is not reported itself.
+`on_pass` takes the place of `logger`, and passing both is a `TypeError`.
+
+The line is wording, so read the record rather than parse the text when a program reads it: the
+[stability](../concepts/stability.md) page says what may change. Rendering a line calls `str()` on the value and
+`repr()` on the arguments, as a failure message does, so a value that holds a secret is written to the log too,
+and nothing is rendered when the logger does not want the level. One exception: in a poll, an assertion of a
+builder made in an outer block is rendered when it is checked, and the outer block's logger is asked once the poll
+has passed.

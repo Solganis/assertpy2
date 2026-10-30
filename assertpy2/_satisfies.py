@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._diff import _walk_leaves
 from ._engine._introspection import (
+    caller_stacklevel,
     class_name,
     is_attrs_instance,
     is_mapping_like,
@@ -174,16 +175,16 @@ def _guarding(builder: _MixinBase) -> bool:
     return _VACUOUS_GUARD and not builder._answering_another
 
 
-def _warn_nothing_compared(*, depth: int = 3) -> None:
+def _warn_nothing_compared() -> None:
     """Say that `is_equal_to()` passed with ``ignore`` and ``include`` leaving no key to compare."""
     warnings.warn(
         "is_equal_to() passed with ignore and include leaving no key to compare, so nothing was checked.",
         VacuousAssertionWarning,
-        stacklevel=depth,
+        stacklevel=caller_stacklevel(),
     )
 
 
-def _warn_vacuous(builder: _MixinBase, name: str, allow_empty: bool, *, depth: int = 3) -> None:
+def _warn_vacuous(builder: _MixinBase, name: str, allow_empty: bool) -> None:
     """Say that *name* passed over nothing, pointing at the line that called the assertion.
 
     Called by the assertion itself once its walk is over, never before it.  Asking the subject first
@@ -191,16 +192,13 @@ def _warn_vacuous(builder: _MixinBase, name: str, allow_empty: bool, *, depth: i
     refusal, it took an item from a value whose walks share one position, and it answered about a
     length where the assertion was about to walk fields.  What was walked is the only thing that
     answers "nothing was checked", and only the walk knows it.
-
-    *depth* counts the frames to the line that called the assertion: three from a method that walks in
-    its own body, four when the walk it shares with its sibling is a method of its own.
     """
     if allow_empty or not _guarding(builder):
         return
     warnings.warn(
         f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
         VacuousAssertionWarning,
-        stacklevel=depth,
+        stacklevel=caller_stacklevel(),
     )
 
 
@@ -259,7 +257,7 @@ class SatisfiesMixin(_MixinBase):
                 diff=DiffResult(kind="match", entries=failures),
             )
         if not walked:
-            _warn_vacuous(self, name, allow_empty, depth=4)
+            _warn_vacuous(self, name, allow_empty)
         return self
 
     def has_no_none_fields(self, *, allow_empty: bool = False) -> Self:
@@ -407,7 +405,7 @@ class SatisfiesMixin(_MixinBase):
                         expected=_describe_matcher(matcher),
                     )
         if not walked:
-            _warn_vacuous(self, name, allow_empty, depth=4)
+            _warn_vacuous(self, name, allow_empty)
         return self
 
     def matches_structure(self, spec: dict[Any, Any]) -> Self:

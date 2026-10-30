@@ -124,6 +124,7 @@ EXPECTED_EXPORTS = [
     "clear_custom_matchers",
     "contents_of",
     "fail",
+    "log_passes",
     "match",
     "register_matcher",
     "register_snapshot_serializer",

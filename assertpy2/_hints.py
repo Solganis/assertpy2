@@ -21,14 +21,17 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import decimal
 import difflib
 import enum
+import fractions
 import json
 import re
 import sys
 from collections import Counter
 from typing import TYPE_CHECKING, Final, NamedTuple, cast
 
+from ._engine._compare import _non_finite
 from ._engine._equality import comparable_fields
 from ._engine._introspection import (
     class_name,
@@ -43,7 +46,7 @@ from ._engine._ordering import equals, nan_operand
 from .errors import _capped, _class_names, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
 
     from .errors import DiffEntry, DiffResult, Step
 
@@ -625,6 +628,215 @@ def apart_in_time(value: object, other: object, tolerance: object, *, close: boo
 
 def _same(moments: bool) -> str:
     return "the two are the same moment" if moments else "the two read the same on the clock they share"
+
+
+# every setting named: one left out is copied from `decimal.DefaultContext`, which a caller may have changed
+_SHOWN_EXACTLY: Final = decimal.Context(
+    prec=34,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=decimal.MIN_EMIN,
+    Emax=decimal.MAX_EMAX,
+    capitals=1,
+    clamp=0,
+    flags=[],
+    traps=[decimal.Inexact, decimal.Overflow, decimal.InvalidOperation],
+)
+_SHOWN_ROUGHLY: Final = decimal.Context(
+    prec=12,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=decimal.MIN_EMIN,
+    Emax=decimal.MAX_EMAX,
+    capitals=1,
+    clamp=0,
+    flags=[],
+    traps=[],
+)
+
+_SIDE: Final = {
+    "is_less_than": "before",
+    "is_less_than_or_equal_to": "before",
+    "is_greater_than": "after",
+    "is_greater_than_or_equal_to": "after",
+    "is_before": "before",
+    "is_before_or_equal_to": "before",
+    "is_after": "after",
+    "is_after_or_equal_to": "after",
+}
+"""The single bounds, by the side of the bound given each asks for."""
+
+
+def passed_by(operation: str, value: object, parameters: Mapping[str, object], *, negated: bool) -> str | None:
+    """How far a value that passed was from the bound it was held against, or ``None`` where that is no distance.
+
+    Said for the bounds a threshold is written with: the four single relations of numbers and of dates, a range,
+    and closeness.  The distance is taken between the values the comparison compared, exactly: a float is the
+    binary number it holds, so ``5 - 4.9`` is ``0.0999999999999996447...``, shown as ``about 0.1``.  A distance
+    is printed exactly where 34 digits hold it and rounded to twelve, with ``about``, where they do not.
+
+    Only operands whose class is exactly a number of the standard library, a ``datetime``, a ``date`` or a
+    ``timedelta`` are measured, so no code of anybody's runs.  Python orders those exactly, so the side a distance
+    falls on is the side the verdict found.  A number whose exact ratio has a numerator or a denominator longer than
+    3322 bits is not measured, so neither is one larger than about ``10**1000`` or smaller than about ``10**-1000``,
+    nor a `Decimal` written with more than a thousand digits: a pure-Python `decimal` refuses to read so many.
+    """
+    if operation in _SIDE:
+        return _from_bound(value, parameters.get("other"), _SIDE[operation])
+    if operation in ("is_between", "is_not_between"):
+        return _in_range(value, parameters.get("low"), parameters.get("high"))
+    if operation in ("is_close_to", "is_not_close_to"):
+        close = (operation == "is_close_to") is not negated
+        return _near(value, parameters.get("other"), parameters.get("tolerance"), parameters.get("rel"), close=close)
+    return None
+
+
+def _exact(number: object) -> fractions.Fraction | None:
+    """*number* as the exact rational it is, or ``None`` for anything else, a non-finite or an outsized number."""
+    kind = type(number)
+    if kind is int:
+        whole = cast("int", number)
+        return fractions.Fraction(whole) if int.bit_length(whole) <= 3322 else None
+    if kind is float:
+        return None if _non_finite(number) else fractions.Fraction(cast("float", number))
+    if kind is decimal.Decimal:
+        held = cast("decimal.Decimal", number)
+        if _non_finite(held) or not -1000 <= decimal.Decimal.adjusted(held) <= 1000:
+            return None
+        if len(decimal.Decimal.as_tuple(held).digits) > 1000:
+            return None
+        return _bounded(fractions.Fraction(held))
+    if kind is fractions.Fraction:
+        return _bounded(cast("fractions.Fraction", number))
+    return None
+
+
+def _bounded(ratio: fractions.Fraction) -> fractions.Fraction | None:
+    """*ratio*, unless its numerator or denominator is longer than 3322 bits, past about ``10**1000``."""
+    return ratio if max(int.bit_length(ratio.numerator), int.bit_length(ratio.denominator)) <= 3322 else None
+
+
+def _minus(left: object, right: object) -> fractions.Fraction | None:
+    """*left* minus *right*, exactly, where both are numbers `_exact` reads."""
+    first, second = _exact(left), _exact(right)
+    if first is None or second is None:
+        return None
+    return first - second
+
+
+def _durations(left: object, right: object) -> tuple[int, datetime.timedelta] | None:
+    """Which way *left* lies from *right*, and how far, for two durations or two dates of exactly the standard classes.
+
+    The size is the larger less the smaller: `-timedelta.max` is past the range though `timedelta.max` is not.
+    """
+    kinds = (type(left), type(right))
+    if kinds != (datetime.timedelta, datetime.timedelta) and kinds != (datetime.date, datetime.date):
+        return None
+    first, second = cast("datetime.timedelta", left), cast("datetime.timedelta", right)
+    larger, smaller, sign = (first, second, 1) if first >= second else (second, first, -1)
+    try:
+        return (sign if larger != smaller else 0), larger - smaller
+    except OverflowError:
+        # two durations at the two ends of the range compare, and their distance is past it
+        return None
+
+
+def _from_bound(value: object, bound: object, side: str) -> str | None:
+    """Where *value* stands against one bound: how far below or above it, or before or after it.
+
+    *side* is the one the assertion asked for, which `out_of_order` takes as the side to say nothing on.  Numbers
+    are asked first, being what a threshold usually is: the moments' reading looks at the classes, which cost a
+    passing line half its time when asked first.
+    """
+    difference = _minus(value, bound)
+    words = ("above", "below")
+    if difference is None:
+        moment = out_of_order(value, bound, before=side == "after", strict=True) or out_of_order(
+            value, bound, before=side != "after", strict=True
+        )
+        if moment is not None:
+            return moment
+        apart = _durations(value, bound)
+        if apart is None:
+            return None
+        sign, size = apart
+        if type(bound) is datetime.date:
+            given, shown, words = "date", f"{size.days} day{'s' if size.days != 1 else ''}", ("after", "before")
+        else:
+            given, shown = "duration", str(size)
+    else:
+        sign, given, shown = (difference > 0) - (difference < 0), "number", _shown(abs(difference))
+    if not sign:
+        return f"the value is the {given} given"
+    return f"the value is {shown} {words[0] if sign > 0 else words[1]} the {given} given"
+
+
+def _shown(number: fractions.Fraction) -> str:
+    """*number* in decimal: exactly where 34 digits hold it, else rounded to twelve and said to be."""
+    numerator, denominator = decimal.Decimal(number.numerator), decimal.Decimal(number.denominator)
+    try:
+        written, about = _SHOWN_EXACTLY.divide(numerator, denominator), ""
+    except decimal.Inexact:
+        written, about = _SHOWN_ROUGHLY.divide(numerator, denominator), "about "
+    plain = written.normalize(_SHOWN_ROUGHLY if about else _SHOWN_EXACTLY)
+    # asked before formatting: a positional `1E+999` is a thousand characters. `E`, as `str()` reads the ambient context
+    return about + format(plain, "f" if -12 <= plain.adjusted() <= 20 else "E")
+
+
+def _in_range(value: object, low: object, high: object) -> str | None:
+    """Where *value* stands against a range of numbers: how far within each end, or how far past the nearer."""
+    from_low, to_high = _minus(value, low), _minus(high, value)
+    if from_low is None or to_high is None:
+        return None
+    if from_low < 0 or to_high < 0:
+        if from_low < 0:
+            return f"the value is {_shown(-from_low)} below the low end"
+        return f"the value is {_shown(-to_high)} above the high end"
+    if not from_low:
+        return "the value is the low end"
+    if not to_high:
+        return "the value is the high end"
+    return f"the value is {_shown(from_low)} above the low end and {_shown(to_high)} below the high end"
+
+
+def _near(value: object, other: object, tolerance: object, rel: object, *, close: bool) -> str | None:
+    """How far apart two values that passed a closeness are, against what they were allowed.
+
+    Either allowance holding is enough, so the larger is the one measured against.  Nothing is said where the
+    exact distance disagrees with the verdict: a window round either value reached the other where it did not.
+    """
+    if isinstance(tolerance, datetime.timedelta) and rel is None:
+        return apart_in_time(value, other, tolerance, close=not close)
+    difference, allowed = _minus(value, other), _allowance(other, tolerance, rel)
+    if difference is None or allowed is None:
+        return None
+    distance = abs(difference)
+    spare = allowed - distance
+    if (spare >= 0) is not close:
+        return None
+    if not distance:
+        return "the two are equal"
+    told = "the tolerance" if rel is None else f"the allowance of {_shown(allowed)}"
+    if not spare:
+        return f"the two are {_shown(distance)} apart, which is {told}"
+    if close:
+        return f"the two are {_shown(distance)} apart, {_shown(spare)} less than {told}"
+    return f"the two are {_shown(distance)} apart, {_shown(-spare)} more than {told}"
+
+
+def _allowance(other: object, tolerance: object, rel: object) -> fractions.Fraction | None:
+    """The larger of the two allowances asked, exactly, or ``None`` where either given is past measuring.
+
+    One past measuring, an infinite one among them, would be the larger, so no smaller one stands in for it.
+    """
+    absolute = _exact(tolerance) if tolerance is not None else None
+    if tolerance is not None and absolute is None:
+        return None
+    if rel is None:
+        return absolute
+    scale, size = _exact(rel), _exact(other)
+    if scale is None or size is None:
+        return None
+    relative = scale * abs(size)
+    return relative if absolute is None or relative > absolute else absolute
 
 
 def _time_between(value: object, other: object, asked: tuple[str, ...]) -> tuple[datetime.timedelta, bool] | None:

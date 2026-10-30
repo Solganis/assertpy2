@@ -63,6 +63,11 @@ drives editor autocomplete.
       show_root_full_path: false
       show_root_toc_entry: true
 
+::: assertpy2.assertpy.log_passes
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
 ::: assertpy2.assertpy.soft_assertions
     options:
       show_root_heading: true

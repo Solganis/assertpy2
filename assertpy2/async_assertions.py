@@ -11,6 +11,7 @@ from collections import OrderedDict, deque
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Final
 
+from . import _passes
 from ._engine._compare import _is_infinite, _is_nan
 from ._engine._operations import DESCRIBES, WITHOUT_A_VERDICT
 from ._engine._require import argument, refuse
@@ -383,13 +384,34 @@ def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
     return named_classes(ignoring, Exception, expectation, subject="ignoring", allow_empty=True)
 
 
-def _replay(builder_func: Callable, val: object, description: str, steps: tuple[_Step, ...]) -> Any:
-    """Run a chain's recorded calls against a fresh builder over *val*, returning the last result."""
+def _replay(builder_func: Callable, val: object, description: str, steps: tuple[_Step, ...], quiet: int = 0) -> Any:
+    """Run a chain's recorded calls against a fresh builder over *val*, returning the last result.
+
+    The first *quiet* steps report nothing to a `log_passes()` block, having been reported by the call that added them.
+    """
     builder = builder_func(val, description)
+    # inside an observed call every step is already quiet, and a failure has to mark that call
+    if quiet and _passes.open_blocks and _passes.current_call() is None:
+        return _replay_quietly(builder, steps, quiet)
     for step, step_args, step_kwargs in steps:
         attribute = getattr(builder, step)
         # `not_` is read, not called, so it has no arguments
         builder = attribute if step_args is None or step_kwargs is None else attribute(*step_args, **step_kwargs)
+    return builder
+
+
+def _replay_quietly(builder: Any, steps: tuple[_Step, ...], quiet: int) -> Any:
+    """`_replay`'s loop with the first *quiet* steps run as if inside another assertion, which reports for them."""
+    for index, (step, step_args, step_kwargs) in enumerate(steps):
+        marker = _passes.Observed() if index < quiet else None
+        token = _passes.observed.set(marker) if marker is not None else None
+        try:
+            attribute = getattr(builder, step)
+            builder = attribute if step_args is None or step_kwargs is None else attribute(*step_args, **step_kwargs)
+        finally:
+            if marker is not None and token is not None:
+                marker.alive = False
+                _passes.observed.reset(token)
     return builder
 
 
@@ -638,16 +660,22 @@ class AsyncAssertionBuilder:
         last_error: Exception | None = None
         while True:
             probed = _PROBE_UNSET
+            # held across the probe as well, whose own assertions are part of the attempt; released before the backoff
+            kept = _passes.holding() if _passes.open_blocks else None
+            token = _passes.held.set(kept) if kept is not None else None
             try:
-                val = self._func()
-                if inspect.isawaitable(val):
-                    val = await val
-                probed = val
-                builder = _replay(self._builder_func, val, self._description, self._steps)
+                try:
+                    val = self._func()
+                    if inspect.isawaitable(val):
+                        val = await val
+                    probed = val
+                    builder = _replay(self._builder_func, val, self._description, self._steps)
+                finally:
+                    if kept is not None and token is not None:
+                        _passes.release(kept, token)
                 if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                     # a probe that only converges after retrying is the one that goes flaky in CI
                     _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
-                return builder
             except (
                 AssertionError,
                 *self._ignoring,
@@ -658,6 +686,10 @@ class AsyncAssertionBuilder:
                 if now >= deadline:
                     return _out_of_time(self, recorder, now - start, failure, last_error)
                 await asyncio.sleep(min(self._interval, deadline - now))
+                continue
+            if kept is not None:
+                _passes.flush(kept)
+            return builder
 
 
 class SyncAssertionBuilder:
@@ -795,19 +827,25 @@ class SyncAssertionBuilder:
             last_error: Exception | None = None
             while True:
                 probed = _PROBE_UNSET
+                kept = _passes.holding() if _passes.open_blocks else None
+                token = _passes.held.set(kept) if kept is not None else None
                 try:
-                    val = self._func()
-                    if inspect.isawaitable(val):
-                        if inspect.iscoroutine(val):
-                            val.close()  # an orphaned coroutine would warn "never awaited" at GC time
-                        raise TypeError(
-                            "given probe returned an awaitable; use eventually() and await it for async probes"
-                        )
-                    probed = val
-                    builder = _replay(self._builder_func, val, self._description, steps)
+                    try:
+                        val = self._func()
+                        if inspect.isawaitable(val):
+                            if inspect.iscoroutine(val):
+                                val.close()  # an orphaned coroutine would warn "never awaited" at GC time
+                            raise TypeError(
+                                "given probe returned an awaitable; use eventually() and await it for async probes"
+                            )
+                        probed = val
+                        # a blocking chain polls all of it at every call, and the call reports the step it added
+                        builder = _replay(self._builder_func, val, self._description, steps, len(steps) - 1)
+                    finally:
+                        if kept is not None and token is not None:
+                            _passes.release(kept, token)
                     if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                         _RETRIES.append((recorder.total_polls + 1, time.monotonic() - start, self._timeout))
-                    return self._chained(steps, builder)
                 except (
                     AssertionError,
                     *self._ignoring,
@@ -818,5 +856,9 @@ class SyncAssertionBuilder:
                     if now >= deadline:
                         return _out_of_time(self, recorder, now - start, failure, last_error)
                     time.sleep(min(self._interval, deadline - now))
+                    continue
+                if kept is not None:
+                    _passes.flush(kept)
+                return self._chained(steps, builder)
 
         return _run

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Final, NoReturn
 from . import _inline
 from ._engine._compare import _build_compare_config
 from ._engine._contract import shape, shape_diff
-from ._engine._introspection import ASSERTPY_FILES
+from ._engine._introspection import ASSERTPY_FILES, caller_stacklevel
 from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
 from .errors import AssertionFailure, _safe_repr, _safe_str, _truncated
@@ -289,7 +289,7 @@ def _record_access(snapname: str, key: str, site: str) -> None:
         warnings.warn(
             _reuse_message(snapname, key, _ACCESS_SITES[snapname, key]),
             SnapshotKeyReusedWarning,
-            stacklevel=3,
+            stacklevel=caller_stacklevel(),
         )
 
 
@@ -610,7 +610,7 @@ class SnapshotMixin(_MixinBase):
                 else "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
                 " subsequent runs compare against it",
                 SnapshotCreatedWarning if expected is _UNSET else SnapshotUpdatedWarning,
-                stacklevel=3,
+                stacklevel=caller_stacklevel(),
             )
         return stale
 
@@ -813,7 +813,7 @@ class SnapshotMixin(_MixinBase):
                 f"updated snapshot <{snapname}>: this run overwrote the stored value instead of comparing;"
                 " subsequent runs compare against it",
                 SnapshotUpdatedWarning,
-                stacklevel=2,
+                stacklevel=caller_stacklevel(),
             )
             return self
         if snapshot_value is not _UNSET:
@@ -840,7 +840,7 @@ class SnapshotMixin(_MixinBase):
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
             " subsequent runs compare against it (delete the file to re-capture)",
             SnapshotCreatedWarning,
-            stacklevel=2,
+            stacklevel=caller_stacklevel(),
         )
         return self
 
@@ -1008,7 +1008,7 @@ class SnapshotMixin(_MixinBase):
                 f"updated contract snapshot <{snapname}>: this run overwrote the stored shape instead of"
                 " comparing; subsequent runs compare against it",
                 SnapshotUpdatedWarning,
-                stacklevel=2,
+                stacklevel=caller_stacklevel(),
             )
             return self
         if stored is not _UNSET:
@@ -1026,6 +1026,6 @@ class SnapshotMixin(_MixinBase):
             f"created contract snapshot <{snapname}>: this run captured the shape instead of comparing;"
             " subsequent runs compare against it (delete the file to re-capture)",
             SnapshotCreatedWarning,
-            stacklevel=2,
+            stacklevel=caller_stacklevel(),
         )
         return self
