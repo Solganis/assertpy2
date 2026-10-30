@@ -212,10 +212,12 @@ Contract snapshot <...>; rerun with --assertpy2-snapshot-update to accept the ne
 ```
 
 If snapshots are the workflow, the specialists lead that niche:
-[syrupy](https://github.com/syrupy-project/syrupy) for external files and
-[inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source. Ours are not
-category-leading engines and do not try to be, though `matches_inline()` does record correctly under
-`pytest-xdist`, where inline-snapshot disables itself.
+
+- [syrupy](https://github.com/syrupy-project/syrupy) for external files
+- [inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source.
+
+Ours do not try to lead the category, though `matches_inline()` records correctly under `pytest-xdist`,
+where inline-snapshot disables itself.
 
 Two of the three need no extra dependency. Inline recording uses the optional `[inline]` extra.
 

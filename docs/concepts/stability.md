@@ -20,11 +20,13 @@ The records in the first row are `AssertionOutcome`, `MatchResult`, `DiffEntry`,
 `PollSample`, `PollTrace` and `Requirement`. Fields are added, never renamed or removed, inside a
 major version.
 
-Where the four checkers do not agree, that is recorded rather than suppressed. The eight relations one of
-them takes and another refuses are held checker by checker in `tests/typing_negative_baseline.py`, each
-with the reason that was measured for it, and a
-rung no portable `assert_type` can pin is listed in `tests/test_pin_coverage.py`, so a change in either
-direction fails.
+Where the four checkers disagree, it is recorded, not suppressed:
+
+- The eight relations one checker takes and another refuses are held per checker in
+  `tests/typing_negative_baseline.py`, each with its measured reason.
+- A rung no portable `assert_type` can pin is listed in `tests/test_pin_coverage.py`.
+
+A change in either direction fails.
 
 Documentation is held to the same bar: the examples in these guides are type-checked in CI, and every
 page that can run in the suite is executed, with what each block prints compared against the page. A
@@ -73,13 +75,13 @@ Where the promise ends, so the edges are decided rather than assumed:
 - On a failure raised by this library, `actual`, `expected`, `diff`, `requirement`, `trace` and `failures`
   are there to read. `trace` is set for polling assertions, `failures` for a soft block, and both are
   `None` and empty elsewhere.
-- `requirement` is `None` where the failure is not one of this library's assertions: `fail()` and
-  `soft_fail()`, a bare `error()` carrying a message of your own, a precondition of one of the few
-  members that assert nothing on their own, and the failure a soft block or `assert_all` raises for
-  everything it collected, where each entry in `failures` carries its own. A polling timeout carries
-  the requirement of whatever its last attempt raised, so it is `None` when the probe raised something
-  that is not one of this library's failures, such as an exception it was told to ignore or a bare
-  `AssertionError`.
+- `requirement` is `None` where the failure is not one of this library's assertions:
+    - `fail()`, `soft_fail()` and a bare `error()` with a message of your own
+    - a precondition of one of the few members that assert nothing on their own
+    - the failure a soft block or `assert_all` raises for everything collected (each entry in `failures`
+      carries its own)
+    - a polling timeout whose last attempt raised something else, such as an ignored exception or a bare
+      `AssertionError`. Otherwise a timeout carries the requirement of its last attempt.
 - `has_expected` says whether an expectation was named at all, which `expected is None` cannot. It
   does not separate `is_equal_to(None)` from `is_none()`, and is not meant to: both compare against
   `None`, so both named one.
@@ -143,9 +145,8 @@ it, as `assert_that(person.name).is_equal_to("Fred")`.
 
 ### Which release a typing change ships in
 
-The fifth kind above is the one that needs its own reading, because a typing change and a runtime
-change are not the same size even when they touch the same method. Three categories, and the test is
-what a caller has to do about it.
+The fifth kind above needs its own reading: a typing change and a runtime change are not the same size,
+even on the same method. Three categories, by what a caller has to do about it:
 
 - **Patch** for an annotation that was simply wrong, where no correct call changes meaning. A parameter
   that always accepted a `float` and said `int` is one of these: nothing you wrote stops working, and
@@ -160,11 +161,12 @@ what a caller has to do about it.
 Every typing change in a minor is named in the release notes with the call that stops type-checking,
 the reason, and what to write instead.
 
-What is mechanised is the *noticing*, not the category. The API snapshot in `tests/api_surface.py`
-records what each typed view offers and how it takes its parameters, both resolved through the bases
-rather than read where they are written. A name leaving a view is classified as `typing`, and so is a
-parameter turning keyword-only, whether that happened where it was declared or by an override further
-down.
+What is mechanised is the *noticing*, not the category:
+
+- The API snapshot in `tests/api_surface.py` records what each typed view offers and how it takes its
+  parameters, resolved through the bases.
+- A name leaving a view is classified as `typing`, and so is a parameter turning keyword-only, where it was
+  declared or by an override further down.
 
 Which of the three categories a change belongs to is a judgement made in review. The snapshot does not
 make it.

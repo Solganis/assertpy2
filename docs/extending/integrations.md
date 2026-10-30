@@ -58,11 +58,13 @@ Anything JSON cannot express degrades to a marked fallback instead of failing th
 - `{"__type__": "dict", "__data__": [[key, value], ...]}` for a mapping with any non-string key, since a
   JSON object has string keys only and rendering `1` as `"1"` drops whichever of the two came second.
 
-Oversized values are capped: strings at 4000 chars, containers at 100 items, where a mapping says how
-many keys it dropped under `"__truncated__"`. Nesting past six levels degrades to `{"__repr__": ...}`.
-The entries themselves stop at `assertpy2_diff_max_entries` (50 by default), and the attachment then
-carries `"truncated"` with the number left out. A polling trace that dropped samples says how many
-under `"dropped"`.
+Caps on oversized values:
+
+- Strings at 4000 characters, containers at 100 items. A mapping says how many keys it dropped under
+  `"__truncated__"`.
+- Nesting past six levels becomes `{"__repr__": ...}`.
+- Entries stop at `assertpy2_diff_max_entries` (50 by default), and `"truncated"` gives the number left out.
+- A polling trace that dropped samples says how many under `"dropped"`.
 
 An **AssertionFailure** attachment (mode `full` only) with what was asked of the value, and with the
 actual and expected values the assertion named:
@@ -82,14 +84,16 @@ actual and expected values the assertion named:
 
 The version moved from 2 to 3 to carry it, so a consumer branching on `format` needs a case for 3.
 
-`requirement` answers what `actual` and `expected` cannot: which assertion ran, with which parameters,
-and whether `not_` inverted it. Parameters are keyed by the assertion's own parameter names and carry
-the values it ran with, so a parameter the caller left out appears with its default and two spellings
-of one call group as one. It is absent where no operation was asked: `fail()`, a bare `error()`, and a
-precondition of one of the few members that assert nothing on their own. A key appears only when the
-assertion named that side. Every failure carries the value under test, but
-most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would repeat
-what the reader already has.
+`requirement` says what `actual` and `expected` cannot: which assertion ran, with which parameters, and
+whether `not_` inverted it.
+
+- Parameters are keyed by the assertion's own parameter names, with the values it ran with. One left out
+  appears with its default, so two spellings of one call group as one.
+- It is absent where no operation was asked: `fail()`, a bare `error()`, and a precondition of one of the
+  few members that assert nothing on their own.
+- A key appears only when the assertion named that side. Every failure carries the value under test, but
+  most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would repeat what
+  the reader already has.
 
 An assertion comparing against `None` does name it, and there `"expected": null` is present rather than
 omitted. The pytest terminal section below follows the same rule.
@@ -297,10 +301,13 @@ Two array assertions, both accepting any array-like numpy can coerce:
   first, so a scalar is never broadcast over an array, and a NaN equals a NaN in the same position, as
   numpy has it. Options go through to numpy: `strict=True` compares the dtypes too.
 - `is_array_close_to()` is float-tolerant, through `numpy.testing.assert_allclose`, for comparing
-  computed arrays. `rtol` and `atol` default to `1e-05` and `1e-08`, the defaults of `numpy.isclose`,
-  where `assert_allclose` itself defaults to `1e-07` and `0`. `equal_nan` defaults to `False`, where
-  numpy's own default is `True`, so a NaN fails unless you pass `equal_nan=True`. The shapes are numpy's
-  to compare, so a scalar broadcasts over an array unless you pass `strict=True` (numpy 2).
+  computed arrays.
+    - `rtol` and `atol` default to `1e-05` and `1e-08`, the defaults of `numpy.isclose`, where
+      `assert_allclose` itself defaults to `1e-07` and `0`.
+    - `equal_nan` defaults to `False`, where numpy's own default is `True`, so a NaN fails unless you
+      pass `equal_nan=True`.
+    - The shapes are numpy's to compare, so a scalar broadcasts over an array unless you pass
+      `strict=True` (numpy 2).
 
 ```python
 import numpy as np
@@ -380,12 +387,16 @@ Inside a container's own `==` the answer stays numpy's. Python finds `[np.int64(
 
 ### Integer arguments
 
-Every argument that is an integer takes a numpy integer, an `IntEnum` member or any other `int`, and
-refuses a bool or anything else by name: the index of `element()` and `has_byte_at()`, the lengths and
-sizes of `is_length()`, `is_length_between()` and the `has_size_*` family, the divisor of
-`is_divisible_by()`, and `match.is_length()`, `match.has_length()` and `match.is_divisible_by()`. They
-are typed `SupportsIndex`, so a type checker takes a numpy integer too, and any other value with an
-`__index__`, which the run time still refuses unless it is an `int` or a numpy integer.
+Every integer argument takes a numpy integer, an `IntEnum` member or any other `int`, and refuses a bool or
+anything else by name. That covers:
+
+- the index of `element()` and `has_byte_at()`
+- the lengths and sizes of `is_length()`, `is_length_between()` and the `has_size_*` family
+- the divisor of `is_divisible_by()`
+- `match.is_length()`, `match.has_length()` and `match.is_divisible_by()`.
+
+They are typed `SupportsIndex`, so a checker accepts any value with `__index__`. At run time only an `int` or
+a numpy integer passes.
 
 ```python
 assert_that(["a", "b"]).is_length(np.int64(2)).element(np.int64(1)).is_equal_to("b")
@@ -421,10 +432,12 @@ assert_that({"wait": np.timedelta64(5, "h")}).is_equal_to(
 )
 ```
 
-A duration against a number has no distance. `is_close_to()` and `is_not_close_to()` refuse the pair,
-`match.close_to()` matches no such pair, and under `tolerance=` a leaf of the other kind is compared by
-`==` alone. A negative duration tolerance is refused like a negative number, and a `NaT` is close to
-nothing.
+A duration against a number has no distance:
+
+- `is_close_to()` and `is_not_close_to()` refuse the pair.
+- `match.close_to()` matches no such pair.
+- Under `tolerance=`, a leaf of the other kind is compared by `==` alone.
+- A negative duration tolerance is refused like a negative number, and a `NaT` is close to nothing.
 
 <!-- docs-guard: raises -->
 <!-- docs-guard: type-error -->
@@ -433,10 +446,13 @@ assert_that(1).is_close_to(1, np.timedelta64(1, "s"))
 # TypeError: given tolerance arg must be a number, to match val, but was <np.timedelta64(1,'s')> (timedelta64)
 ```
 
-A type checker refuses that call as well. Durations order as numbers do, through `is_greater_than()`,
-`is_between()` and the rest. A `np.datetime64` value is not taken by `is_close_to()`, which measures a `datetime` under a `timedelta`.
-Comparing a duration with a bare number by `==` is numpy's own equality, which numpy 2 deprecates with
-a warning.
+A type checker refuses that call as well.
+
+- Durations order as numbers do, through `is_greater_than()`, `is_between()` and the rest.
+- A `np.datetime64` value is not taken by `is_close_to()`, which measures a `datetime` under a
+  `timedelta`.
+- Comparing a duration with a bare number by `==` is numpy's own equality, which numpy 2 deprecates with
+  a warning.
 
 ### Type checking data values
 

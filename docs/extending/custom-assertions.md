@@ -23,10 +23,12 @@ assert_that(6).is_5()  # fails!
 Both lines run, but a type checker rejects the first one, since `5` resolves to the numeric protocol
 and that declares no `is_5`.
 
-An extension is visible to a checker only where the value keeps the whole builder, which is a narrow
-set: a value with a capability but no overload of its own, such as an iterable you wrote or a mapping
-that is not a `dict`, plus anything typed `Any`. Everything else reaches either its own protocol or
-the core surface. The reason and the ways round it are in
+A checker sees an extension only where the value keeps the whole builder:
+
+- a value with a capability but no overload of its own, such as your own iterable or a non-`dict` mapping
+- anything typed `Any`.
+
+Everything else gets its own protocol or the core surface. Why, and the ways round it:
 [Where the typed surface ends](../concepts/type-safety.md#where-the-typed-surface-ends).
 
 `remove_extension()` takes the same function and unregisters it, so a temporary assertion does not
@@ -43,11 +45,12 @@ remove_extension(is_5)
 `add_extension()` registers a name at run time. No checker learns that name or its signature: where a
 value keeps the whole builder the call is accepted as `Any`, and everywhere else it is rejected.
 
-Nothing adds it to the inferred type for you. You can declare a `Protocol` of your own carrying `is_5()`
-and `cast()` the builder to it, which types the call, but that protocol then carries only what you
-declare on it: `is_5().is_greater_than(0)` stops type-checking unless you write `is_greater_than` there
-too. The protocols the views are built from are private and stay that way, so the typed surface can keep
-moving.
+Nothing adds it to the inferred type for you:
+
+- You can declare your own `Protocol` with `is_5()` and `cast()` the builder to it. The call is typed, but
+  only what you declare is: `is_5().is_greater_than(0)` needs `is_greater_than` on your protocol too.
+- The protocols the views are built from are private and stay that way, so the typed surface can keep
+  moving.
 
 What is supported is writing the check as a matcher. It is typed end to end, it restricts the type it
 accepts, and it imports nothing private:
@@ -117,14 +120,14 @@ def test_foo(my_extensions):
     assert_that(6).is_5()  # fails!
 ```
 
-A name already in use is refused with `ValueError`, whether a built-in such as `is_equal_to` holds
-it or another function added earlier, so an extension cannot replace an assertion by accident. Pass
-`override=True` to replace it on purpose. Adding the same function again is not a clash, so the
-module-scoped fixture above can run once for every module that requests it.
-
-A name a polling chain uses for itself, such as `within` or `every`, or one starting with `_`, `cr_` or
-`gi_`, is refused with `ValueError` even under `override=True`, since after `eventually()` the extension
-could never be reached.
+- A name already in use is refused with `ValueError`, whether a built-in such as `is_equal_to` holds it
+  or another function added earlier, so an extension cannot replace an assertion by accident.
+- `override=True` replaces it on purpose.
+- Adding the same function again is not a clash, so the module-scoped fixture above can run once for
+  every module that requests it.
+- A name a polling chain uses for itself, such as `within` or `every`, or one starting with `_`, `cr_`
+  or `gi_`, is refused with `ValueError` even under `override=True`, since after `eventually()` the
+  extension could never be reached.
 
 ## Writing custom assertions
 

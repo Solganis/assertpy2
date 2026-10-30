@@ -1,8 +1,8 @@
 # Type Safety
 
 Type safety is what sets `assertpy2` apart from `assertpy` and most alternatives. `assert_that()` is
-overloaded, so the value you pass decides which assertions you get back - a *type-specific* set, not one
-generic `Any`:
+overloaded, so the value you pass decides which assertions you get back: a *type-specific* set, not one
+generic `Any`.
 
 ```python
 assert_that("hello").starts_with("he")  # string assertions
@@ -56,9 +56,8 @@ assert_that("foo").is_positive()
 assert_that(42).is_instance_of("int")
 ```
 
-The same holds for a relation between two values, not only for a method that does not apply. An
-argument is bound to the type of the value under test, so a comparison that could never hold is an
-error rather than a test that fails at runtime:
+The same holds for a relation between two values. An argument is bound to the type of the value under
+test, so a comparison that could never hold is a type error, not a runtime failure:
 
 <!-- docs-guard: type-error -->
 ```python
@@ -69,11 +68,9 @@ assert_that(date.today()).is_before(5)             # a date against a number
 assert_that(1).satisfies(match.starts_with("a"))   # a matcher built for another type
 ```
 
-Where the ordering assertions stop is worth knowing before you rely on them.
-
-The line above catches a number compared against text, because a numeric value reaches a numeric view
-whose operand is bound. A value that reaches no view of its own is the different case. It keeps
-ordering with an operand of any type, and nothing there is refused.
+The ordering assertions have a limit. A number against text is caught because a numeric value reaches a
+numeric view whose operand is bound. A value that reaches no view of its own keeps ordering with an
+operand of any type, and nothing there is refused.
 
 ```python
 def what_a_checker_allows(anything: object, someone: Person) -> None:
@@ -88,26 +85,24 @@ given other arg must be comparable with val <...> (object), but was <'text'> (st
 val must be a number or a date, which is what an ordering is defined for, but was <...> (Person)
 ```
 
-That is deliberate, and it is the second attempt. The first spelling bound the operand to a list of
-types and rejected `numpy.int64`, a value this library documents support for. The capability an
-ordering needs is one no annotation can name, so the choice was between refusing correct comparisons
-and accepting incorrect ones. Refusing correct code is the worse of the two.
+That is deliberate. Binding the operand to a list of types rejected `numpy.int64`, which the library
+supports. No annotation can name the capability an ordering needs, so the choice was between refusing
+correct comparisons and accepting wrong ones, and refusing correct code is the worse of the two.
 
-Comparing an `int` against a `float`, passing a matcher where an item is expected, and every other
-ordinary combination keep working. Which relations are refused and which stay accepted is measured
-rather than asserted: [`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py)
-holds the spellings that were tried, and CI compares all four checkers against a recorded baseline in
-both directions.
+An `int` against a `float`, a matcher where an item is expected and every other ordinary combination keep
+working. Which relations are refused is measured, not asserted:
+[`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py) holds the
+spellings tried, and CI compares all four checkers against a recorded baseline in both directions.
 
 [ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy),
 [Pyright](https://github.com/microsoft/pyright) and [Pyrefly](https://github.com/facebook/pyrefly) all
 report these in the editor and in CI, turning a class of test bugs into errors you see while typing.
 
-Every public `assert_that` overload is pinned by an `assert_type` check in
-[`tests/test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py). CI runs
-four independent checkers against that file on every push, with **zero suppressions**, so a regression
-that broadens or changes a return type fails the build. `ty` additionally type-checks the whole
-package.
+- Every public `assert_that` overload is pinned by an `assert_type` check in
+  [`tests/test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py).
+- CI runs four checkers against that file on every push, with **zero suppressions**. A changed or broadened
+  return type fails the build.
+- `ty` also checks the whole package.
 
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
@@ -134,12 +129,9 @@ assert_that(person).is_positive()   # type error: a plain class has no numeric a
 | | anything typed `Any`, which is what an unannotated helper or a `json.loads()` result gives you |
 | **gets the core surface** | a value annotated `object`, and a class that answers to nothing |
 
-That second row is a compatibility trade rather than a clean line, and it errs on purpose. A class
-that happens to define `__iter__` for a reason of its own keeps every assertion name there is, numeric
-ones included. A value the library might be able to use keeps everything, and only a value it
-certainly cannot use is narrowed.
-
-Erring the other way would reject calls that work, which is the worse failure of the two.
+The second row errs on purpose. A class that defines `__iter__` for a reason of its own keeps every
+assertion name, numeric ones included: a value the library might use keeps everything, and only a value it
+certainly cannot use is narrowed. Erring the other way would reject calls that work, which is worse.
 
 [Dynamic assertions](../guides/assertions.md#dynamic-assertions-on-objects) (`has_<attribute>()`) are
 resolved at runtime from the value itself, so no overload can declare them ahead of time. They are
@@ -151,17 +143,16 @@ builder:
 assert_that(person).has_first_name("Fred")   # type error: a plain class has no dynamic assertions
 ```
 
-The runtime accepts it either way, and only the checker differs. On a value with its own
-overload the choice is between `# type: ignore[attr-defined]` and the typed equivalent, which for a
-dict is [`contains_entry()`](../guides/assertions.md#dicts):
+The runtime accepts it, and only the checker differs. On a value with its own overload, use
+`# type: ignore[attr-defined]` or the typed equivalent, for a dict [`contains_entry()`](../guides/assertions.md#dicts):
 
 ```python
 assert_that({"first_name": "Fred"}).contains_entry({"first_name": "Fred"})
 ```
 
-This is the deliberate cost of keeping the original assertpy API working unchanged. The two are not
-mutually satisfiable: for a checker to accept `has_first_name` on a dict, `_DictAssertion` would need a
-`__getattr__`, and that same declaration would stop it reporting `contins_key` as a typo.
+This is the cost of keeping the assertpy API unchanged. For a checker to accept `has_first_name` on a
+dict, `_DictAssertion` would need a `__getattr__`, and that same declaration would stop it reporting
+`contins_key` as a typo.
 
 [Custom assertions](../extending/custom-assertions.md) registered with `add_extension()` sit on the same
 line, for the same reason. The name is attached at runtime, so it reaches a checker through that one
@@ -186,18 +177,17 @@ narrower than either half of the example above:
 
 ## Typed narrowing with .value
 
-Assertions don't just check a value - they can hand it back, typed. The `value` property ends a chain
-by returning the checked value as-is.
+The `value` property ends a chain by returning the checked value as-is, typed.
 
-For object- and union-typed values, two assertions refine its static type along the way: `is_not_none()`
-removes `None`, and `is_instance_of()` narrows to the checked class. The usual `assert x is not None` /
-`cast()` dance to satisfy a type checker disappears:
+For object- and union-typed values, two assertions refine the static type on the way: `is_not_none()`
+removes `None`, and `is_instance_of()` narrows to the checked class. No `assert x is not None` or `cast()`
+is needed:
 
 ```python
 order: Order | None = repo.find_order(42)
 
 paid = assert_that(order).is_not_none().is_instance_of(PaidOrder).value
-paid.refund()  # statically typed as PaidOrder - no cast, no bare assert
+paid.refund()  # statically typed as PaidOrder, no cast, no bare assert
 ```
 
 Alternatives narrow too, up to three of them, written as a tuple or as separate arguments:
@@ -219,9 +209,8 @@ dict assertions, ...), so extract-and-continue works after pivots too:
 name = assert_that(b"fred").decoded_as().is_length(4).value  # typed as str
 ```
 
-Collection assertions are generic over the element type, so element-access pivots
-(`first()`/`last()`/`element()`/`single()`) narrow the chain to the element - a list of models stays
-typed all the way down:
+Collection assertions are generic over the element type, so `first()`, `last()`, `element()` and
+`single()` narrow the chain to the element, and a list of models stays typed all the way down:
 
 ```python
 orders: list[Order] = repo.all_orders()
@@ -231,45 +220,41 @@ total = assert_that(orders).first().value.total
 mapped = assert_that(orders).mapped(lambda o: o.total).value
 ```
 
-Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime.
-Here the narrowing is purely static - checked by ty, mypy, Pyright and Pyrefly - with zero runtime cost
-beyond returning the value.
+AssertJ approximates this at runtime with `asInstanceOf(InstanceOfAssertFactories...)`. Here the
+narrowing is static, checked by ty, mypy, Pyright and Pyrefly, and costs nothing beyond returning the value.
 
 !!! note "The narrowing is sound in every mode"
-    `.value` never hands back a value that contradicts its narrowed type, and that guarantee holds in
-    every mode - not just strict:
+    `.value` never hands back a value that contradicts its narrowed type, in every mode, not just strict:
 
     - **Strict** (the `assert_that` default): a failed `is_not_none()` or `is_instance_of()` halts the
       chain before `.value` is reached, so the value genuinely matches the narrowed type.
     - **Soft / warn** (inside [`soft_assertions()`](../guides/testing.md#soft-assertions) or under
-      `assert_warn()`): a failure is *collected* instead of halting, so reading `.value` would read past
-      an unestablished fact. Rather than leak a value that could violate its static type, `.value`
-      **raises** `TypeError` - and a pivot like `first()` or `extracting()` rejects the untrusted value
-      on its own input check. `.val`, the name a polling chain hands its value back under, refuses
-      in the same position and for the same reason, and both refusals name the failure that caused
-      them. `check()` answers rather than refusing: reading a verdict is what it promises, so it hands
-      back `AssertionOutcome(passed=False)` carrying that same failure.
+      `assert_warn()`): a failure is *collected* instead of halting, so `.value` would read past an
+      unestablished fact. It **raises** `TypeError` instead, and a pivot like `first()` or
+      `extracting()` rejects the untrusted value on its own input check.
+        - `.val`, the name a polling chain hands its value back under, refuses the same way.
+        - Both refusals name the failure that caused them.
+        - `check()` answers rather than refusing, since a verdict is what it promises: it hands back
+          `AssertionOutcome(passed=False)` carrying that failure.
 
     Either way nothing unsound escapes: in soft mode you get an exception, never a wrong-typed value.
     Read `.value` in strict mode, or after the soft block has closed.
 
-    A **negated** assertion narrows nothing. `not_.is_not_none()` says the value *is* `None` and
-    `not_.is_instance_of(str)` says it is not a string, so what comes back carries the type it already
-    had rather than the one that was denied.
+    A **negated** assertion narrows nothing: `not_.is_not_none()` says the value *is* `None`, so what
+    comes back keeps the type it already had.
 
-    What a refinement hands back is the view `assert_that()` would have given for the refined type, so
-    `is_not_none()` on a `str | None` continues as a string. Refining to a class the library does not
-    name continues on the core surface instead, since there is no per-type protocol to hand back.
+    A refinement hands back the view `assert_that()` would give the refined type, so `is_not_none()` on a
+    `str | None` continues as a string. A class the library does not name continues on the core surface,
+    since there is no per-type protocol to hand back.
 
     Under `ty` the numeric and sequence refinements come back gradual rather than as their view, so the
     chain accepts everything from there on instead of narrowing.
 
 ### Refinement narrowing with a TypeIs predicate (advanced)
 
-`is_not_none()` and `is_instance_of()` are two built-in narrowers. `satisfies()` extends narrowing
-to **your own** predicates: pass a predicate typed with [`TypeIs`](https://peps.python.org/pep-0742/)
-and it narrows the chain to the guarded type. Unlike `is_instance_of()`, which narrows by class only,
-a `TypeIs` predicate narrows by any runtime condition - a refinement type:
+`satisfies()` extends narrowing to **your own** predicates: one typed with
+[`TypeIs`](https://peps.python.org/pep-0742/) narrows the chain to the guarded type. Unlike
+`is_instance_of()`, which narrows by class only, it narrows by any runtime condition:
 
 ```python
 from typing_extensions import TypeIs  # or `from typing import TypeIs` on Python 3.13+
@@ -278,15 +263,14 @@ def is_paid(order: Order) -> TypeIs[PaidOrder]:
     return isinstance(order, PaidOrder) and order.status == "PAID"
 
 paid = assert_that(order).is_not_none().satisfies(is_paid).value
-# statically typed as PaidOrder - narrowed by a domain predicate, not just a class
+# statically typed as PaidOrder, narrowed by a domain predicate, not just a class
 paid.refund()
 ```
 
-The runtime behavior of `satisfies()` is unchanged (it just runs the predicate). The narrowing is
-purely static.
+At runtime `satisfies()` just runs the predicate. The narrowing is purely static.
 
-`is_not_none()` in that example is part of the assertion, not a step needed to unlock narrowing. A
-concretely typed value refines just as well, which is where a domain predicate is usually applied:
+`is_not_none()` above is part of the assertion, not needed for narrowing. A concretely typed value
+refines just as well:
 
 ```python
 def is_paid_order(payload: object) -> TypeIs[PaidOrder]:
@@ -309,15 +293,14 @@ paid = assert_that(order).satisfies(is_paid_order).value   # statically PaidOrde
 
     - prefer `is_instance_of()` for class narrowing (which PyCharm *does* narrow)
     - treat `satisfies()`-based refinement narrowing as advanced / checker-dependent
-    - don't disable the *Unresolved attribute reference* inspection to work around it - it is a core
-      check. Scope any workaround to the specific line.
+    - don't disable the *Unresolved attribute reference* inspection to work around it, since it is a
+      core check. Scope any workaround to the specific line.
 
 ### Contract narrowing with assert_conforms
 
-`is_instance_of()` narrows a value that is *already* an instance. `assert_conforms()` goes one step
-further - it **validates a raw payload against a pydantic v2 model and continues over the validated
-instance**, narrowing the chain to that model. It is the capstone for API-response testing: parse,
-validate, and type in one step.
+`is_instance_of()` narrows a value that is *already* an instance. `assert_conforms()` **validates a raw
+payload against a pydantic v2 model and continues over the validated instance**, narrowing the chain to
+that model: parse, validate and type in one step.
 
 <!-- docs-guard: skip -->
 ```python
@@ -338,15 +321,13 @@ assert_that(order.total).is_greater_than(0)
 with pydantic's validation errors. On success it returns a builder over the validated, coerced
 instance, so `.value` hands back a typed `Order`. It needs pydantic installed.
 
-`assert_conforms` is a **function**, not a method on the builder, and that is deliberate. A method
-(`assert_that(payload).conforms_to(Order)`) can only narrow when the payload's own static type is
-narrowable - so the dominant case, the `Any` a `response.json()` decodes to, would stay `Any`, and an
-explicitly `dict`-typed payload would stay `dict`.
+`assert_conforms` is a **function**, not a builder method, on purpose:
 
-Because `assert_conforms` drives its return type from the `model` argument instead of from the payload,
-it narrows to `Order` for **every** input, `Any` included. And since it yields a class-narrowed builder
-(the same mechanism as `is_instance_of()`), the narrowing lights up in PyCharm too, not only the CLI
-checkers.
+- A method (`assert_that(payload).conforms_to(Order)`) narrows only when the payload's own static type
+  does, so the `Any` of `response.json()` would stay `Any` and a `dict`-typed payload would stay `dict`.
+- The function takes its return type from `model`, so it narrows to `Order` for **every** input, `Any`
+  included.
+- It yields a class-narrowed builder, as `is_instance_of()` does, so the narrowing works in PyCharm too.
 
 A **list endpoint** (a JSON array of objects) validates element-by-element with `each=True`, narrowing
 the chain to `list[Order]`:
@@ -363,7 +344,7 @@ composes with `exact=True` for per-element drift (drift paths are prefixed with 
 ### Contract drift with `exact=True`
 
 `model_validate` **silently drops** fields the model does not declare, so a stale model keeps passing
-after the live API grows new fields - your test is green while the contract has drifted.
+after the live API grows new fields: the test is green while the contract has drifted.
 
 `exact=True` catches that: it fails when the payload carries any field the model does not declare,
 in the models, dataclasses and `TypedDict`s the payload became inside lists, tuples, sets, dicts, unions
@@ -393,10 +374,12 @@ except AssertionFailure as failure:
 # promo_code SPRING ['promo_code']
 ```
 
-Each of those entries has `absent == "expected"`. Its `steps` lead into the payload by the keys the walk
-read, so by the alias where the path names the field. Where a field holds JSON text, a step of kind `json`
-carries what the text decodes to, and the steps after it lead on from there. A part that cannot be checked is
-a single entry holding that part, with the reason in `expected`.
+- Each entry has `absent == "expected"`.
+- Its `steps` lead into the payload by the keys the walk read, so by the alias where the path names the
+  field.
+- Where a field holds JSON text, a step of kind `json` carries what the text decodes to, and the steps
+  after it lead on from there.
+- A part that cannot be checked is a single entry holding that part, with the reason in `expected`.
 
 What the check reads, in short:
 
@@ -483,11 +466,13 @@ A part in which no key can hide (a number, text that is not JSON, a model passed
 
 #### The payload as it was sent
 
-It reads the payload as it was sent. Where the model runs code of its own during validation (a
-validator, `model_post_init`, a custom `__init__`), the payload is kept before validation, and the plain
-dicts and lists that code changed in place are put back for the check, then returned to what validation
-left. So a validator that pops a key from its input is read like one that returns a copy without it. A
-dict or list subclass changed in place is not put back.
+It reads the payload as it was sent:
+
+- Where the model runs its own code during validation (a validator, `model_post_init`, a custom
+  `__init__`), the payload is kept before validation.
+- Plain dicts and lists that code changed in place are put back for the check, then returned to what
+  validation left. A validator that pops a key is read like one that returns a copy without it.
+- A dict or list subclass changed in place is not put back.
 
 #### What it does not see
 
@@ -527,12 +512,15 @@ rewrite the tag after the fact.
 A `TypedDict` held in a `deque`, an `OrderedDict` or a named tuple, or declared beside a `deque`, is not
 guessed either: the check takes those for types that may build a dict.
 
-Where the check does not guess, a clean payload passes. A key the payload sent that the built dict lost
-fails with `<path> cannot be checked`, and so does a field two of them read from different keys when the
-payload sends both. A key read through an alias is not lost. A field's name sent beside its alias is not
-named there, as it is where the check knows which `TypedDict` built the dict: the built dict holds that
-name either way. What the dict holds is followed as whatever
-each of the declared types says of it.
+Where the check does not guess:
+
+- A clean payload passes.
+- A key the payload sent that the built dict lost fails with `<path> cannot be checked`. So does a field
+  two of the types read from different keys, when the payload sends both.
+- A key read through an alias is not lost.
+- A field's name sent beside its alias is not named, as it is when the check knows which `TypedDict` built
+  the dict: the built dict holds that name either way.
+- What the dict holds is followed as each declared type says.
 
 ## Set up your type checker
 

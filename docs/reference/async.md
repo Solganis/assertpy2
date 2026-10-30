@@ -1,7 +1,7 @@
 # Async & eventual assertions
 
 Poll a callable until an assertion passes or the timeout expires. Start with ``eventually()`` on a
-callable value, chain the assertion you expect to eventually hold, and await the result - or use
+callable value, chain the assertion you expect to eventually hold, and await the result. Use
 ``eventually_sync()`` for the same polling without an event loop. See
 [Testing](../guides/testing.md#async-assertions) for usage.
 

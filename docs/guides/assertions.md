@@ -111,33 +111,36 @@ assert_that(1).is_not_in(allowed)   # passes: 1 is not the list, though the list
 ```
 
 The last line is the trap. `is_in(allowed)` fails for a member and shows the list in its message, and
-`is_not_in(allowed)` passes for a member, where no message is printed for a reader to notice anything.
+`is_not_in(allowed)` passes for a member and prints nothing for a reader to notice.
 `match.is_in()` takes its candidates the same way.
 
 !!! warning "Floats and equality"
     Avoid `is_equal_to()` with `float` values. Use `is_close_to()` or `is_between()` instead.
 
-`is_close_to()` takes the distance three ways, the difference and the window around each side, and
-passes when any of them is within the tolerance. Float rounding differs between the three at the
-boundary, so `-1.1` is close to `-0.9` within `0.2`, although `-0.9 - -1.1` comes out as
-`0.20000000000000007`. Under an absolute tolerance the answer is the same whichever operand is the
-value. `match.close_to()` gives the same one, `is_not_close_to()` its opposite, and
-`is_equal_to(..., tolerance=)` measures the same way each pair it measures.
+How `is_close_to()` measures:
 
-A pair that Python's own arithmetic refuses or overflows is measured by exact value rather than
-refused: a `Decimal` against a `float` or a `numpy` integer, or an `int` past the float range against a
-`float`. A `Decimal` context that traps `Overflow` still raises it, under either tolerance, since that
-is the arithmetic it asked for. A `numpy` integer scalar is measured and ordered as the `int` it
-holds, since its own
-arithmetic wraps at its width: `numpy.uint8(3)` is 247 away from `250`, where `numpy.uint8(3) - 250` is
-`9` and a warning. A `numpy` float beside one is read as the `float` it holds wherever a `float` holds
-the same number, so the pair is measured as Python measures an `int` against a `float`. A subclass of a
-`numpy` scalar is asked through its own operators and keeps its width, and so does a `Fraction` built
-from a `numpy` integer, which holds it as a part. Two of `int` and of a `Fraction` of two `int` are
-close by their exact difference alone, since a window under a float tolerance rounds one past
-`2**53`. Other pairs are measured by their own arithmetic. An infinity is close only to an equal
-infinity, whatever the tolerance, and a NaN is close to nothing and is neither less than, greater than
-nor between anything:
+- Three ways, the difference and the window around each side, and it passes when any is within the
+  tolerance. Float rounding at the boundary differs between them, so `-1.1` is close to `-0.9` within
+  `0.2`, though `-0.9 - -1.1` is `0.20000000000000007`.
+- Under an absolute tolerance the answer is the same whichever operand is the value.
+- `match.close_to()` gives the same answer, `is_not_close_to()` the opposite, and
+  `is_equal_to(..., tolerance=)` measures each pair the same way.
+
+How particular pairs are measured:
+
+- A pair Python's arithmetic refuses or overflows is measured by exact value: a `Decimal` against a `float` or a `numpy`
+  integer, an `int` past the float range against a `float`. A `Decimal` context that traps `Overflow`
+  still raises it.
+- A `numpy` integer is measured and ordered as the `int` it holds, since its own arithmetic wraps:
+  `numpy.uint8(3)` is 247 away from `250`, where `numpy.uint8(3) - 250` gives `9` and a warning.
+- A `numpy` float beside one is read as the `float` it holds, where a `float` holds the same number.
+- A subclass of a `numpy` scalar uses its own operators and keeps its width. So does a `Fraction` built
+  from a `numpy` integer.
+- Two values, each an `int` or a `Fraction` of two `int`s, are close by their exact difference alone,
+  since a window under a float tolerance rounds one past `2**53`.
+- Other pairs are measured by their own arithmetic.
+- An infinity is close only to an equal infinity, whatever the tolerance. A NaN is close to nothing and is
+  neither less than, greater than nor between anything.
 
 ```python
 assert_that(-1.1).is_close_to(-0.9, 0.2)
@@ -146,14 +149,16 @@ assert_that(float("inf")).is_not_close_to(1e308, float("inf"))
 assert_that(float("nan")).is_not_close_to(float("nan"), 1)
 ```
 
-A tolerance relative to the size of the numbers is `rel=`, a fraction of the expected value, as
-`pytest.approx()` and `numpy.testing.assert_allclose()` scale it: `rel=0.02` allows `2` either side of
-`100`, whatever the value is. Scaled by the larger of the two, as `math.isclose()` scales a pair with
-no expected side, the value under test would widen its own allowance, and `10` would be within `rel=1`
-of `1`. Given beside an absolute tolerance, either holding is enough, which keeps an expected value
-near zero within reach. They are not added: `100` is not close to `103` within `1` and `rel=0.02`,
-which their sum would cover. A datetime has no size to take a fraction of and refuses `rel`.
-`match.close_to()`, `match.equal_to()` and `is_equal_to()` take it too:
+`rel=` is a tolerance relative to the expected value, as in `pytest.approx()` and
+`numpy.testing.assert_allclose()`:
+
+- `rel=0.02` allows `2` either side of `100`, whatever the value.
+- Not the larger of the two, as `math.isclose()` takes it: then the value would widen its own allowance,
+  and `10` would be within `rel=1` of `1`.
+- Beside an absolute tolerance, either one holding is enough, which keeps an expected value near zero
+  within reach. They are not added: `100` is not close to `103` within `1` and `rel=0.02`.
+- A datetime has no size and refuses `rel`.
+- `match.close_to()`, `match.equal_to()` and `is_equal_to()` take it too.
 
 ```python
 assert_that(101.5).is_close_to(100, rel=0.02)
@@ -213,12 +218,11 @@ assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_b
 )
 ```
 
-`any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
-`is_length()` takes a matcher in place of the number, which is asked about the length, so a range or a
-composed condition is one assertion: `is_length(match.between(2, 5))`, as `match.has_length()` and
-`match.is_length()` take one too.
-`is_type_of()` asks for the exact class and takes one class, so a `bool` is no `int` there.
-`is_instance_of()` takes a subclass, and a tuple or a union of classes any one of which will do.
+- `any_satisfy`, `all_satisfy` and `none_satisfy` accept callables and [matchers](matchers.md).
+- `is_length()` takes a matcher for the length: `is_length(match.between(2, 5))`. So do
+  `match.has_length()` and `match.is_length()`.
+- `is_type_of()` asks for the exact class and takes one class, so a `bool` is no `int` there.
+- `is_instance_of()` accepts subclasses, and a tuple or a union of classes.
 
 #### Assertions that checked nothing
 
@@ -275,9 +279,8 @@ Two empty dicts under a filter stay quiet, since the comparison checked that bot
 snapshot is not watched this way: the keys it ignores include its placeholders, which it checks with
 matchers of their own.
 
-The negative ones never warn. For `none_satisfy`, `does_not_contain` and
-`does_not_contain_duplicates` an empty subject is the expected pass, since "no errors were logged" is
-exactly what such a test wanted to hear.
+The negative ones never warn. For `none_satisfy`, `does_not_contain` and `does_not_contain_duplicates`
+an empty subject is the expected pass: "no errors were logged" is what such a test wants to hear.
 
 The exact-pairing and multiset assertions:
 
@@ -316,17 +319,15 @@ async def is_positive(value: int) -> bool:
 assert_that(-1).satisfies(is_positive)  # TypeError: predicate handed back a coroutine instead of an answer; ...
 ```
 
-Await the call and assert on what it returned, `assert_that(await is_positive(-1)).is_true()`. Every
-place that reads an answer as truth refuses a coroutine, whether it came from a plain callable, from a
-custom matcher's `matches()`, or from a `comparators=` entry, and whether it is reached directly or
-through a composed matcher. `eventually()` is the other half of the story and a different one: it polls
-an async probe for you, so an async callable belongs there as the thing being polled.
+Await the call and assert on the result: `assert_that(await is_positive(-1)).is_true()`.
 
-The call assertions refuse one for the same reason. `raises()`, `does_not_raise()`, `warns()` and
-`does_not_warn()` judge what happens before the call returns, and an `async def` has not run its body by
-then, so `when_called_with()` raises `TypeError` rather than pass or fail on a body it never saw. Await
-the call inside `pytest.raises` or `pytest.warns` instead. An async generator is refused the same way,
-and a plain generator is not: its body runs only when you consume it, so assert on that.
+- Every place that reads an answer as truth refuses a coroutine: a plain callable, a custom matcher's
+  `matches()`, a `comparators=` entry, directly or through a composed matcher.
+- To poll an async probe, use `eventually()`.
+- `raises()`, `does_not_raise()`, `warns()` and `does_not_warn()` refuse an `async def` too:
+  `when_called_with()` raises `TypeError`, since the body has not run when the call returns. Await it
+  inside `pytest.raises` or `pytest.warns` instead.
+- An async generator is refused the same way. A plain generator is not: its body runs when consumed.
 
 Ruff already covers part of it, and this check does not repeat what it does:
 
@@ -402,11 +403,10 @@ one it has never heard of. Name yours and it reads them the same way:
 assertpy2_dangling_entries = "check verify"
 ```
 
-Only list a wrapper that **builds** something to assert on, the way `assert_that` does. A helper that
-asserts inside its own body is complete as a statement, and listing it would report working code. The
-name has to arrive through `from ... import check`, aliases included. That import is the whole
-difference between your wrapper and any other function in the world that happens to be called `check`,
-so a helper reached as `helpers.check(...)` is out of scope.
+- List only a wrapper that **builds** something to assert on, as `assert_that` does. A helper that asserts
+  inside its own body is complete, and listing it would report working code.
+- The name must arrive through `from ... import check`, aliases included. A helper reached as
+  `helpers.check(...)` is not read.
 
 Two limits worth knowing before you rely on it:
 
@@ -498,33 +498,31 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 
 ### Selective comparison (ignore / include)
 
-`is_equal_to()` can ignore or include specific keys or fields. It works across dicts, dataclasses,
-namedtuples, Pydantic models, attrs classes, and plain objects. A mapping that is not a `dict`, a
-`MappingProxyType` or a `ChainMap` for one, is read by its keys. For a sequence, each element is
-compared pairwise under the same filters, and a failure is one for the two sequences: its diff lists
-every element that differs, at a path that starts at the sequence (`[1].name`).
+`is_equal_to()` can ignore or include keys or fields of dicts, dataclasses, named tuples, Pydantic models,
+attrs classes and plain objects.
 
-A key applies at the level it names. A nested-path tuple goes on into the value under its first key and
-reads that value by its fields, which for a mapping are its keys: under `ignore=("user", "id")` a dict
-and a dataclass that hold the same under `user` are equal, as they are at the top.
+- Any other mapping, such as `MappingProxyType` or `ChainMap`, is read by its keys.
+- Sequences are compared element by element under the same filters. One failure covers both sequences,
+  and its diff lists each differing element at a path from the sequence: `[1].name`.
+- A key applies at the level it names. A nested-path tuple enters the value under its first key and reads
+  it by fields (keys, for a mapping). Under `ignore=("user", "id")` a dict and a dataclass holding the same
+  under `user` are equal.
+- A record (dataclass, attrs instance, model) is read by its fields all the way down, and so is a dict held
+  against one, whatever `==` the record has. Under two plain dicts a record is compared by its `==` unless a
+  path enters it. An `OrderedDict` under a record keeps its order.
+- On a failure, `failure.actual` and `failure.expected` are the compared fields for a record, and your own
+  object for a dict or a sequence.
+- A plain object is read by its attributes when they are all it holds. A subclass of a builtin container
+  and a class with slots hold more, so they are compared by their own `==`, and refused at the top as a
+  plain `set` is.
 
-A dataclass, attrs instance or model is read through its fields all the way down, and so is a dict held
-against one: a record under either is compared by its fields, whatever `==` it has of its own. Under two
-plain dicts a record is compared by its `==` unless a path enters it. An `OrderedDict` under a record
-keeps its order, as its `==` reads it.
+An exception is read as its class (under the name `__class__`), its `args` and its `__dict__` attributes:
 
-On a failure `failure.actual` and `failure.expected` are the fields that were compared where the value is
-a record, and your own object where it is a dict or a sequence.
-
-A plain object is read by its attributes where they are all it holds. A subclass of a builtin container
-and a class with a slot hold more than their `__dict__`, so they are compared by their own `==`, and at
-the top they are refused as a plain `set` is.
-
-An exception is read as three things: its class, under the name `__class__`, its `args` and the
-attributes in its `__dict__`. Two errors of two classes differ, and so do two with different messages,
-unless you leave `__class__` or `args` out by name. An exception whose instance has room for more than
-those, an `OSError` with its `filename`, an exception group, a class with a slot, is compared by its own
-`==`. One that is a dataclass, an attrs class or a model is read as that record, by the fields it declares.
+- Two of different classes differ, and so do two with different messages, unless you leave `__class__` or
+  `args` out by name.
+- One with room for more, such as an `OSError` with `filename`, an exception group or a class with slots,
+  is compared by its own `==`.
+- One that is a dataclass, an attrs class or a model is read as that record, by its declared fields.
 
 The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those. Any other
 iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
@@ -579,24 +577,24 @@ assert_that(payload).is_equal_to(expected, ignore=float)
 `is_equal_to()` can compare two concrete nested structures with a numeric tolerance or with custom
 comparators, anywhere in the graph:
 
-- `tolerance` - an absolute tolerance that widens `==` for every pair of real-number leaves: a pair `==`
-  holds equal stays equal, and any other is measured as `is_close_to()` measures it (see
-  [Numbers](#numbers)). A `bool` leaf is compared exactly. A numpy duration tolerance measures only numpy
-  duration leaves, and a numeric one measures no duration leaf. It reaches a leaf inside a mapping, a
-  sequence, a deque or a record. An [object compared by its own `==`](#what-the-walk-takes-apart) is
-  not opened for it.
-- `rel` - a tolerance relative to the expected leaf of each pair of real-number leaves, beside or instead of
-  `tolerance`, either holding being enough, as `is_close_to(..., rel=)` has it. `snapshot()` and
-  `matches_inline()` take both.
-- `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
-  field-name key wins over a type key). A node it matches, a value or a whole container whose type you
-  name, is decided by the predicate alone, at any depth and at the root. A container whose `==` holds is
-  still walked, since `==` says nothing of what your predicate says of what it holds, so a comparator
-  stricter than `==` fails a pair inside a list as inside a dict or a deque. Four things are left to `==`:
-  mapping keys, set members, which have no positions to pair them by, whatever a container shared by both
-  sides holds, and what an [object compared by its own `==`](#what-the-walk-takes-apart) holds apart.
-  The predicate may be asked about one pair more than once while a failure is reported, so keep it free
-  of side effects. The walk reaches a few hundred levels deep, where `==` alone goes deeper.
+- `tolerance`: an absolute tolerance for every pair of real-number leaves. A pair `==` holds equal stays
+  equal, any other is measured as `is_close_to()` measures it (see [Numbers](#numbers)).
+    - A `bool` leaf is compared exactly.
+    - A numpy duration tolerance measures only numpy duration leaves, and a numeric one no duration leaf.
+    - It reaches leaves in mappings, sequences, deques and records, but does not open an
+      [object compared by its own `==`](#what-the-walk-takes-apart).
+- `rel`: a tolerance relative to the expected leaf of each pair of real-number leaves, beside or instead
+  of `tolerance`, either one holding being enough. `snapshot()` and `matches_inline()` take both.
+- `comparators`: maps a `type` or a field name to an `(actual, expected) -> bool` predicate. A field-name
+  key wins over a type key.
+    - A matched node, a value or a whole container, is decided by the predicate alone, at any depth.
+    - A container `==` holds equal is still walked, so a comparator stricter than `==` fails a pair inside a
+      list, a dict or a deque.
+    - Left to `==`: mapping keys, set members, whatever a container shared by both sides holds, and what an
+      [object compared by its own `==`](#what-the-walk-takes-apart) holds apart.
+    - The predicate may be asked about one pair more than once while a failure is reported. Keep it free
+      of side effects.
+- The walk reaches a few hundred levels deep. `==` alone goes deeper.
 
 Tolerated or comparator-equal leaves are reported in neither the message nor the diff.
 
@@ -621,9 +619,9 @@ Use `comparators` to change *how* a field or type is compared. To drop a field f
 entirely, use `ignore` (above) rather than an always-true comparator (`ignore` also handles fields missing
 on one side or with incomparable types).
 
-`ignore_null=True` skips any named field the **expected** side leaves `None`, at any depth - handy for a
-partial expected/template. Only the expected side is skipped, so an unexpectedly `None` *actual* field is
-still reported (never masked):
+`ignore_null=True` skips any named field the **expected** side leaves `None`, at any depth, which suits a
+partial template. Only the expected side is skipped, so an unexpected `None` on the *actual* side is still
+reported:
 
 <!-- docs-guard: skip -->
 ```python
@@ -656,9 +654,8 @@ assert_that({"a": {"b": [{"c": True}]}}).is_equal_to({"a": {"b": [{"c": 1}]}})  
 assert_that({"active": True}).is_equal_to({"active": 1}, strict_types=True)  # fails
 ```
 
-Because it is opt-in it can afford to be blunt, but the bluntness is worth knowing before you turn it
-on. It also rejects pairs some callers read as equal: `IntEnum` against `int`, a `dict` subclass
-against `dict`, `float` against `int`.
+Being opt-in, it is blunt. It also rejects pairs some callers read as equal: `IntEnum` against `int`, a
+`dict` subclass against `dict`, `float` against `int`.
 
 ##### What the walk takes apart
 
@@ -668,18 +665,17 @@ against `dict`, `float` against `int`.
 - a record: a dataclass, a named tuple, an attrs class, a Pydantic model
 - an object compared by an `==` of its own, read by its attributes
 
-`tolerance` and `comparators` reach the first two kinds in full. An object of the last kind is asked
-its own `==` first, unless a comparator owns the object itself, by its class or by the name it sits
-under, and then decides it alone. That `==` stays the judge of what the two hold, and the options can
-only add to it: two such objects it holds apart stay apart, under a tolerance and under a comparator
-for what they hold. Where it holds them equal, each attribute both sides hold equal is then checked
-as any other node is: its type, a comparator that owns it, and what it holds in turn.
-
-A key option changes who is asked. Under `ignore=` or `include=` a plain object is
-[read by its attributes](#selective-comparison-ignore--include) and its own `==` is not asked, so a
-`tolerance` beside the key option reaches them. Two objects of a class with no `==` of its own, one
-holding `1.0` and the other `1.05`, differ under `tolerance=0.1` alone and are equal under
-`tolerance=0.1, ignore="absent"`. A dataclass is read by its fields either way.
+- `tolerance` and `comparators` reach the first two kinds in full.
+- An object of the last kind is asked its own `==` first, unless a comparator owns it by class or by the
+  name it sits under. That `==` stays the judge: two objects it holds apart stay apart, under a tolerance
+  and under a comparator for what they hold. Where it holds them equal, each attribute the two hold equal
+  is then checked as any other node: its type, a comparator that owns it, what it holds. An attribute they
+  differ on is left to that `==`.
+- Under `ignore=` or `include=`, a plain object is
+  [read by its attributes](#selective-comparison-ignore--include) and its own `==` is not asked, so a
+  `tolerance` beside them reaches the attributes. Two objects of a class without its own `==`, holding `1.0`
+  and `1.05`, differ under `tolerance=0.1` and are equal under `tolerance=0.1, ignore="absent"`.
+- A dataclass is read by its fields either way.
 
 ```python
 class User:
@@ -711,14 +707,14 @@ When several comparison options meet on one leaf, they resolve in a fixed order:
 **`ignore_null` &rarr; `comparators` &rarr; identity &rarr; `strict_types` &rarr; `tolerance`.**
 
 It reads as two groups. The first two decide whether the leaf is compared at all (`ignore_null`) and
-whether your own code replaces the comparison (`comparators`). The rest then compute equality itself,
-from the most decisive test to the most forgiving: the same object, then the same type, then a numeric
-allowance. Two consequences follow that are worth saying out loud:
+whether your own code replaces the comparison (`comparators`). The rest compute equality, from the most
+decisive test to the most forgiving: the same object, then the same type, then a numeric allowance. Two
+consequences:
 
 - `tolerance` and `strict_types` only ever combine within one type, `float` against `float`. The
   classic tolerance case, a `Decimal` from a database column against a `float` from JSON, fails on the
   type before the tolerance is consulted.
-- a matcher on the expected side is exempt, so composed matchers keep working, and a spec that mixes
+- A matcher on the expected side is exempt, so composed matchers keep working, and a spec that mixes
   literals with matchers gets strictness on its literal half only.
 
 ```python
@@ -951,11 +947,12 @@ assert_that(b"hello").decoded_as("utf-8").starts_with("hel").is_length(5)
 assert_that(b"hello").decoded_as().is_equal_to("hello")  # default encoding utf-8
 ```
 
-It is also the way to a pattern: `matches()` and `match.matches_regex()` take text, and refuse bytes and
-a bytes pattern. `decoded_as("utf-8").matches(r"...")` decodes the whole value with one encoding first,
-so it suits text that arrived as bytes. Binary data that is no valid text in any encoding raises the
-codec's `UnicodeDecodeError` there instead of failing, and is asked with `starts_with()`, `ends_with()`
-and `contains()` and a bytes operand.
+It is also the way to a pattern. `matches()` and `match.matches_regex()` take text, and refuse bytes and
+a bytes pattern:
+
+- Text that arrived as bytes: `decoded_as("utf-8").matches(r"...")`.
+- Binary data that is not valid text raises the codec's `UnicodeDecodeError` there. Check it with
+  `starts_with()`, `ends_with()` or `contains()` and a bytes operand.
 
 All bytes assertions work with soft assertions, warn mode, and `.not_` negation.
 
@@ -1006,10 +1003,10 @@ assert_that({"a": 1, "b": {"c": -2}}).all_fields_satisfy(match.is_positive())  #
 #   b.c: expected a positive value, but was -2
 ```
 
-Scalars, strings and sets are treated as single leaves (use `each` / `all_satisfy` for element-wise set
-checks), and a value met again inside itself is not walked a second time. A Pydantic model is walked
-through the values its fields hold, the way the diff reads it: a field declared `exclude=True` is walked, a
-`@computed_field` is not, and a `@field_serializer` does not apply.
+- Scalars, strings and sets are single leaves. For element-wise set checks use `each` / `all_satisfy`.
+- A value met again inside itself is not walked a second time.
+- A Pydantic model is walked through the values its fields hold, the way the diff reads it: a field
+  declared `exclude=True` is walked, a `@computed_field` is not, and a `@field_serializer` does not apply.
 
 ### Extracting attributes from objects
 

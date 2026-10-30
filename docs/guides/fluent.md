@@ -22,18 +22,16 @@ assert_that(iter([1, 2, 3])).contains(1).does_not_contain(9).is_sorted()
 `val` and `value` stay the iterator you passed, which the chain has read by then. The chain keeps what
 its own assertions read, and nothing else:
 
-- What you take from the iterator yourself the chain does not see, whether through `val`, through
-  another name for it, inside a function you pass to an assertion, or in a method of the iterator's
-  own class, an `__eq__` or `__len__` that reads it when an assertion or a matcher compares or measures it.
-- A matcher that reads the items, such as `match.contains()` or `match.each_item()`, is handed the
-  items the chain keeps, the same for every link and for every matcher combined with it. One that asks
-  about the value itself, its type, identity, length or an attribute, is asked about the iterator, as
-  the assertion of the same name is: `match.is_instance_of(Iterator)` holds and `match.has_length(3)`
-  does not. A matcher of your own says which it is with
-  [`reads_items`](matchers.md#a-one-shot-value).
-- A predicate you pass to `satisfies()` is handed the iterator itself, and so is a matcher of your own
-  that asks about the value. Where a link had read a part of the value by then, a read past that part
-  is refused with a `TypeError`, since what the predicate took can no longer be told: assert on
+- The chain does not see what you take from the iterator yourself: through `val` or another name, in a
+  function you pass to an assertion, or in a method of the iterator's own class, such as an `__eq__` or
+  `__len__` that reads it when an assertion or a matcher compares or measures it.
+- A matcher that reads the items, such as `match.contains()` or `match.each_item()`, gets the items the
+  chain keeps, the same for every link and every matcher combined with it.
+- A matcher that asks about the value itself (type, identity, length, an attribute) is asked about the
+  iterator: `match.is_instance_of(Iterator)` holds, `match.has_length(3)` does not. Your own matcher says
+  which kind it is with [`reads_items`](matchers.md#a-one-shot-value).
+- A `satisfies()` predicate gets the iterator itself, as does your own matcher that asks about the value.
+  If a link has already read part of the value, reading past it raises `TypeError`. Assert on
   `list(...)` of the value instead.
 - A matcher that is an operand of a comparison, as in `is_equal_to(match.contains(1))`,
   `match.equal_to(match.contains(1))` or `is_in(...)`, is handed the iterator as `==` hands it, and one

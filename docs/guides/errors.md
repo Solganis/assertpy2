@@ -31,13 +31,11 @@ except AssertionFailure as e:
 
 ### Paths a program can follow
 
-`entry.path` is written for a person and cannot be read back. A mapping key goes through `str()`, so
-`{3: "a"}` and `{"3": "a"}` produce the same text, and a key holding a dot or a bracket has no grammar
-to parse it with.
+`entry.path` is for people and cannot be read back. Keys pass through `str()`, so `{3: "a"}` and
+`{"3": "a"}` give the same path, and a key holding a dot or a bracket cannot be parsed.
 
-`entry.steps` is the same location in the form a program can act on: a tuple of
-[`Step`][assertpy2.errors.Step], each holding the key, index, field name, set member or line number
-itself, untouched.
+`entry.steps` is the same location for a program: a tuple of [`Step`][assertpy2.errors.Step], each holding
+the key, index, field name, set member or line number itself.
 
 ```python
 from typing import Any
@@ -59,13 +57,12 @@ except AssertionFailure as e:
     print(cursor)                                      # admin
 ```
 
-An empty `steps` means the difference is the whole value, which is the entry whose `path` renders as
-`.`. It is also empty where the path is a label rather than a location: a containment failure reports
-`missing` and `extra`, and an item that is not in a collection has no position in it.
-
-A sequence whose two sides have shifted apart is the one case where an index alone is ambiguous, since
-the index spaces no longer agree. There the step names its `side` (`actual` or `expected`), matching
-the `actual[2]` / `expected[1]` the path renders.
+- Empty `steps` means the whole value differs (its `path` renders as `.`), or the path is a label, not a
+  location: a containment failure reports `missing` and `extra`, and an item not in a collection has no
+  position in it.
+- In a sequence whose sides have shifted apart, an index alone is ambiguous, since the two sides' index
+  spaces no longer agree. The step names its `side` (`actual` or `expected`), as the path renders
+  `actual[2]` / `expected[1]`, and a resolver must read that side.
 
 The diff is also rendered into the failure **message**, so it travels with `str(e)` wherever the
 exception surfaces - `unittest`, a plain script, an `AssertionError` in a CI log:
@@ -82,11 +79,8 @@ except AssertionError as e:
     #     + 99
 ```
 
-Each `..` in that message stands for a run of parts that matched, and stands where that run was, so a
-one-field change in a wide object reads as `{.., 'b': 2, ..}` rather than as both objects in full.
-
-Sequences collapse the same way once they grow past a line or so, which keeps a single changed element
-out of a forty-item dump:
+Each `..` stands for a run of matching parts, where that run was: a one-field change in a wide object reads
+`{.., 'b': 2, ..}`. Sequences collapse the same way once they grow past a line or so:
 
 ```python
 try:
@@ -100,8 +94,8 @@ except AssertionError as e:
     #     + 999
 ```
 
-Sequences are aligned before they are compared, so an element inserted or removed is reported as
-itself rather than as a mismatch at every index after it:
+Sequences are aligned first, so an inserted or removed element is reported as itself, not as a mismatch at
+every later index:
 
 ```python
 try:
@@ -113,17 +107,13 @@ except AssertionError as e:
     #   actual[0]: - 0
 ```
 
-Comparing position by position would have called all forty elements different. A one-sided entry names
-the sequence its index belongs to, because once the two sides have shifted their index spaces no longer
-agree.
+A one-sided entry names the sequence its index belongs to. When alignment is used:
 
-The alignment is used only where a sequence changed length, and then only where it reads shorter than
-the plain index comparison. A reversal, a coordinate pair and anything else of unchanged length keep
-the positional reading, so a comparison that could not benefit does not pay for the attempt. Sequences
-over a thousand elements are not aligned at all.
+- only where a sequence changed length, and only where it reads shorter than comparing by index
+- never for a reversal, a coordinate pair or anything else of unchanged length
+- never above a thousand elements.
 
-A multi-line value is collapsed by line, which matters most: every line of it costs a row of terminal,
-and the message carries the value twice.
+A multi-line value collapses by line, since the message carries it twice:
 
 ```python
 try:
@@ -143,13 +133,18 @@ Either way every difference stays in the diff, so the shorter message loses noth
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
-`assert_conforms()` attaches one of the same kind. A validation failure has an entry per pydantic error.
-An `exact=True` failure has an entry per undeclared field, holding the value the payload sent there with
-`absent == "expected"`, or a single entry for the part that cannot be checked, with the reason in
-`expected`. The steps lead into the payload. Two kinds of step hold an object of their own rather than a
-key or an index into the one before. `item` holds a member of a collection that keeps no positions, or the
-mapping key a find lies inside. `json` stands where the value is JSON text (`Json[...]`) and holds what the
-text decodes to, the object the steps after it lead into. A reader takes `step.value` at both:
+`assert_conforms()` attaches one of the same kind:
+
+- A validation failure has an entry per pydantic error.
+- An `exact=True` failure has an entry per undeclared field, holding the value the payload sent, with
+  `absent == "expected"`. A part that cannot be checked gets a single entry, with the reason in `expected`.
+
+The steps lead into the payload. Two kinds of step hold an object instead of a key or an index:
+
+- `item`: a member of a collection that keeps no positions, or the mapping key a find lies inside.
+- `json`: the decoded value of JSON text (`Json[...]`), which the steps after it lead into.
+
+A reader takes `step.value` at both:
 
 ```python
 def resolve(value, steps):
@@ -158,22 +153,25 @@ def resolve(value, steps):
     return value
 ```
 
-`resolve(payload, entry.steps)` is then the very object `entry.actual` holds, text or not, for a payload
-validation left as it was sent. Where a validator changed the payload in place, the payload is returned to
-what validation left, so an entry that holds one of its dicts, lists or tuples holds a copy of what was sent
-instead. An entry inside JSON text is not copied: it keeps the decoded value reached by following the steps
-after its `json` step.
+`resolve(payload, entry.steps)` is then the very object `entry.actual` holds, for a payload validation left
+as sent.
 
-Under pytest the plugin attaches this same diff to the failure as its own section instead, keeping the
-message itself to a single line so the diff is never shown twice. The section travels with the failure,
-so the terminal, a JUnit report and an IDE runner such as PyCharm's all show it, and so does a failing
-fixture. When failures arrive as an exception group, as two fixtures failing in teardown do, each one
-gets its own section, numbered in the order the traceback prints them: `Structured Diff (2 of 3)`. A
-soft block's failure gets the sections of each failure it collected, as
-[What a soft block hands back](#what-a-soft-block-hands-back) shows. The
-terminal colors it as it draws the failure, when it takes color at all, so a JUnit report, an IDE
-runner and a CI log without forced color all get plain text. The plugin is auto-registered through the
-`pytest11` entry point and needs no configuration.
+Where a validator changed the payload in place, the payload is returned to what validation left, so an
+entry holding one of its dicts, lists or tuples holds a copy of what was sent instead. An entry inside JSON
+text is not copied: it keeps the decoded value the steps after its `json` step lead to.
+
+Under pytest the plugin attaches the diff as a section of its own and keeps the message to one line, so the
+diff is never shown twice.
+
+- The section travels with the failure: the terminal, a JUnit report and an IDE runner such as PyCharm's
+  show it, for a failing fixture too.
+- An exception group, such as two fixtures failing in teardown, gets a section per failure, numbered in
+  traceback order: `Structured Diff (2 of 3)`.
+- A soft block gets a section per failure it collected, see
+  [What a soft block hands back](#what-a-soft-block-hands-back).
+- Color comes only from the terminal. A JUnit report, an IDE runner and a CI log without forced color get
+  plain text.
+- The plugin registers itself through the `pytest11` entry point. No configuration needed.
 
 See [Rich pytest diffs](#rich-pytest-diffs) for supported types and configuration.
 
@@ -202,22 +200,14 @@ rendered by the plugin as diff sections on the failure.
   expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
 ```
 
-That section carries the values the assertion named. Every failure holds the value under test on
-`failure.actual`, but most messages open with it, so a `contains_key()` failure shows the diff without
-repeating its subject above it.
+- The section carries the values the assertion named. `failure.actual` always holds the value under test,
+  but most messages open with it, so it is not repeated.
+- For a failed `is_equal_to()` under `ignore=` or `include=`, the rows are the compared views: without the
+  left-out keys, and a record as its fields. `failure.actual` stays the value you passed.
+- Beside `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=`, the rows are the two values.
 
-For a failed `is_equal_to()` under `ignore=` or `include=` the two rows are the views that were
-compared: without the keys left out, and a dataclass or a model as the fields read of it. `failure.actual`
-stays the value you passed. Beside `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=` the
-rows stay the two values.
-
-The diff for that failure, and the other diff shapes, render like this.
-
-The comparison is recursive, so for a very large or deeply nested value it walks the whole object graph.
-
-When the payload is huge and you care about a few fields, extract those and assert on them instead. It
-is faster and the failure stays focused. See
-[When full structural comparison is too much](../recipes.md#when-full-structural-comparison-is-too-much).
+The comparison walks the whole object graph. For a huge payload where a few fields matter, assert on those:
+see [When full structural comparison is too much](../recipes.md#when-full-structural-comparison-is-too-much).
 
 ### What each diff kind looks like
 
@@ -227,41 +217,33 @@ example above:
 
 ![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)
 
-String values go finer than line-by-line. Each changed line is diffed *within the line*, with difflib
-carets (`? ^^^`) pointing at the exact span, the same guides pytest's own assertion rewriting uses.
-
-`bytes` and `bytearray` take that path too, pointed at through their `b'...'` form:
+Strings are diffed within each changed line, with difflib carets (`? ^^^`) at the exact span, as pytest's
+own rewriting does. `bytes` and `bytearray` too, through their `b'...'` form:
 
 ![Colored string diff: the changed word marked with difflib carets, removal in red and addition in green](../assets/diff-string.svg)
 
-The carets appear only when the two lines still resemble each other, at difflib's own 0.75 similarity
-cutoff.
-
-Past that the two lines are printed plainly. A guide underlining most of the line says nothing the pair
-of values does not already say.
+Carets appear only while the two lines resemble each other (difflib's 0.75 cutoff). Past that the lines
+print plainly.
 
 **Set and contains** show extra items in red and missing items in green:
 
 ![Colored set diff: extra items in red, missing items in green](../assets/diff-set.svg)
 
-**Match** (the matcher-driven assertions listed in the table above) shows each field's path and the
-predicate that failed, with the actual value in red. A field `assert_conforms(..., exact=True)` found
-undeclared has no predicate, and is shown as `path: - value`.
+**Match** (the matcher assertions in the table above) shows each field's path, the failed predicate and
+the actual value in red:
 
-Every mismatch is listed, not just the first. There is no green, since a predicate has no "addition".
+- Every mismatch is listed, not just the first. There is no green: a predicate has no "addition".
+- An undeclared field found by `assert_conforms(..., exact=True)` has no predicate: `path: - value`.
 
 ![Colored match diff: each field's path, the failed predicate, and the actual value in red](../assets/diff-match.svg)
 
-Nested structures are diffed recursively and report the exact path to the differing value (for example
-`[1].name`). A value that leads back into itself is read as far as the two sides differ, and the way back adds
-no row. Where `==` holds two values apart and nothing inside them differs, as with two instances of a class
-that compares by identity, the row is the pair itself.
-
-Two values can render to the same text and still not be equal, most often because they differ only in
-type.
-
-The message then tags each with its type, so `assert_that("1").is_equal_to(1)` reads
-`Expected <1:str> to be equal to <1:int>, but was not.` rather than a baffling `<1>` / `<1>`.
+- Nested structures report the exact path to the differing value, such as `[1].name`.
+- A value that leads back into itself is read as far as the sides differ. The way back adds no row.
+- Where `==` holds two values apart and nothing inside differs, as with identity-compared instances, the
+  row is the pair itself.
+- Two unequal values of different types that print the same are tagged with their types:
+  `assert_that("1").is_equal_to(1)` reads
+  `Expected <1:str> to be equal to <1:int>, but was not.`
 
 !!! note
     Cycle detection covers every walker this library owns:
@@ -279,9 +261,8 @@ The message then tags each with its type, so `assert_that("1").is_equal_to(1)` r
 
 ### The comparison settings are named back to you
 
-`ignore` and `include` appear inside the failure sentence. The rest of the comparison settings get a
-line of their own, so a failure under `tolerance`, `comparators`, `ignore_null` or `strict_types`
-says which of them were in force:
+`ignore` and `include` appear in the failure sentence. `tolerance`, `comparators`, `ignore_null` and
+`strict_types` get a line of their own:
 
 ```python
 from assertpy2 import assert_that
@@ -293,15 +274,13 @@ except AssertionError as failure:
     # compared with tolerance=0.001, strict_types=True
 ```
 
-Nothing is added on an ordinary failure, where every setting sits at its default. The line goes
-below the sentence rather than into it, so the original text stays a prefix and a `match=` written
-against it keeps matching.
+With default settings nothing is added. The line goes below the sentence, so a `match=` written against
+the sentence keeps matching.
 
 ### Some failures say why, not only what
 
-A diff says what differs. There are failures where that leaves the hard part undone: two strings that
-render identically and differ in a trailing space, or a comparison that could never have passed
-because a NaN was in it. Where the whole difference has one explanation, it gets a line:
+A diff says what differs, not why: two strings differing only in a trailing space, or a comparison a NaN
+made impossible. Where the whole difference has one explanation, it gets a line:
 
 ```python
 from assertpy2 import assert_that
@@ -313,10 +292,8 @@ except AssertionError as failure:
     # every difference here is one of surrounding whitespace
 ```
 
-The line appears only when it accounts for **every** entry in the diff. A half-explanation is worse
-than none: you would act on it and land back at the same failure. So a value that is simply wrong
-gets nothing, and neither does a failure where one field differs by whitespace and another by its
-content.
+The line appears only when it explains **every** entry in the diff. A value that is simply wrong gets
+nothing, and so does one field differing by whitespace beside another differing in content.
 
 The one a JSON payload produces more than any other is a field that came back as text. The diff shows
 `- 7` against `+ '7'` on every row, and the line says it once:
@@ -349,9 +326,8 @@ except AssertionError as failure:
     # a NaN takes part in this comparison, and a NaN is equal to nothing, not even itself
 ```
 
-The other failure that leaves a reader stuck is two values that print the same and are not equal. A
-class that defines no `__eq__` compares by identity, so an expected value your test built is never
-equal to the one the code returned, however well they agree:
+Two values that print the same yet are not equal: a class without `__eq__` compares by identity, so the
+expected value your test built never equals the returned one:
 
 ```python
 from assertpy2 import assert_that
@@ -369,16 +345,13 @@ except AssertionError as failure:
     # these values compare with object's __eq__, so equality is identity and no two separate instances are equal
 ```
 
-It is said before anything about the values, for the same reason `NaN` is. No value on the other side
-would have made the comparison pass, so a line about how the two differ would send you to fix something
-that cannot help.
+- It is said first, as `NaN` is: under `object.__eq__`, matching attributes cannot make two separate
+  instances equal.
+- Exceptions are the everyday case, since they compare by identity too.
+- A `comparators=` entry over those values silences it: the verdict is then your predicate's.
 
-Exceptions are the everyday case, since they carry identity equality too. Your own `comparators=` entry
-over those values silences it, the verdict there being your predicate's rather than the type's.
-
-The same holds one level down. A row of the diff whose two sides print the same is never left to stand
-alone. Two sides of two classes are each printed with its class, and with its module where the classes
-share a name:
+One level down, a diff row whose sides print the same is never left alone. Two classes are each printed
+with the class, and with the module where the names clash:
 
 ```python
 from assertpy2 import assert_that
@@ -396,11 +369,11 @@ except AssertionError as failure:
     #     + {'x': 1}:dict
 ```
 
-Two sides of one class that print the same get a line instead. Where the class leaves `__eq__` to
-`object` and no `comparators=` took part, the line says so of the row: `a difference here prints the same
-on both sides, and the class of the two leaves __eq__ to object, so two separate instances are never
-equal`. Anywhere else it says what is known, that the repr does not show the difference, and lists the
-attributes of the two that differ:
+Two sides of one class that print the same get a line instead:
+
+- The class leaves `__eq__` to `object`, and no `comparators=` took part: `a difference here prints the same
+  on both sides, and the class of the two leaves __eq__ to object, so two separate instances are never equal`.
+- Otherwise: the repr does not show the difference, and the attributes that differ are listed.
 
 ```python
 from assertpy2 import assert_that
@@ -424,9 +397,8 @@ except AssertionError as failure:
     # a difference here prints the same on both sides, so what holds the two apart is not in their repr (attributes that differ: currency)
 ```
 
-Where the differences repeat down a sequence, a line says where they sit. A place is the path with
-every position written `[*]`, and every entry of the diff is counted, the ones past the fiftieth that are
-not printed included:
+Where differences repeat down a sequence, a line says where, with positions written `[*]`. Every entry
+counts, including those past the fiftieth that are not printed:
 
 ```python
 from assertpy2 import assert_that
@@ -445,46 +417,56 @@ except AssertionError as failure:
 It is said for three or more differences at one to three places, under whatever line says why. It names
 where and recommends nothing: whether `updated_at` belongs under `ignore=` is your call.
 
-A failed `contains()` is explained the same way, and so is every assertion that looks for something.
-Where one fact about the item not found accounts for it, a line says so in the words of the assertion
-that failed: the item is a NaN, a candidate reads the same and is of another plain type, or a candidate
-prints the same and their class compares by identity. That holds for `contains()`, `contains_key()`,
-`contains_only()`, `contains_exactly()`, `contains_exactly_in_any_order()`, `contains_only_once()`,
-`contains_sequence()`, `contains_in_order()`, `is_in()`, `is_subset_of()`, `contains_value()` and
-`contains_entry()`.
+A failed `contains()`, and every assertion that looks for something, gets a line when one fact about the
+item not found explains it:
 
-All of them but the two that walk in order, the keys and the entry also name the closest row with what
-differs, where a row shares a key with the item: for dicts and for dataclasses, attrs instances, named
-tuples and models. Both are said of one item not found. Several would each need their own.
+- the item is a NaN
+- a candidate reads the same and is of another plain type
+- a candidate prints the same, and their class compares by identity.
 
-Where the thing not found is a key, and the value holds one that reads almost the same, the line names
-it. `contains_key()`, `contains()` on a mapping, `contains_entry()` and `has_<name>()` say it, the
-last of an attribute as well:
+That holds for `contains()`, `contains_key()`, `contains_only()`, `contains_exactly()`,
+`contains_exactly_in_any_order()`, `contains_only_once()`, `contains_sequence()`, `contains_in_order()`,
+`is_in()`, `is_subset_of()`, `contains_value()` and `contains_entry()`.
+
+Most of them also name the closest row and what differs, where a row shares a key with the item: dicts,
+dataclasses, attrs instances, named tuples and models. Not `contains_sequence()`, `contains_in_order()`,
+`contains_key()` or `contains_entry()`. Both lines are said for one item not found, not for several.
+
+Where a key is not found and the value holds one that reads almost the same, the line names it.
+`contains_key()`, `contains()` on a mapping, `contains_entry()` and `has_<name>()` (for an attribute too)
+say it:
 
 ```text
 Expected <{'user_id': 2, 'email': 'a@b'}> to contain key <userId>, but did not.
 a key reads the same but for how its words are joined: <user_id>
 ```
 
-Three things are looked for, the narrowest first. A key is the same once both are lowercased. A key is
-the same once both are lowercased and what joins their words is taken out (a space, an underscore, a
-dot, a hyphen), `userId` beside `user_id`. One spelling alone is almost the same: two neighbouring
-letters swapped, a letter too many or too few, or the two nearly one text, a `difflib` ratio of 0.85 once
-lowercased and unjoined, which a long name reaches with a few letters dropped or replaced. The first two
-are facts. The third is a likeness and is worded as one. Where two spellings come that close nothing is
-said, and keys that differ only in case or joining are one spelling, named together: the first three,
-and how many more there are.
+What counts as almost the same, narrowest first:
 
-The line is said of one key not found: where several are missing none is named. Only keys that are plain
-text are read, and of an object only the public names it holds. The likeness is looked for among names
-of a hundred characters at most. A `has_<name>()` asked under `not_` for
-a name that is not there fails as it does without `not_`, the line included. Over the keys of three
-real payloads, a key asked for with one slip was named in 99.3% of 2529 cases, and no other key ever was.
+1. The same once both are lowercased.
+2. The same once lowercased and with word joints (space, underscore, dot, hyphen) taken out: `userId` and
+   `user_id`.
+3. One spelling that is nearly the same: two neighbouring letters swapped, a letter too many or too few,
+   or a `difflib` ratio of 0.85 once lowercased and unjoined.
 
-`contains_exactly()` and `contains_exactly_in_any_order()` count. Where everything missing is one item
-the value does hold, the failure says the two counts of that item instead:
-`<'7'> is held 1 time and was asked for 2 times.` With nothing missing, where everything left over is
-one item that was asked for, it says the two counts of that one.
+The first two are facts, the third is worded as a likeness. Where two spellings come that close, nothing
+is said. Keys that differ only in case or joints count as one spelling and are named together: the first
+three, and how many more.
+
+Limits:
+
+- Said for one key not found. With several missing, none is named.
+- Only plain-text keys are read, and of an object only its public names.
+- The likeness is looked for among names of up to a hundred characters.
+- `has_<name>()` under `not_`, for a name that is not there, fails as it does without `not_`, line included.
+
+Over the keys of three real payloads, a key asked for with one slip was named in 99.3% of 2529 cases, and
+no other key ever was.
+
+`contains_exactly()` and `contains_exactly_in_any_order()` count, and give an item's two counts:
+
+- where everything missing is one item the value does hold: `<'7'> is held 1 time and was asked for 2 times.`
+- where nothing is missing and everything left over is one item that was asked for.
 
 ```python
 import json
@@ -506,13 +488,17 @@ except AssertionError as failure:
     # a given item reads the same as the value and is of another type: int, not str
 ```
 
-A failed `contains_entry()` says what the key holds, or that the key is not there. A failed
-`has_<name>()` fails as `is_equal_to()` on the value it read: the failure carries that value, the
-operand and their diff, and two values that print the same are told apart by class. Two dicts are
-printed as `is_equal_to()` prints them, the keys that match collapsed to `..`, and so are two lists or
-two plain tuples too long to print whole, unless the two collapsed texts read alike or the values cannot
-be compared a second time: then both are printed as texts, cut around the place they part. Where the
-two cannot be read a second time the diff is one entry, the pair itself.
+A failed `contains_entry()` says what the key holds, or that the key is not there.
+
+A failed `has_<name>()` fails as `is_equal_to()` on the value it read:
+
+- The failure carries that value, the operand and their diff. Two values that print the same are told
+  apart by class.
+- Two dicts print as `is_equal_to()` prints them, matching keys collapsed to `..`. So do two lists or plain
+  tuples too long to print whole.
+- If the collapsed texts read alike, or the values cannot be compared a second time, both print as texts,
+  cut around where they part.
+- If the two cannot be read a second time, the diff is one entry: the pair itself.
 
 A text held against a text is explained the same way. Where the relation asked holds once one thing is
 set aside, the line names that thing:
@@ -524,21 +510,20 @@ the value holds it once every run of whitespace is read as one space
 
 The space after `Total:` in the value is a no-break space, which the sentence cannot show.
 
-`starts_with()` and `ends_with()` name whitespace at that end of the value (a single `\n`, `\r\n` or
-`\r` is called a line break), case, whitespace at an end of the text given, or that the value holds the
-text somewhere else.
-`contains()` on a text names case, or that every run of whitespace has to be read as one space, which
-is what a line break, a tab, a no-break space and two spaces in a row all come to, or both.
-`starts_with_ignoring_case()`, `ends_with_ignoring_case()` and `contains_ignoring_case()` say all of
-that but case. `is_equal_to_ignoring_case()` names the whitespace that still holds the two apart, and
-`is_equal_to_ignoring_whitespace()` names case. For two texts `is_equal_to()` named line endings and
-surrounding whitespace before: it names the kind or amount of whitespace too, past those two.
+| Assertion | Names |
+|---|---|
+| `starts_with()`, `ends_with()` | whitespace at that end of the value (a single `\n`, `\r\n` or `\r` is a line break), case, whitespace at an end of the text given, or that the text is somewhere else in the value |
+| `contains()` on a text | case, or that each run of whitespace must be read as one space (a line break, a tab, a no-break space, two spaces), or both |
+| `starts_with_ignoring_case()`, `ends_with_ignoring_case()`, `contains_ignoring_case()` | all of the above but case |
+| `is_equal_to_ignoring_case()` | the whitespace still holding the two apart |
+| `is_equal_to_ignoring_whitespace()` | case |
+| `is_equal_to()` on two texts | line endings, surrounding whitespace, and the kind or amount of whitespace |
 
-One fact is said, the narrowest. Two at once get no line, a leading space and another case for
-`starts_with()`: only `contains()` has a line for case and whitespace together, and equality one for
-line endings and surrounding whitespace. These lines are said of plain text alone: a `str` of a
-class of its own, bytes and the first element of a list get none. `is_equal_to()` is the exception,
-and reads bytes and a `str` of any class as it did before.
+- One fact is said, the narrowest. Two at once get no line, such as a leading space plus another case for
+  `starts_with()`. Only `contains()` has a line for case and whitespace together, and equality for line
+  endings and surrounding whitespace.
+- Only plain text gets these lines. A `str` subclass, bytes and the first element of a list get none.
+  `is_equal_to()` still reads bytes and any `str` subclass as before.
 
 Two moments say how far apart they are. `is_before()`, `is_after()` and their `_or_equal_to` twins
 give the distance on the other side, or say that the two are the same moment:
@@ -556,29 +541,28 @@ Expected <2026-01-01 12:00:00> to be close to <2026-01-01 12:00:07> within toler
 the two are 0:00:07 apart, 0:00:02 more than the tolerance
 ```
 
-The distance is `datetime`'s own subtraction, exact to the microsecond, printed as a `timedelta` prints.
-It is said where `datetime` itself made the verdict. A subclass that writes its own comparison, a pandas
-`Timestamp` for one, gets no line, and one that writes its own `-` or `+`, as pendulum's does, gets the
-line of the four ordering assertions and not the one of closeness. The tolerance has to be exactly a
-`timedelta`.
+- The distance is `datetime`'s own subtraction, exact to the microsecond, printed as a `timedelta`.
+- It is said only where `datetime` itself made the verdict. A subclass with its own comparison, such as a
+  pandas `Timestamp`, gets no line.
+- A subclass with its own `-` or `+`, such as pendulum's, gets the ordering line but not the closeness line.
+- The tolerance has to be exactly a `timedelta`.
 
 `is_less_than()`, `is_greater_than()` and their `_or_equal_to` forms, which take two datetimes as well,
 say of them what `is_before()` and its kin say. `is_between()` says nothing.
 
-Two datetimes that share one zone object are compared by Python on their wall clocks, which is the
-time between the two only while the zone keeps one offset. Across a change of its clocks it is not, and
-the two readings of a repeated hour compare equal. The line then speaks of the clock and not of the
-moments:
+Python compares two datetimes that share one zone object on their wall clocks. Across a clock change that
+is not the time between them, and the two readings of a repeated hour compare equal. The line then speaks
+of the clock:
 
 ```text
 Expected <2026-10-25 02:30:00+02:00> to be before <2026-10-25 02:30:00+01:00>, but was not.
 the two read the same on the clock they share
 ```
 
-Two in different zones are compared as the moments they are, and the line gives the time between them.
-The line itself asks a zone for its offset only where the zone is `datetime.timezone` or
-`zoneinfo.ZoneInfo`. With a zone of another library, pytz's or dateutil's, two that share it get the
-line about their clock, and two in different zones get none.
+- Two in different zones are compared as moments, and the line gives the time between them.
+- The line asks a zone for its offset only for `datetime.timezone` and `zoneinfo.ZoneInfo`.
+- With a zone of another library, such as pytz's or dateutil's, two sharing it get the clock line, and two
+  in different zones get none.
 
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
@@ -587,33 +571,29 @@ Expected <500> to be equal to <200> on attribute <status_code>, but was not.
 from GET https://api.example.com/orders/7 -> 500
 ```
 
-It survives the step into the body, so a failure under
-[`decoded_as_json()`](../recipes.md#test-an-http-api-response) still says which call produced it. It
-reads no body and starts no I/O, which is why a streaming response that has never been read is safe to
-assert on.
+It survives the step into the body: a failure under
+[`decoded_as_json()`](../recipes.md#test-an-http-api-response) still names the call. It reads no body and
+starts no I/O, so an unread streaming response is safe to assert on.
 
 Like the settings echo above, these sit below the sentence, so anything written against the original
 message keeps working.
 
 ### Polling failures carry a trace
 
-An [`eventually()`](testing.md#async-assertions) timeout attaches its convergence telemetry as
-`failure.trace` - a [`PollTrace`][assertpy2.errors.PollTrace] with per-poll
-[`PollSample`][assertpy2.errors.PollSample] entries and a one-line trend summary. See
-[Polling trace](testing.md#polling-trace).
+An [`eventually()`](testing.md#async-assertions) timeout carries `failure.trace`: a
+[`PollTrace`][assertpy2.errors.PollTrace] with a [`PollSample`][assertpy2.errors.PollSample] per poll and a
+one-line trend. See [Polling trace](testing.md#polling-trace).
 
 ### The comparison window of an IDE
 
-pytest calls the hook `pytest_assertrepr_compare` for a failed `assert left == right`, and a test
-runner that opens a two-pane comparison listens to it. A failed `is_equal_to()` is the same comparison,
-so the plugin hands the two values it compared to those listeners, the value under test as `left` and
-the operand as `right`.
+pytest calls the hook `pytest_assertrepr_compare` for a failed `assert left == right`, and runners with a
+two-pane comparison listen to it. A failed `is_equal_to()` is the same comparison, so the plugin hands them
+the two values: the value under test as `left`, the operand as `right`.
 
-PyCharm's runner is one of them. Run from PyCharm, a failed `assert_that(actual).is_equal_to(expected)`
-gets the "Click to see difference" link a plain `assert actual == expected` gets. The window it opens
-shows the operand under Expected and the value under test under Actual, both whole. Seen in
-PyCharm 2026.3 on a response of forty nested rows. As for a plain `assert`, PyCharm also prints the two
-values above the link.
+In PyCharm, a failed `assert_that(actual).is_equal_to(expected)` gets the same "Click to see difference"
+link as `assert actual == expected`. The window shows the operand under Expected and the value under
+Actual, both whole, and PyCharm prints the two values above the link. Seen in PyCharm 2026.3 on a response
+of forty nested rows.
 
 What is handed over is the pair the assertion compared:
 
@@ -623,11 +603,10 @@ What is handed over is the pair the assertion compared:
 | `is_equal_to()` under `ignore=` or `include=` | the two copies without the keys left out, so a key the assertion passed over is in neither pane |
 | `has_<name>()` | the value it read and the operand |
 
-A record in such a copy, a dataclass, an attrs class or a model, is handed over as the dict of its
-fields, which is what was compared. A pane then lays a record out line by line, and a dict beside a
-record reads in the same shape. That holds for a mapping whose keys are each exactly a `str`, an `int`,
-a `bool`, a `float`, a `bytes` or `None`. A mapping with any other key, one of a subclass of those
-among them, is handed over as it was.
+- A record in a copy made under `ignore=` or `include=` (a dataclass, an attrs class, a model) is handed
+  over as the dict of its fields, which is what was compared. The pane lays it out line by line, in the same shape as a dict beside it.
+- That holds for mappings whose keys are exactly `str`, `int`, `bool`, `float`, `bytes` or `None`. A
+  mapping with any other key, a subclass of those included, is handed over as it was.
 
 The window compares two texts, as it does for a plain `assert`:
 
@@ -655,10 +634,9 @@ Who hears the hook:
 
 ### Catching failures with their types intact
 
-`pytest.raises(AssertionError)` types the caught exception as plain `AssertionError`, so a type
-checker flags `.actual` / `.expected` / `.diff` access. Catch `AssertionFailure` instead. It is the
-subclass every failure is raised as, including a soft block's aggregate and `fail()`, so one handler
-covers the library:
+`pytest.raises(AssertionError)` types the exception as plain `AssertionError`, so a checker flags
+`.actual`, `.expected` and `.diff`. Catch `AssertionFailure`: every failure is raised as it, a soft block's
+and `fail()` included:
 
 ```python
 import pytest
@@ -675,9 +653,8 @@ def test_diff_is_machine_readable():
     assert_that(diff.entries[0].path).is_equal_to("role")
 ```
 
-The rich diff comes from the fluent form. The `==` drop-in for matchers (for example
-`assert response == {"id": match.is_positive()}`) hands rendering to pytest instead, which prints its
-own dict comparison without the path.
+The rich diff comes from the fluent form. With the `==` drop-in for matchers
+(`assert response == {"id": match.is_positive()}`), pytest renders its own comparison, without the path.
 
 ### What the failures had in common
 
@@ -699,17 +676,12 @@ You get that without configuring anything. Three is the floor rather than a rule
 assertpy2_failure_clusters = "5"   # failing tests a cluster must hold before it is printed, or "off"
 ```
 
-That is a hypothesis you can act on before opening a single traceback, and it comes from the same
-structured diff the report sections are built from. Nothing about it is a guess: two failures share a
-cluster when their difference is *equal*, never when it looks similar. Where a difference has no place to
-be keyed on, what is compared is the text the values print as, so two values with the same `repr` count
-as one.
+Two failures share a cluster only when their difference is *equal*, never merely similar. Without a place
+to key on, the printed text is compared: two values with the same `repr` count as one.
 
-**Failures are grouped by the place they differ at, not by the values they showed.** A broken constant
-gives every failure the same pair, and grouping on values would find it. A broken formula differs at
-the same field with a value of its own per test, and grouping on values would scatter it into forty
-clusters of one. Where a cluster's values disagree, the summary says so rather than printing the first
-pair as though it explained all of them:
+**Failures are grouped by the place they differ at, not by their values.** A broken formula differs at one
+field with a value of its own per test. Grouping by values would scatter it into forty clusters of one.
+Where a cluster's values disagree, the summary says so:
 
 ```text
   12 of 12 failing tests differ at order.total
@@ -717,37 +689,26 @@ pair as though it explained all of them:
       expected: 120.0
 ```
 
-A row index is generalised away, so `users[0].role` and `users[7].role` are one difference reported
-against two rows. A line number in a string comparison is generalised the same way.
+Row indexes and line numbers are generalised: `users[0].role` and `users[7].role` are one difference.
 
 What the summary will and will not claim:
 
-- **Three kinds of difference carry no location.** A containment failure names `missing` or `extra`, a
-  set entry names a member, and a scalar failure is the whole value. Those group on the failure's own
-  [diagnostic line](#some-failures-say-why-not-only-what) when it has one, so five uploads differing
-  from their expected bodies only by a trailing newline read as one cause across five different
-  payloads. They print as `5 of 5 failing tests share one scalar difference`, because a family is not a
-  place and a summary pointing at one would be inventing it.
-- **Containment and set differences without a diagnostic stay out of it.** Their two fields hold
-  presence rather than values, so a missing item reports `None` on the actual side, and a heading built
-  from that would tell you your value was `None` when it was a list of three.
-- **The floor is a count, never a share of the run.** Under a share, every additional cause raises the
-  bar for all the others, and a run of forty failures splitting cleanly into five causes of eight would
-  say nothing at all.
-- **The share is measured against every test that went red**, errors from a broken fixture included, so
-  `10 of 13 outside any cluster of 3` is the honest reading of a run that was mostly environment. It
-  names the floor because that is what it measures: two tests sharing a difference under a floor of
-  three are related, and the summary declined to print them rather than found nothing.
-- **Tests, not reports.** A test that fails its assertion and then errors in teardown is one broken
-  test, and pytest counts it in both of its own totals.
-
-A collection that failed is red and is not a test, so it is named on its own line rather than folded into
-a count of tests: `1 collection error, not counted below`. That only happens under
-`--continue-on-collection-errors`, since otherwise the run stops before anything is summarised.
-
-Under `pytest-xdist`, a worker killed mid-run never ships what it recorded, and a worker running a
-different version of this library can ship something unreadable. Either way the summary says so rather
-than presenting a share of what it happened to receive:
+- **Three kinds of difference carry no location**: a containment failure (`missing` or `extra`), a set
+  entry and a scalar failure. They group on the failure's
+  [diagnostic line](#some-failures-say-why-not-only-what) when it has one. Five uploads differing only by a
+  trailing newline read as one cause: `5 of 5 failing tests share one scalar difference`.
+- **Containment and set differences without a diagnostic stay out.** Their fields hold presence, not
+  values, so a heading would claim your value was `None`.
+- **The floor is a count, not a share of the run.** With a share, forty failures splitting into five
+  causes of eight would print nothing.
+- **The share counts every red test**, fixture errors included: `10 of 13 outside any cluster of 3` says ten
+  failing tests fell outside any cluster of three or more. The floor is named because two tests sharing a
+  difference under it were declined, not missing.
+- **Tests, not reports.** A test failing its assertion and then erroring in teardown counts once.
+- A failed collection is named on its own line: `1 collection error, not counted below`. That happens only
+  under `--continue-on-collection-errors`.
+- Under `pytest-xdist`, a worker killed mid-run ships nothing, and one on another version of this library
+  can ship something unreadable. The summary says so:
 
 ```text
 assertpy2 failure clusters:
@@ -761,42 +722,35 @@ Everything printed is bounded, because a diagnostic that grows with the run hurt
 - a cluster reports a floor rather than a count past 64 distinct values per side (`and 64+ other values`)
 - at most five clusters print, followed by a count of the rest
 
-What a cluster is keyed on is not cut, since two payloads agreeing for their first 200 characters are
-still two failures. The failure message and the structured diff keep their values whole.
+What a cluster is keyed on is not cut: two payloads sharing their first 200 characters are still two
+failures. The failure message and the structured diff keep their values whole.
 
-Nothing here can fail a run that would otherwise have passed or reported. If the summary cannot be
-built, it says so in a warning and the run's own results are untouched.
+Nothing here can fail a run. If the summary cannot be built, a warning says so and the run's own results
+are untouched.
 
-A run that passes pays nothing for it, since there is no failure to record. A run that fails walks each
-failed report carrying a diff once, measured at 2.3 µs over one differing entry and 0.11 ms over fifty,
-and builds the summary once for the whole run, 15 µs over forty failing tests. Turned off, the recorder
-returns on the configuration alone and nothing is read at all.
+A passing run pays nothing, since there is no failure to record. A failing run reads each failed diff once
+(2.3 µs for one differing entry, 0.11 ms for fifty) and builds the summary once (15 µs for forty failing
+tests). Turned off, nothing is read.
 
 ### Configuration
 
-Two of the settings below guard against a test that passes without checking anything: the dangling
-detector and the vacuous-quantifier warning. Both are off unless you ask, because either can turn a
-green run red, and a suite that inherited this library did not ask for that. A new suite gets both in
-one line:
+Two settings guard against a test that passes without checking anything: the dangling detector and the
+vacuous-quantifier warning. Both are off by default, since either can turn a green run red. A new suite
+turns both on in one line:
 
 ```toml
 [tool.pytest.ini_options]
 assertpy2_profile = "safe"   # dangling on, vacuous on (default "compatible": both off)
 ```
 
-Naming a setting yourself wins over the profile, so `safe` plus `assertpy2_dangling = "off"` is a suite
-that wants the other and has said so where the next reader will look.
-
-Failure clustering is not one of them and needs no profile. It reads a run that has already gone red,
-so there is no green run for it to change. Write `assertpy2_failure_clusters = "off"` to turn it off.
+- A setting you name wins over the profile: `safe` plus `assertpy2_dangling = "off"` keeps only the other.
+- Failure clustering needs no profile: it reads only red runs. `assertpy2_failure_clusters = "off"` turns it
+  off.
 
 ### Seeing them, and being stopped by them
 
-`safe` warns. A run full of findings still exits zero, which is a fair first look and a poor gate. The
-exception is a suite that escalates warnings: under `filterwarnings = ["error"]` each finding turns its
-test red, as `strict` would.
-
-`strict` turns on the same two guards and fails the tests they find:
+`safe` warns, so a run full of findings still exits zero, unless the suite has
+`filterwarnings = ["error"]`. `strict` turns on the same two guards and fails the tests they find:
 
 ```toml
 [tool.pytest.ini_options]
@@ -810,14 +764,10 @@ ERROR test_orders.py::test_the_total    DanglingAssertionWarning
 FAILED test_orders.py::test_every_item  VacuousAssertionWarning
 ```
 
-A dangling chain is found while the module is collected and reported when its test is set up, so the
-test never runs and pytest calls it an error. A vacuous pass is found while the assertion itself runs,
-so it is a failure. Both stop the run.
-
-The escalation is scoped to this library's own two warnings. A `DeprecationWarning` from somewhere
-else in your suite is left exactly as it was, which a blanket `filterwarnings = "error"` would not do.
-
-Failure clustering is not escalated and cannot be: it reads a run that already went red.
+- A dangling chain is found at collection and reported at setup, so the test never runs: an error.
+- A vacuous pass is found while the assertion runs: a failure.
+- The `strict` profile escalates only these two warnings. A `DeprecationWarning` elsewhere stays as it was,
+  which a blanket `filterwarnings = "error"` would not do.
 
 ```toml
 [tool.pytest.ini_options]
@@ -831,12 +781,11 @@ assertpy2_dangling_entries = "check"  # your own assert_that wrappers, for the c
 assertpy2_vacuous = "on"            # warn when a universal assertion passes over an empty value
 ```
 
-In a terminal that takes color, or with `--color=yes`, diffs are colored on screen: red removals, green
-additions, cyan headers. Every other reader of the failure gets the same diff as plain text. Entries beyond
-the limit are hidden behind a `... and N more entries` summary.
+- In a color terminal or with `--color=yes`, diffs are colored: red removals, green additions, cyan headers.
+  Every other reader gets plain text.
+- Entries past the limit become `... and N more entries`.
 
-The plugin also adds `assertpy2_allure` (see [Allure](../extending/integrations.md#allure)) and these
-command-line flags, each documented where it is used:
+The plugin also adds `assertpy2_allure` (see [Allure](../extending/integrations.md#allure)) and these flags:
 
 | Flag | What it does |
 |---|---|
@@ -848,17 +797,11 @@ command-line flags, each documented where it is used:
 
 ## What a failure exposes
 
-An assertion library's job is to put the values it compared in front of you, so a failing assertion is
-a deliberate disclosure.
+A failing assertion shows the values it compared, and that output reaches CI logs, report attachments and,
+for snapshots, committed files. Below is what travels where.
 
-That output does not stay in your terminal. It reaches CI logs, report attachments and, for snapshots,
-files committed to the repository. Below is what travels where, so you can decide what to hand the
-library in the first place.
-
-**assertpy2 caps size. It never redacts.** Nothing here inspects a value to decide whether it looks
-like a credential, and nothing ever will: a masker that guesses wrong in the safe direction hides the
-difference you were debugging, and one that guesses wrong in the other direction is worse than no
-masker at all.
+**assertpy2 caps size. It never redacts.** Nothing guesses whether a value looks like a credential: a
+wrong guess either hides the difference you are debugging or leaks what you thought was masked.
 
 ### The channels
 
@@ -869,9 +812,8 @@ masker at all.
 | `failure.diff` | per-path actual and expected, capped when rendered | the same |
 | a snapshot file | the serialised value | `__snapshots/*.json`, normally committed |
 
-The caps are on rendering only. The value under test, a value it is held against, a pattern and a list
-of items are printed whole up to 4000 characters in every assertion. Past that the message says how much
-it left out, and what it keeps depends on what the assertion is about:
+The caps are on rendering only. Values, patterns and item lists print whole up to 4000 characters. Past
+that the message says how much it left out, and keeps:
 
 | What a message prints | What it keeps past the cap |
 |---|---|
@@ -889,12 +831,9 @@ A diff has caps of its own:
 | the whole block | 20 KB |
 | matching parts of a structure | collapse to `..` |
 
-None of that shrinks what `failure.actual` holds, and `failure.actual` is what a reporting integration
-serialises.
-
-Under `pytest -vv` a message and the values of the report section are printed whole, as pytest prints
-its own output there. Under `ignore=` or `include=` alone those are the two views compared, whole. The
-rows of a diff stay cut.
+- None of that shrinks `failure.actual`, which is what a reporting integration serialises.
+- Under `pytest -vv`, a message and the report section's values print whole (under `ignore=` or
+  `include=` alone, the two compared views). Diff rows stay cut.
 
 ### Keeping a value out
 
@@ -913,19 +852,15 @@ except AssertionFailure as failure:
     print("sk-live" in str(failure.actual))  # True: the object you passed is unchanged
 ```
 
-`ignore` and `include` govern the report as well as the verdict, so the value stays out of the log.
-The exception still holds the original objects, because they are yours and the library does not copy
-them.
-
-For anything stronger, redact before asserting rather than after. Compare a filtered copy, or wrap the
-value in a type whose `__repr__` prints a placeholder: both put the decision where the meaning is
-known, which is your code and not ours.
+- `ignore` and `include` govern the report as well as the verdict, so the value stays out of the log.
+- The exception still holds your original objects. The library does not copy them.
+- For anything stronger, redact before asserting: compare a filtered copy, or wrap the value in a type
+  whose `__repr__` prints a placeholder.
 
 ### Turning channels off
 
-`assertpy2_diff = "off"` drops the structured diff section from pytest reports, and
-`assertpy2_allure = "off"` stops attaching values to Allure. Both leave the message itself intact, so
-neither is a substitute for not passing the value in.
+`assertpy2_diff = "off"` drops the diff section from pytest reports, and `assertpy2_allure = "off"` stops
+attaching values to Allure. The message stays intact, so neither replaces not passing the value in.
 
 ## Failure and expected exceptions
 
@@ -967,14 +902,12 @@ Or assert it does **not** raise a given exception:
 assert_that(safe_func).does_not_raise(ValueError).when_called_with("foo")
 ```
 
-`does_not_raise(ValueError)` is about that one exception. A call that raises another passes it, and
-the other exception goes unreported, so a call that has to complete is asked with
-`does_not_raise(Exception)`.
-
-Either takes a tuple of classes too, as `except` and `pytest.raises` do, or a union, as `isinstance`
-does, and any one of them answers it: `raises((TimeoutError, ConnectionError))` holds when either is raised, and
-`does_not_raise(KeyError | IndexError)` fails on either. An empty tuple names nothing that could be raised
-and is refused. With several classes named, a type checker reads the caught exception as `BaseException`.
+- `does_not_raise(ValueError)` is about that one exception: a call raising another passes, and that other
+  exception goes unreported. For a call that must complete, use `does_not_raise(Exception)`.
+- Both take a tuple or a union of classes, any one of which answers: `raises((TimeoutError,
+  ConnectionError))` holds when either is raised, `does_not_raise(KeyError | IndexError)` fails on either.
+- An empty tuple is refused.
+- With several classes, a type checker reads the caught exception as `BaseException`.
 
 !!! tip
     For the common "did it raise?" case without inspecting the message, prefer pytest's
@@ -991,14 +924,11 @@ err = assert_that(load).raises(ConfigError).when_called_with("bad.toml").raised(
 assert_that(err.code).is_equal_to(42)
 ```
 
-A type checker reads `err` as the `ConfigError` that `raises()` named. After `caused_by()`, `has_root_cause()`
-or `error_of()` it reads the type that step asked for, since that is the exception the chain moved to.
+A type checker reads `err` as the `ConfigError` that `raises()` named, and after `caused_by()`,
+`has_root_cause()` or `error_of()` as the type that step asked for.
 
-**The cause chain.** `caused_by()` asserts the exception was chained from a given cause, either an
-explicit `raise ... from` or one raised during handling.
-
-`has_root_cause()` walks to the root of the chain. Both pivot to that cause's message, so the chain
-continues:
+**The cause chain.** `caused_by()` asserts a direct cause (`raise ... from`, or raised during handling).
+`has_root_cause()` walks to the root. Both pivot to that cause's message:
 
 <!-- docs-guard: skip -->
 ```python
@@ -1009,19 +939,17 @@ assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(
 ).is_equal_to("db timeout")
 ```
 
-Either pivot also takes a union or a tuple of classes, as `isinstance` does, and holds when the cause is any
-one of them: `caused_by(TimeoutError | ConnectionError)`. With no single class named, a type checker reads the
-cause as `BaseException` (Pyrefly keeps a union as the union).
+Both also take a union or a tuple: `caused_by(TimeoutError | ConnectionError)`. A type checker then reads
+the cause as `BaseException` (Pyrefly keeps the union).
 
-**Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`). `contains_error()`
-asserts the caught group holds an exception of each given type, and `does_not_contain_error()` asserts it
-holds none of them. Both search the whole tree, so a group nested inside a group is reached. Each argument
-may be a tuple or a union, which any one of its classes answers: `contains_error((ValueError, KeyError),
-OSError)` asks for one of the first two and for an `OSError` too.
+**Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`):
 
-To ask about the failures rather than their types, pivot. `errors()` hands back the leaves as a list, so
-every collection assertion applies to them, and `error_of()` picks the first exception of a type and
-continues on its message, with the object itself still one `raised()` away:
+- `contains_error()` asserts the group holds an exception of each given type, `does_not_contain_error()`
+  that it holds none. Both search the whole tree, nested groups included.
+- Each argument may be a tuple or a union: `contains_error((ValueError, KeyError), OSError)` asks for one of
+  the first two, and an `OSError`.
+- `errors()` pivots to the leaves as a list, for every collection assertion.
+- `error_of()` picks the first exception of a type and continues on its message. `raised()` gives the object.
 
 <!-- docs-guard: untyped -->
 ```python
@@ -1036,17 +964,15 @@ caught.errors().is_length(2)
 caught.error_of(ValueError).contains("bad id")
 ```
 
-`errors()` flattens nesting, so a count is over the failures themselves and not over the shape the group
-happened to take. `contains_error()` and `error_of()` search the wider set, groups included, so the two
-always agree about whether a type is in there.
+`errors()` flattens nesting, so a count is over the failures, not the shape. `contains_error()` and
+`error_of()` search groups too, so the two always agree whether a type is there.
 
-To assert the shape itself, `matches_error_tree()` takes one entry per member and a list for a nested
-group. Nothing may be left over on either side, and a plain `list` of types is the only spelling of a
-subgroup, since a tuple already means "any of these" elsewhere in the library.
+To assert the shape, `matches_error_tree()` takes one entry per member:
 
-Only a nested list looks inside a subgroup. A type entry matches a subgroup node the same way it matches
-a leaf, by `isinstance`, so `matches_error_tree(Exception)` holds for a group of one member whatever that
-member turns out to hold.
+- A nested group is a plain `list` of types (a tuple means "any of these").
+- Nothing may be left over on either side.
+- A type entry matches a subgroup by `isinstance`, as it matches a leaf. Only a nested list looks inside:
+  `matches_error_tree(Exception)` holds for any group of one member.
 
 <!-- docs-guard: untyped -->
 ```python
@@ -1059,12 +985,9 @@ caught.contains_error(ValueError, KeyError)
 caught.matches_error_tree(ValueError, [KeyError])
 ```
 
-`contains_error()` passes there whatever the nesting is. `matches_error_tree()` is the one that would
-notice `KeyError` moving out of `retries`.
-
-Entries pair with members rather than being read in order, so the same claim written either way round
-gets the same verdict. `matches_error_tree(Exception, ValueError)` and `matches_error_tree(ValueError,
-Exception)` both hold for a group of one `ValueError` and one `KeyError`.
+`contains_error()` passes whatever the nesting. `matches_error_tree()` would notice `KeyError` leaving
+`retries`. Entries pair with members, not by order: `matches_error_tree(Exception, ValueError)` and
+`matches_error_tree(ValueError, Exception)` both hold for a `ValueError` and a `KeyError`.
 
 ### Expected warnings
 
@@ -1078,9 +1001,8 @@ assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").m
 )
 ```
 
-The category defaults to `Warning` (matches any warning) and matches subclasses, and a tuple or a union of
-categories is answered by a warning of any one of them. Or assert it does
-**not** emit a given category:
+The category defaults to `Warning` (any warning), matches subclasses, and may be a tuple or a union. Or
+assert it does **not** emit a category:
 
 <!-- docs-guard: skip -->
 ```python
@@ -1102,12 +1024,13 @@ To also assert on the value the call returned (alongside the warning, or after `
 )
 ```
 
-`returned()` hands back a builder over the value the call returned, so that value's own assertions
-apply: `contains()` on a returned list, `starts_with()` on a returned string. A type checker reads its
-`.value` as the callable's declared return type. The builder is the whole one rather than the view
-`assert_that()` would pick for that type, so a checker accepts any assertion on it, and one the value
-cannot answer raises at run time. `returned()` raises `TypeError` if the call raised (there is no return
-value to inspect).
+`returned()` hands back a builder over the returned value, so its own assertions apply: `contains()` on a
+returned list, `starts_with()` on a returned string.
+
+- A type checker reads `.value` as the callable's declared return type.
+- The builder is the full one, not the typed view `assert_that()` would pick. A checker accepts any
+  assertion on it, and one the value cannot answer raises at run time.
+- If the call raised, `returned()` raises `TypeError`: there is no return value.
 
 !!! warning "Not thread-safe"
     `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global
@@ -1129,10 +1052,9 @@ assert_that(1 + 2).described_as("adding stuff").is_equal_to(2)
 
 ### What a soft block hands back
 
-A [`soft_assertions()`](testing.md#soft-assertions) block renders its collected failures into one
-numbered message. That message is a rendering, not the only copy: the raised `AssertionFailure` also
-carries `failures`, one [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] per collected failure,
-in the order they were collected.
+A [`soft_assertions()`](testing.md#soft-assertions) block renders its failures into one numbered message.
+The raised `AssertionFailure` also carries `failures`: one
+[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] per failure, in the order collected.
 
 ```python
 from assertpy2 import AssertionFailure, assert_that, soft_assertions
@@ -1149,12 +1071,11 @@ except AssertionFailure as e:
     print(e.failures[1].message)                 # Expected <foo> to be of length <4>, but was <3>.
 ```
 
-Each record keeps what the text had flattened: the values, the diff, the `group` label it was collected
-under, and the `(file, line)` the message renders in brackets. A polling assertion that times out inside
-a soft block keeps its [`trace`](testing.md#polling-trace) there too.
+Each record keeps the values, the diff, the `group` label, the `(file, line)` and, for a poll that timed
+out, its [`trace`](testing.md#polling-trace).
 
-Off pytest the message is the only place a reader finds the diffs, so each entry carries its diff in the
-block form a single failure prints. For the block above, `str(e)` reads:
+Off pytest, each entry of the message carries its diff in the block form a single failure prints. For
+the block above, `str(e)` reads:
 
 ```
 soft assertion failures:
@@ -1166,22 +1087,25 @@ soft assertion failures:
 2. Expected <foo> to be of length <4>, but was <3>.  [test_app.py:7]
 ```
 
-One message has room for the blocks of twenty failures and 60 000 characters. A failure past that keeps
-the compact form, one line per differing path, and the last line of the message names it. A block too
-wide for what is left keeps the compact form too and takes one of the twenty, but none of the characters,
-so a smaller block after it still fits. Every block is a `print` away:
-`print(e.failures[20].diff)` renders it. `diff` is `None` on a failure that has none, such as
-`is_true()` on `False`. An exception of yours that escapes the block gets the same text as a note.
+Room in one message:
 
-Under pytest the message keeps the compact form, and the plugin hangs the blocks on the report. Each
-collected failure gets the sections a raised failure gets, numbered as the message numbers it,
-`Structured Diff (failure 2 of 3)`, and each section opens on that failure's line of the message, with its
-group in brackets.
-Under `ignore=` or `include=` a section shows the two copies the assertion compared, as it does for a
-raised failure. The room is the same, twenty failures and 60 000 characters, shared by every soft block
-that fails in one report. Each block with failures left out gets one more section naming them, and a
-failure with nothing to show takes no place among the twenty. An exception of yours that escapes the block brings along what
-the block had collected before it, and those failures get their sections too.
+- Blocks for twenty failures and 60 000 characters. Past that, a failure keeps the compact form (one line
+  per differing path), and the last line of the message names it.
+- A block too wide for what is left also keeps the compact form. It takes one of the twenty but none of
+  the characters, so a smaller block after it still fits.
+- Every block is a `print` away: `print(e.failures[20].diff)`. `diff` is `None` on a failure without one,
+  such as `is_true()` on `False`.
+- An exception of yours that escapes the block gets the same text as a note.
+
+Under pytest the message keeps the compact form, and the plugin hangs the blocks on the report:
+
+- Each collected failure gets the sections a raised failure gets, numbered as in the message:
+  `Structured Diff (failure 2 of 3)`. A section opens on that failure's line, with its group in brackets.
+- Under `ignore=` or `include=`, a section shows the two copies the assertion compared.
+- The room is the same, twenty failures and 60 000 characters, shared by every soft block failing in one
+  report. A block with failures left out gets one more section naming them. A failure with nothing to show
+  takes no place among the twenty.
+- An exception of yours that escapes the block brings what the block had collected, with their sections.
 
 In the compact form, what each kind of value adds:
 
@@ -1194,9 +1118,8 @@ In the compact form, what each kind of value adds:
 
 ### Asking instead of asserting
 
-`check()` runs the next assertion for its verdict and hands back an
-[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] instead of raising. It is truthy when the
-assertion held, and carries the message, values and diff when it did not.
+`check()` returns the next assertion's verdict as an [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome]
+instead of raising: truthy when it held, with the message, values and diff when it did not.
 
 ```python
 outcome = assert_that({"role": "guest"}).check().is_equal_to({"role": "admin"})
@@ -1207,23 +1130,18 @@ assert outcome.diff is not None
 print(outcome.diff.entries[0].path)   # role
 ```
 
-Use it where a test is not what you are writing: branching on a precondition, or reporting a check into
-something that is not pytest. An assertion states a requirement, and stopping at the first unmet one is
-the point of the other modes.
-
-Negation is proxied, so `assert_that(5).check().not_.is_positive()` answers too. A bad argument still
-raises: `TypeError` and `ValueError` mean the call itself is wrong, which is not a verdict about the
-value.
-
-Unlike a failure collected by `soft_assertions()` or logged by `assert_warn()`, a failed check does not
-mark the value as unverified: `.value` keeps working, because a question was asked, not an assertion
-made.
+- Use it outside tests: branching on a precondition, or reporting into something that is not pytest. A
+  false outcome does not stop anything, so inspect it. Where an unmet requirement should fail the test,
+  use a plain assertion.
+- Negation works: `assert_that(5).check().not_.is_positive()`.
+- A bad argument still raises `TypeError` or `ValueError`: the call is wrong, not the value.
+- A failed check does not mark the value unverified, unlike a soft or warned failure: `.value` keeps
+  working.
 
 ### What was asked, as data
 
-`message` says what failed in English, and `actual`, `expected` and `diff` say what the values were.
-None of them says what was *asked* of the value, and `expected` cannot, since what it holds changes
-with the assertion:
+`message`, `actual`, `expected` and `diff` say what failed and what the values were, but not what was
+*asked*. `expected` cannot, since what it holds depends on the assertion:
 
 | Assertion | `expected` holds |
 |---|---|
@@ -1244,11 +1162,9 @@ print(outcome.requirement.parameters)   # {'other': 9, 'tolerance': 0.1, 'rel': 
 print(outcome.requirement.negated)      # False
 ```
 
-The same three fields are on the raised
-[`AssertionFailure`][assertpy2.errors.AssertionFailure], on each entry of a soft block's `failures`,
-and in the Allure attachment. That is what lets a report group failures without parsing messages: every
-`is_close_to` failure in a run carries the same operation, and a negated one is marked rather than
-worded differently.
+The same three fields are on the raised [`AssertionFailure`][assertpy2.errors.AssertionFailure], on each
+entry of a soft block's `failures` and in the Allure attachment. A report can group failures without
+parsing messages: every `is_close_to` failure carries the same operation, and a negated one is marked.
 
 Two details worth knowing before you build on it:
 
@@ -1268,9 +1184,8 @@ gap:
 | what a soft block or `assert_all` raises for everything it collected | `None`, with the answer on each entry in its `failures` |
 | a polling timeout | that of whatever its last attempt raised: usually the assertion that kept failing, and `None` when the probe raised something that is not one of this library's failures, such as an exception it was told to ignore or a bare `AssertionError` |
 
-Reading it costs a built-in assertion nothing when it passes, since nothing runs until a failure is
-composed. A registered extension is the exception: it says what it is at the call, so it pays a
-wrapper whether it passes or fails.
+A built-in assertion pays nothing for it when it passes. A registered extension pays a wrapper on every
+call, passing or failing.
 
 ### Warnings instead of failures
 
@@ -1315,10 +1230,10 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
 
 #### Handing each failure to your own code
 
-`on_failure` takes a callable and hands it each failure as its
-[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] instead of logging it: the message, the values,
-the diff, the [`requirement`](#what-was-asked-as-data) and the `(file, line)` the assertion was written
-at. A logger that should carry the record, diff included, takes it from there:
+`on_failure` takes a callable instead of a logger. It gets each failure as an
+[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome]: the message, the values, the diff, the
+[`requirement`](#what-was-asked-as-data) and the `(file, line)`. A logger that should carry the record
+takes it from there:
 
 ```python
 import logging
@@ -1336,19 +1251,18 @@ def report(outcome):
 assert_warn({"status": 500}, on_failure=report).is_equal_to({"status": 200})
 ```
 
-Every link of a chain is handed over, a pivot and `extracting()` included, and a polling timeout comes
-with its [`trace`](testing.md#polling-trace). The value is marked as unverified before your callable
-runs, as it is when a failure is logged. An exception your callable raises comes out of the assertion
-that failed, as one a logger raises does, an `AssertionError` included. `on_failure` takes the place of `logger`, and
-passing both is a `TypeError`. Through a `LoggerAdapter` the record keeps your `extra` only with
-`merge_extra=True`, which arrived in Python 3.13.
+- Every link of a chain is handed over, pivots and `extracting()` included.
+- A polling timeout comes with its [`trace`](testing.md#polling-trace).
+- The value is marked unverified before your callable runs, as with a logged failure.
+- An exception your callable raises comes out of the assertion that failed.
+- `on_failure` replaces `logger`. Passing both is a `TypeError`.
+- Through a `LoggerAdapter`, the record keeps your `extra` only with `merge_extra=True` (Python 3.13+).
 
 ### Logging the assertions that pass
 
-An assertion that holds says nothing. Inside a [`log_passes()`][assertpy2.assertpy.log_passes] block each one
-logs a line: the call, the value it held for, the file and line it was asked at and, for a comparison against a
-bound, how far the value was from it. Nothing else changes, and a failure is raised, collected or logged as it
-would be outside.
+Inside a [`log_passes()`][assertpy2.assertpy.log_passes] block, every assertion that holds logs one line: the
+call, the value, where it was asked and, for a threshold, how far the value was from it. Failures behave as they
+do outside.
 
 ```python
 from assertpy2 import assert_that, log_passes
@@ -1368,8 +1282,8 @@ Each line goes to the `assertpy2.passes` logger at `INFO`:
 [test_api.py:7]: is_close_to(100, 2) passed for <98.7>, the two are about 1.3 apart, about 0.7 less than the tolerance
 ```
 
-pytest shows the log of a passing test only when asked. Live logging prints the lines as the test runs, for one
-run with `pytest -o log_cli=true --log-cli-level=INFO` or for good in the configuration:
+**Seeing the lines.** pytest hides the log of a passing test. Turn on live logging for one run with
+`pytest -o log_cli=true --log-cli-level=INFO`, or for good:
 
 ```toml
 [tool.pytest.ini_options]
@@ -1377,48 +1291,51 @@ log_cli = true
 log_cli_level = "INFO"
 ```
 
-Outside pytest the `INFO` level reaches a handler once your program configures one, `logging.basicConfig(level=
-logging.INFO)` for a script. Pass `logger=` and `level=` to send the lines elsewhere. The logger is a child of
-`assertpy2`, so turning off that one's propagation, as the section above suggests for warnings, keeps these
-lines from your handlers as well.
+Outside pytest, configure a handler: `logging.basicConfig(level=logging.INFO)` for a script. `logger=` and
+`level=` send the lines elsewhere. The default logger is a child of `assertpy2`, so turning off that one's
+propagation, as the section above suggests for warnings, keeps these lines from your handlers as well.
 
-The distance is said for the bounds a threshold is written with: `is_less_than()`, `is_greater_than()` and their
-`_or_equal_to` forms, `is_before()` and `is_after()` and theirs, `is_between()` and `is_not_between()`,
-`is_close_to()` and `is_not_close_to()`. It is measured on numbers of the standard library, `datetime`, `date`
-and `timedelta`, and between the values the comparison compared: a float is the binary number it holds, so
-`0.5 - 0.42` is `0.0800000000000000155...` and the line says `about 0.08`. A distance 34 digits hold is printed
-exactly. Anything else gets the line without a distance: a `numpy` scalar or a subclass of `int`, a range of
-dates, a number larger than about `10**1000` or smaller than about `10**-1000`, a `Fraction` whose numerator or
-denominator is that long, a `Decimal` written with more than a thousand digits, and two durations whose distance a
-`timedelta` cannot hold.
+**Where the distance is given.**
 
-What makes a line:
+- Assertions: `is_less_than()`, `is_greater_than()`, `is_before()`, `is_after()` and their `_or_equal_to`
+  forms, `is_between()` and `is_not_between()`, `is_close_to()` and `is_not_close_to()`.
+- Values: standard-library numbers, `datetime`, `date` and `timedelta`.
+- Exact: a float counts as the binary number it holds, so `0.5 - 0.42` reads `about 0.08`. Up to 34 digits are
+  printed exactly.
+- No distance for: `numpy` scalars, subclasses of `int`, a range of dates, numbers past about `10**1000` or below
+  about `10**-1000`, a `Fraction` with parts that long, a `Decimal` of more than a thousand digits, and durations
+  whose distance overflows `timedelta`.
 
-- One line per assertion the test asked. `is_positive()` asks `is_greater_than(0)` underneath and is one line,
-  and so is `all_satisfy()` with the assertions its predicate makes, and an extension with the ones in its body.
-  Under an assertion that reports nothing, of a builder made before the block or kept past it, an assertion made
-  inside the block reports on its own.
-- A pass is a verdict, not a return. A failure a soft block collects, or one `assert_warn()` logs, is not
-  reported, nor is anything run under `check()`. A negation that held reads `not_.is_less_than(2) passed`.
-- A chain is a line per link, up to the link that failed.
-- A poll reports the steps of the attempt that passed, each once, with the value that attempt read. A blocking
-  `eventually_sync()` chain polls again at every call and reports the step that call added.
+**What makes a line.**
 
-The block is a context of its own, as a soft block is: each thread and `asyncio` task has its own, and a task
-started inside reports into the block while it is open. A builder reports into the block it was made in, while
-that block is open. One made before the block opened reports nothing, and one kept past the block's end reports
-nothing, in a later block too. A pivot such as `extracting()` reports where the builder it came from reports.
+- One line per assertion you wrote. `is_positive()` is one line, though it calls `is_greater_than(0)`. So is an
+  extension, or `all_satisfy()` with what its predicate asserts. Under an assertion that reports nothing, of
+  a builder made before the block or kept past it, an assertion made inside the block reports on its own.
+- Only passes: a failure a soft block collects, one `assert_warn()` logs, and anything under `check()` log nothing.
+- A negation reads `not_.is_less_than(2) passed`.
+- A chain logs one line per link, up to the one that failed.
+- A poll logs each step of the attempt that passed, once, with the value that attempt read. A blocking
+  `eventually_sync()` chain polls again at every assertion called on it and logs the step that assertion
+  added.
 
-While no block is open anywhere, `assert_that()` makes the builder it made before, and a pivot and each poll
-attempt check one counter. While a block is open in some thread, each `assert_that()` asks its own context once
-whether it is inside one. An assertion made inside a block pays for being observed, and a builder kept past its
-block still runs through the observation, reporting nothing.
+**Which assertions a block sees.** Like a soft block, it belongs to its thread or `asyncio` task, and tasks
+started inside share it.
+
+- A builder reports into the block it was made in, while that block is open.
+- A builder made before the block, or kept after it, reports nothing.
+- A pivot such as `extracting()` reports where its parent reports.
+
+**Cost.** With no block open anywhere, `assert_that()` makes the builder it made before, and a pivot, a
+negation, an extension call and a poll attempt each check one counter. With a block open in some thread, each
+`assert_that()` checks its context once. Inside a block, each assertion pays for being observed, and a builder
+kept past its block still runs through the observation, reporting nothing.
 
 #### Handing each pass to your own code
 
-`on_pass` takes a callable and hands it each pass as its [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome]
-in place of logging it: `passed` set, the value, the [`requirement`](#what-was-asked-as-data), the
-`(file, line)` and, as `hint`, the distance line. `message` is empty, as on every passing outcome.
+`on_pass` takes a callable instead of a logger. It gets each pass as an
+[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome]: `passed` set, the value, the
+[`requirement`](#what-was-asked-as-data), the `(file, line)` and the distance as `hint`. `message` is empty, as
+on every passing outcome.
 
 ```python
 from assertpy2 import AssertionOutcome, assert_that, log_passes
@@ -1432,20 +1349,22 @@ assert checked[0].requirement.operation == "is_less_than"
 assert checked[0].hint == "the value is about 0.08 below the number given"
 ```
 
-An exception your callable raises, or your logger raises when it is asked for its level or given a line, comes out
-of the assertion that passed, as one from `on_failure` comes out of the assertion that failed. Out of a poll it
-comes once and is not retried, for a block that was open before the poll's attempt began: the attempt holds those
-passes and hands them on once the poll has passed. A block entered while an attempt runs, by the probe or beside
-it, hands its passes on as they come, and what its callable or logger raises, once it reaches the probe, is part
-of that attempt, which the poll retries. So does an assertion the probe runs in a context of its own, through
-`Context.run()` or in another thread: the attempt holds what runs in its own context and in the tasks it starts.
-An exception raised in another thread reaches the probe only if the probe passes it on: `Thread.join()` does not. An assertion your callable or
-your logger makes is not reported itself.
-`on_pass` takes the place of `logger`, and passing both is a `TypeError`.
+- `on_pass` replaces `logger`. Passing both is a `TypeError`.
+- An exception your callable or logger raises comes out of the assertion that passed.
+- Assertions your callable or logger make are not reported.
+- Read the record, not the text. The line is wording and may change, see [stability](../concepts/stability.md).
+- A line calls `str()` on the value and `repr()` on the arguments, as a failure message does. A secret in a value
+  ends up in the log. Nothing is rendered when the logger does not want the level.
 
-The line is wording, so read the record rather than parse the text when a program reads it: the
-[stability](../concepts/stability.md) page says what may change. Rendering a line calls `str()` on the value and
-`repr()` on the arguments, as a failure message does, so a value that holds a secret is written to the log too,
-and nothing is rendered when the logger does not want the level. One exception: in a poll, an assertion of a
-builder made in an outer block is rendered when it is checked, and the outer block's logger is asked once the poll
-has passed.
+??? note "Inside a poll"
+    - An attempt holds the passes made in its own context and in the tasks it starts. Only the attempt that
+      passed hands them on, after the poll. An exception your callable or logger raises then comes out once
+      and is not retried.
+    - That holds for blocks open before the attempt began. A block entered during the attempt, by the probe or
+      beside it, hands its passes on at once. What its callable or logger raises, once it reaches the probe,
+      is part of the attempt, which the poll retries.
+    - The same goes for an assertion the probe runs in another context, through `Context.run()` or a thread. An
+      exception raised in another thread reaches the probe only if the probe passes it on, which
+      `Thread.join()` does not.
+    - An assertion of a builder made in an outer block is rendered when checked. The outer block's logger is
+      asked after the poll.

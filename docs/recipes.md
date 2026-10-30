@@ -127,8 +127,8 @@ rows it did not find and the rows nobody asked for, whole, and does not point in
 ## Choose a snapshot style
 
 Store the expected value in a **file** with `snapshot()`, or **inline** in the test source with
-`matches_inline()`. Record both the same way - run `pytest --assertpy2-snapshot-update` - and both honor
-the same selective knobs and CI mode:
+`matches_inline()`. Both are recorded with `pytest --assertpy2-snapshot-update`, and both honor the same
+selective knobs and CI mode:
 
 <!-- docs-guard: skip -->
 ```python
@@ -139,10 +139,12 @@ def test_report():
     assert_that(build_summary()).matches_inline()
 ```
 
-Use inline for small, literal-able values you want to read next to the test. Use file snapshots for
-large payloads or values that need a custom serializer (`datetime`, `Decimal`, a domain object). Inline
-snapshots need the `[inline]` extra (`pip install assertpy2[inline]`). See
-[Snapshot testing](guides/testing.md#snapshot-testing).
+- Inline suits small, literal-able values you want to read next to the test. It needs the `[inline]`
+  extra (`pip install assertpy2[inline]`).
+- A file suits large payloads and values that need a custom serializer (`datetime`, `Decimal`, a domain
+  object).
+
+See [Snapshot testing](guides/testing.md#snapshot-testing).
 
 ## Assert on a filtered, mapped collection
 
@@ -226,7 +228,7 @@ assert_that(load).raises(RuntimeError).when_called_with("x").caused_by(ValueErro
 
 `raised()` pivots to the exception object, `has_root_cause()` walks the whole chain, and
 `contains_error()` matches inside an `ExceptionGroup`, where `errors()` hands back the failures
-themselves - see [Expected exceptions](guides/errors.md#expected-exceptions).
+themselves. See [Expected exceptions](guides/errors.md#expected-exceptions).
 
 ## Wait for eventual consistency
 
@@ -291,14 +293,15 @@ assert_that(response["meta"]["total"]).is_equal_to(2)
 `at_json_path()` navigate into a nested payload, and need the JSON extra
 (`pip install assertpy2[json]`). This keeps the failure focused on the field that broke.
 
-It also keeps the failure cheap. What a failed comparison costs follows the two values and not the
-message. The sentence stays a few hundred characters and the report prints the first fifty differences,
-yet the failure reads both values whole and holds an entry for every difference it found, in
-`failure.diff.entries`. As a sense of scale and no promise, measured on one machine with one shape of
-row: two lists of 10 000 rows that differ in every row took about 90 ms and 8 MB to fail where `==`
-answered in a microsecond, and a single differing row among the 10 000 took 5 ms. A polling assertion
-pays that at every attempt that fails, so [`eventually()`](guides/testing.md#async-assertions) over a
-value that large polls less often than its interval asks.
+What a failed comparison costs follows the two values, not the message:
+
+- The sentence stays a few hundred characters and the report prints the first fifty differences, but the
+  failure reads both values whole and keeps every difference in `failure.diff.entries`.
+- For scale, on one machine and one row shape: two lists of 10 000 rows differing in every row took about
+  90 ms and 8 MB to fail, where `==` answered in a microsecond. One differing row among 10 000 took 5 ms.
+- A polling assertion pays that at every failed attempt, so
+  [`eventually()`](guides/testing.md#async-assertions) over a value that large polls less often than its
+  interval asks.
 
 ## Migrate an assertion from plain `assert`
 

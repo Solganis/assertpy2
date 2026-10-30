@@ -166,11 +166,12 @@ own `matches()` raises still propagates, and so does a coroutine handed back whe
 `all_of()`, `any_of()`, and `not_()` are named function equivalents of the `&`, `|`, and `~`
 operators from [Composition](#composition). Use whichever reads better.
 
-A matcher checks its arguments when it is built, as the assertion of the same name does, so a mistake
-raises where it is written rather than at the first comparison. `match.between(10, 1)` and
-`match.close_to(1.0, -0.1)` raise `ValueError`, and `match.has_length(2.5)` and
-`match.is_divisible_by("3")` raise `TypeError`. The factories that take a matcher, `has_property()`,
-`each_item()`, `not_()`, `all_of()` and `any_of()`, refuse anything else, as `&` and `|` do:
+A matcher checks its arguments when it is built, so a mistake raises where it is written:
+
+- `match.between(10, 1)` and `match.close_to(1.0, -0.1)` raise `ValueError`.
+- `match.has_length(2.5)` and `match.is_divisible_by("3")` raise `TypeError`.
+- `has_property()`, `each_item()`, `not_()`, `all_of()` and `any_of()` refuse anything but a matcher where
+  they take one, as `&` and `|` do:
 
 <!-- docs-guard: raises -->
 <!-- docs-guard: type-error -->
@@ -202,14 +203,15 @@ assert_that(response).matches_structure({
 })
 ```
 
-A value in a spec that is neither a matcher nor a nested dict is compared with `==`, so
-`"name": "Alice"` reads the same as `match.equal_to("Alice")`. A class is such a value too:
-`{"id": int}` asks whether the value is equal to the class `int`, which `7` is not. The matcher for
-an instance is `match.is_instance_of(int)`, and a failed `matches_structure()` names it where the
-value is an instance of the class the spec holds. Where it is not, the failure says the value's type:
-`but was <7> of type <str>`. Beside a class with a metaclass of its own, an abstract base class or a
-model, the failure says the type whatever the value is, since asking such a class whether the value is
-its instance would run the class's own code.
+A spec value that is neither a matcher nor a nested dict is compared with `==`: `"name": "Alice"` reads as
+`match.equal_to("Alice")`.
+
+- A class is such a value too. `{"id": int}` asks whether the value equals the class `int`, which `7` does
+  not. For an instance use `match.is_instance_of(int)`.
+- Where the value is an instance of the class in the spec, the failure names that matcher. Where it is
+  not, it says the value's type: `but was <7> of type <str>`.
+- Beside a class with its own metaclass, an abstract base class or a model, it always says the type: asking
+  such a class about an instance would run its code.
 
 A failure prints the value and the spec with what matched left out, as a failed `is_equal_to()` does,
 so one wrong field of a wide record stays one short sentence:
@@ -226,15 +228,16 @@ except AssertionError as failure:
     # Expected <{.., 'age': 15, ..}> to match structure {.., age: a value between <18> and <120>, ..}, but at <age>: expected a value between <18> and <120>, but was <15>.
 ```
 
-A plain dict, a model and an attrs instance are written that way, a record under its class name:
-`Customer(.., address={'city': 'Oslo', ..}, ..)`. It takes every key on the way, the value's and the
-spec's, to be exactly a `str`, an `int`, a `bool`, a `float`, a `bytes` or `None`, and a record's field
-names to read as names. Anything else is printed whole: a mapping of another class, and a record that a
-dict or an attrs instance holds. A model's nested models are dicts once it is read, and are left out of
-like any dict. The failure holds the whole value as `actual` either way.
+- A plain dict, a model and an attrs instance print that way, a record under its class name:
+  `Customer(.., address={'city': 'Oslo', ..}, ..)`.
+- That needs every key, the value's and the spec's, to be exactly `str`, `int`, `bool`, `float`, `bytes`
+  or `None`, and record field names to read as names.
+- Anything else prints whole: a mapping of another class, a record held by a dict or an attrs instance. A
+  model's nested models are dicts once read, and collapse like any dict.
+- The failure holds the whole value as `actual` either way.
 
 The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
-attrs instance - a model or attrs instance is normalized to its dict first, so the same spec works
+attrs instance. A model or attrs instance is normalized to its dict first, so the same spec works
 either way, including inside `satisfies()` and the `==` form.
 
 Normalization applies at every level: a model nested in a plain dict matches too, and failure paths
@@ -364,7 +367,7 @@ assert_that([{"name": "Bob"}, {"name": "Alice"}]).contains_exactly_in_any_order(
 
 ### What you see on failure
 
-When fields do not match, the pytest plugin prints the exact path and the predicate that failed - every
+When fields do not match, the pytest plugin prints the exact path and the predicate that failed, for every
 mismatch, not just the first:
 
 ![Colored match diff: user.name, user.role and user.age each shown with their path and the predicate that failed](../assets/diff-match.svg)
@@ -473,13 +476,14 @@ class IsAnIterator(BaseMatcher):
 assert_that(iter([1, 2])).satisfies(IsAnIterator() & match.contains(2))
 ```
 
-It is `True` by default, which hands a matcher the items in a list, as `satisfies()` always did. The
-built-in matchers that ask about the value, `is_instance_of()`, `is_type_of()`, `has_length()`,
-`equal_to()` and the rest, say `False`. A matcher that says `False` and walks the value anyway takes the
-items from the iterator itself, so after a link that read a part of it the links that follow are
-refused, as they are after a predicate, and so is a matcher combined with it that reads the items.
-`equal_to()` or `is_in()` holding a matcher, and `equal_to()` given `comparators=`, are treated the
-same way, since `==` hands the value on to that code of yours.
+- `True` by default: the matcher gets the items in a list, as `satisfies()` always did.
+- The built-in matchers that ask about the value (`is_instance_of()`, `is_type_of()`, `has_length()`,
+  `equal_to()` and the rest) say `False`.
+- A matcher that says `False` and walks the value anyway takes items from the iterator itself. After a
+  link that read part of it, the links that follow are refused, as after a predicate, and so is a matcher
+  combined with it that reads the items.
+- `equal_to()` or `is_in()` holding a matcher, and `equal_to()` given `comparators=`, are treated the same
+  way, since `==` hands the value to your code.
 
 ### Registering one on the `match` namespace
 

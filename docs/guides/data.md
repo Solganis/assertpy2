@@ -91,26 +91,28 @@ Three spec dialects are read:
 A spec declaring any other `openapi` version is refused. Read as one of these it would validate against
 the wrong dialect, which passes every keyword that dialect cannot spell.
 
-The same holds inside a spec. OpenAPI 3.0 and Swagger 2.0 carry an older JSON Schema, which passes over a
-keyword of a later one, or reads it another way: a 3.0 schema with `const: a` used to take `b`. A schema
-the response reaches that holds such a keyword is refused with a `ValueError` naming the schema and the
-keyword: `const`,
-`contains`, `propertyNames`, `if`, `dependentRequired`, `dependentSchemas`, `unevaluatedProperties`,
-`unevaluatedItems`, `prefixItems`, `$dynamicRef`, `exclusiveMinimum` or `exclusiveMaximum` written as
-a number, and `$recursiveRef`. The keyword is refused wherever it stands, whatever it would forbid
-there. Spell the constraint as 3.0 does, or move the spec to OpenAPI 3.1 as a whole: with the version
-line alone changed, `nullable` and a boolean `exclusiveMinimum` are what is not read. A `$schema` inside
-a 3.0 or 2.0 document changes nothing: the document is read as one dialect throughout.
+The same holds inside a spec. OpenAPI 3.0 and Swagger 2.0 carry an older JSON Schema, which skips or
+misreads keywords of a later one: a 3.0 schema with `const: a` used to take `b`.
+
+- A schema the response reaches that holds such a keyword is refused with a `ValueError` naming the schema
+  and the keyword, wherever it stands.
+- The keywords: `const`, `contains`, `propertyNames`, `if`, `dependentRequired`, `dependentSchemas`,
+  `unevaluatedProperties`, `unevaluatedItems`, `prefixItems`, `$dynamicRef`, `$recursiveRef`, and
+  `exclusiveMinimum` or `exclusiveMaximum` written as a number.
+- Fix: spell the constraint as 3.0 does, or move the whole spec to OpenAPI 3.1. With only the version line
+  changed, `nullable` and a boolean `exclusiveMinimum` are what stop being read.
+- A `$schema` inside a 3.0 or 2.0 document changes nothing: the document is one dialect throughout.
 
 Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf` and `enum` validate with full JSON-Schema
 semantics.
 
-A `multipleOf` divides the numbers as they are written: `19.99` is a multiple of `0.01`. As two floats
-divided it is not, the quotient being `1998.9999999999998`, and jsonschema fails it there. A float is
-read as the decimal it prints as, so `0.30000000000000004` is no multiple of `0.1`. Digits a float
-does not keep are gone before the check sees the number: `1.0000000000000001` is `1.0` once parsed.
-Where they matter, parse with `json.loads(text, parse_float=decimal.Decimal)`, and a `Decimal` is
-divided exactly. A `multipleOf` that is no number above zero is refused with a `ValueError`.
+`multipleOf` divides the numbers as written:
+
+- `19.99` is a multiple of `0.01`. As two floats it is not (`1998.9999999999998`), and jsonschema fails it.
+- A float is read as the decimal it prints as, so `0.30000000000000004` is no multiple of `0.1`.
+- Digits a float does not keep are gone before the check: `1.0000000000000001` parses as `1.0`. Where they
+  matter, parse with `json.loads(text, parse_float=decimal.Decimal)`: a `Decimal` is divided exactly.
+- A `multipleOf` that is not a number above zero is refused with a `ValueError`.
 
 Two keywords of OpenAPI 3.0 are read as 3.0.3 words them, since the value is a response:
 
@@ -124,18 +126,21 @@ Two keywords of OpenAPI 3.0 are read as 3.0.3 words them, since the value is a r
 Both are read on the schemas the response reaches and never on a value: an `enum` member or an `example`
 that looks like a schema is left as it is.
 
-One reading is wider than the text on purpose. `nullable: true` on a schema that is a `$ref`, an `allOf`,
-an `anyOf` or a `oneOf`, with no `type` of its own, still allows `null`: that is how a nullable reference
-is usually written, and a spec written so would fail on every `null` otherwise. What else stands beside
-an `allOf`, `anyOf` or `oneOf` is still asked of `null`: an `enum` there lets it through only where it
-lists it, as beside a `type`.
+One reading is wider than the text on purpose:
 
-Pass `strict_nullable=True` to leave that reading out and hold `nullable` to the text. With no `type`
-beside it the keyword then does nothing, and `null` is asked of what else the schema holds, as it
-would be with no mark there: a `$ref` to a string refuses it and one to a nullable string takes it, an
-`anyOf` takes it where a branch does, a `oneOf` where exactly one does, and a schema that holds
-nothing else takes it as it takes any value. `x-nullable` and OpenAPI 3.1 are read the same either
-way.
+- `nullable: true` on a `$ref`, `allOf`, `anyOf` or `oneOf` with no `type` of its own still allows `null`.
+  That is how a nullable reference is usually written, and such a spec would otherwise fail on every `null`.
+- Whatever else stands beside the `allOf`, `anyOf` or `oneOf` is still asked: an `enum` there lets `null`
+  through only if it lists it.
+
+`strict_nullable=True` holds `nullable` to the text. Without a `type` beside it the keyword does nothing,
+and `null` is asked of the rest of the schema:
+
+- a `$ref` to a string refuses it, one to a nullable string takes it
+- an `anyOf` takes it where a branch does, a `oneOf` where exactly one does
+- a schema with nothing else takes it as any value.
+
+`x-nullable` and OpenAPI 3.1 read the same either way.
 
 Three limits:
 
@@ -191,10 +196,11 @@ assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 `path` is the operation's key in the spec, not the request URL. A Swagger 2.0 `basePath` (or an OpenAPI 3
 server prefix) is not part of it, so an endpoint served at `/api/v1/version` is looked up as `/version`.
 
-`status` defaults to `200`, then `201`, then the range `2XX`, then `default`. Pass `status=` to pick
-another. A status is looked up as the spec declares it: its own code first, then its range (`404` under
-`4XX`), then `default`. A status none of the three covers is refused with a `ValueError`. Swagger 2.0
-has no ranges.
+- `status` defaults to `200`, then `201`, then the range `2XX`, then `default`. Pass `status=` to pick
+  another.
+- A status is looked up as the spec declares it: its own code first, then its range (`404` under `4XX`),
+  then `default`. A status none of the three covers is refused with a `ValueError`.
+- Swagger 2.0 has no ranges.
 
 When the body does not conform, the message names the operation and counts the failures. Every one is
 reported with its JSON path and the constraint it broke, not just the first:

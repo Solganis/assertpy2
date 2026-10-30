@@ -1,7 +1,7 @@
 # Migration from assertpy
 
 `assertpy2` is a drop-in, fully typed replacement for the original
-[assertpy](https://github.com/assertpy/assertpy) - the same `assert_that(...)` API, so for most projects
+[assertpy](https://github.com/assertpy/assertpy): the same `assert_that(...)` API, so for most projects
 the switch is a single import.
 
 !!! success "TL;DR"

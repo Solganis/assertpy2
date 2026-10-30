@@ -29,14 +29,13 @@ with soft_assertions():
     halt immediately. Use `soft_fail()` to collect a forced failure. Soft state is thread-safe and
     async-safe (independent per thread and per `asyncio.Task` via `contextvars`).
 
-The message is a rendering, not the only copy. The raised `AssertionFailure` carries `failures`, one
-record per collected failure, with everything the text had flattened: values, diff, group label and the
-`(file, line)` it was collected at. See
+The message is not the only copy. The raised `AssertionFailure` carries `failures`, one record per
+collected failure: values, diff, group label and `(file, line)`. See
 [What a soft block hands back](errors.md#what-a-soft-block-hands-back).
 
-An exception from inside the block still wins, and it is left exactly as it was raised: same type, same
-message, same traceback, so `except TimeoutError` around the block keeps working. What the block had
-already collected travels with it as an exception note rather than being dropped:
+An exception raised inside the block still wins, unchanged: same type, message and traceback, so
+`except TimeoutError` around the block keeps working. What the block had collected travels with it as a
+note:
 
 ```text
 TimeoutError: service did not answer
@@ -45,13 +44,10 @@ soft assertion failures:
 1. Expected <1> to be equal to <2>, but was not.  [test_orders.py:14]
 ```
 
-On Python 3.10 the failures are attached the same way and stay reachable as `exc.__notes__`, but that
-interpreter's traceback does not print notes, so there they are read rather than shown. `add_note`
-arrived in 3.11.
-
-One consequence for anyone matching on the message: current pytest searches notes as well, so
-`pytest.raises(..., match="^service did not answer$")` around a soft block stops matching once a note is
-attached. The message itself is unchanged.
+- On Python 3.10 the note is attached too and readable as `exc.__notes__`, but the traceback does not
+  print notes there.
+- Current pytest's `match=` searches notes as well, so `pytest.raises(..., match="^service did not answer$")`
+  around a soft block stops matching once a note is attached. The message itself is unchanged.
 
 ## Grouped soft assertions
 
@@ -113,16 +109,17 @@ By default it polls for 5 seconds every 0.5 seconds. Tune with `within()` and `e
 await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
 ```
 
-Both take seconds as a real number, and both are checked where they are given, in `eventually()`,
-`eventually_sync()`, `within()` and `every()`. A bool, text or a `Decimal` raises `TypeError`, and a
-negative or NaN one raises `ValueError`. An infinite timeout, or one past the float range, waits until
-the condition holds. The interval has to be finite. An interval longer than the time left sleeps only
-until the deadline, so the poll fails on time after one last try.
+Both take seconds as a real number, checked where given (`eventually()`, `eventually_sync()`, `within()`,
+`every()`):
 
-The subject is a callable rather than a value, and that is the design rather than a limitation. A value
-is refused outright, because polling one would re-read nothing: an immutable subject could only spin to
-the timeout, and the library cannot tell one apart from a live object. The callable says what to read
-again, so `assert_that(lambda: element.text)` asks the element each round.
+- A bool, text or a `Decimal` raises `TypeError`. A negative or NaN one raises `ValueError`.
+- An infinite timeout, or one past the float range, waits until the condition holds.
+- The interval must be finite. One longer than the time left sleeps only to the deadline, so the poll
+  fails on time after one last try.
+
+The subject is a callable, by design. A value is refused: polling it would re-read nothing, and the
+library cannot tell an immutable value from a live object. The callable says what to read again, so
+`assert_that(lambda: element.text)` asks the element each round.
 
 Both sync and async callables work, and any assertion method is available after `eventually()`:
 
@@ -133,9 +130,8 @@ await assert_that(get_name).eventually().starts_with("Al")
 await assert_that(get_count).eventually().is_between(10, 20)
 ```
 
-A chain keeps polling for as long as it is written. Every call on it, whether a navigation step like
-`described_as()` or another assertion, is replayed against a fresh probe on each poll, and the whole
-chain is awaited once at the end:
+Every call on the chain, a step like `described_as()` or another assertion, is replayed against a fresh
+probe on each poll, and the whole chain is awaited once at the end:
 
 <!-- docs-guard: skip -->
 ```python
@@ -149,20 +145,15 @@ Negation is part of that chain too, which is how you wait for something to stop 
 await assert_that(get_status).eventually(timeout=10).not_.is_equal_to("pending")
 ```
 
-The `await` is what runs the chain, so leaving it out polls nothing. A chain that is dropped without
-being awaited raises a `RuntimeWarning`, the same way a dropped coroutine does, and
-[`--assertpy2-dangling`](assertions.md#assertions-that-never-ran) reports it from the source at
-collection.
+- The `await` runs the chain: without it nothing is polled. A chain dropped without being awaited raises a
+  `RuntimeWarning`, as a dropped coroutine does, and
+  [`--assertpy2-dangling`](assertions.md#assertions-that-never-ran) reports it from the source.
+- Awaiting returns the ordinary builder over the settled value, so assertions after it are plain
+  assertions, not a new wait.
 
-Awaiting hands back the ordinary builder over the value that settled, so anything asserted on the
-result afterwards is a plain assertion against that value rather than a new wait.
-
-By default only a failing assertion is retried. Any other exception raised by the probe propagates
-immediately.
-
-The one exception is an `AssertionError` raised by the probe itself. It arrives where a failing
-assertion arrives and is retried the same way, which is what a probe asserting its own preconditions
-usually wants. The timeout message says so, naming the type and the count.
+By default only a failing assertion is retried, and any other exception from the probe propagates at once.
+An `AssertionError` the probe raises itself is retried the same way, which suits a probe that asserts its
+own preconditions. The timeout message names its type and count.
 
 When "not ready yet" arrives as an exception, such as a refused connection while a service boots,
 list those exception types in `ignoring`:
@@ -194,9 +185,8 @@ await assert_that(get_order).eventually().within(10).ignoring(
 
 ### Synchronous polling
 
-`eventually_sync()` is the same polling assertion without asyncio: assertion methods block the
-calling thread (via `time.sleep`) instead of returning coroutines, so it drops straight into plain
-non-async tests:
+`eventually_sync()` is the same polling assertion without asyncio. Its assertions block the thread (via
+`time.sleep`) instead of returning coroutines, so it works in plain tests:
 
 ```python
 def test_status_converges():
@@ -217,13 +207,12 @@ assert_that(get_order).eventually_sync(timeout=10).is_instance_of(Order).has_sta
 assert_that(get_status).eventually_sync(timeout=10).not_.is_equal_to("pending")
 ```
 
-The one difference is that the probe must be a sync callable. One that returns an awaitable raises
-`TypeError`, so poll async probes with `eventually()` and `await`.
+The probe must be a sync callable: one returning an awaitable raises `TypeError`. Poll async probes with
+`eventually()` and `await`.
 
-Reaching for `asyncio.run()` to call `eventually()` from a non-async test works only where nothing
-else owns a loop in that thread. Playwright's sync API is the common counter-example, since it drives
-a loop of its own and the call fails with `RuntimeError: asyncio.run() cannot be called from a running
-event loop`. That configuration is why `eventually_sync()` exists.
+`asyncio.run()` around `eventually()` works only where nothing else owns a loop in that thread.
+Playwright's sync API drives its own loop, and the call fails with `RuntimeError: asyncio.run() cannot be
+called from a running event loop`. That is why `eventually_sync()` exists.
 
 ### Polling trace
 
@@ -238,18 +227,14 @@ out. The message opens with a one-line trend that pins the failure mode:
 | `value cycles between 2 states across 12 polls` | it keeps returning to earlier values, so waiting longer will not help |
 | `value could not be compared across 12 polls` | the probe returns something that cannot be rendered, so movement is unknown |
 
-Every count in that line is over the whole run, not over the samples the trace kept: a long poll drops
-middle samples, and a value that moved on every one of a thousand polls has to read as a thousand rather
-than as the two dozen still in hand. Where a line describes the *shape* of what was kept rather than
-counting, it says so (`value cycles between 2 states in the 25 polls kept`).
+Counts in that line cover the whole run, not only the samples kept: a long poll drops middle samples, and
+a value that moved on all of a thousand polls reads as a thousand. A line about the *shape* of what was
+kept says so: `value cycles between 2 states in the 25 polls kept`.
 
-The raised `AssertionFailure` carries the full timeline as `.trace`, a
-[`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples with identical consecutive polls
-collapsed.
-
-In the pytest report a `Polling Trace` section leads with that one-line summary, covering total polls,
-elapsed time and how the value moved. It then lists every distinct poll with its offset, repeat count
-and the error or failure it produced:
+The raised `AssertionFailure` carries the timeline as `.trace`, a [`PollTrace`][assertpy2.errors.PollTrace]
+of per-poll samples, identical consecutive polls collapsed. The pytest report gets a `Polling Trace`
+section: the one-line summary (polls, elapsed time, how the value moved), then every distinct poll with
+its offset, repeat count and error or failure:
 
 ```text
   t=+0.0s error x2: ConnectionError('boot')
@@ -257,27 +242,21 @@ and the error or failure it produced:
   t=+1.5s fail x5: Expected <SHIPPED> to be equal to <PAID>, but was not.
 ```
 
-Allure receives the same timeline as a typed `Polling Trace` JSON attachment, with diffs between
-consecutive distinct samples.
+- Allure gets the same timeline as a `Polling Trace` JSON attachment, with diffs between consecutive
+  distinct samples.
+- Samples are point-in-time snapshots, correct even when the probe mutates and returns the same object.
+  Long polls keep the first 5 and last 20 samples.
+- In soft mode the message keeps the trend line, and a collected timeout keeps its trace as
+  `failures[i].trace` on the aggregate. Warn mode logs the message and keeps nothing.
+- `trace=False` turns the recorder off per assertion, on `eventually()` and `eventually_sync()`.
 
-Sample values are point-in-time snapshots, so they stay correct even when the probe mutates and
-returns the same object. They are capped like other attachments: long polls keep the first 5 and last
-20 samples.
+What the recorder costs:
 
-In soft/warn modes the message keeps the trend line, and so does the trace object: a timeout collected
-by a soft block is reachable as `failures[i].trace` on the aggregate. Warn mode logs the message and
-keeps nothing, having nothing to keep it on.
-
-The recorder can be switched off per assertion with `trace=False`, on both `eventually()` and
-`eventually_sync()`.
-
-On every poll that fails with a value it reads that value twice, once for the sample and once to tell
-whether the value moved. The second walk covers the whole value rather than the cut sample, so a change
-past the hundredth item of a container is still seen.
-
-A poll that passes, or one whose probe raised, walks nothing, and so does a chain that settles on its
-first probe. What the recorder costs is therefore the cost of failing polls, and it grows with the
-payload: one failing poll is a few microseconds over a scalar and about 2 ms over two hundred records.
+- A poll that fails with a value reads it twice: once for the sample, once, whole, to tell whether it
+  moved, so a change past the hundredth item is still seen.
+- A passing poll, a poll whose probe raised, and a chain settling on its first probe walk nothing.
+- So the cost is that of failing polls, growing with the payload: a few microseconds over a scalar, about
+  2 ms over two hundred records.
 
 Ten of them, which is what a timeout usually reaches:
 
@@ -286,16 +265,12 @@ Ten of them, which is what a timeout usually reaches:
 | a scalar | 118 µs | 85 µs |
 | a payload of two hundred records | 22 ms | 1.2 ms |
 
-That second row is most of what a failing poll costs, which is why a tight interval over a large
-response is where turning the recorder off is worth it.
+Turn it off for the rare case of a near-zero interval over a heavy value. The timeout failure then reports
+only the last failure.
 
-That is the rare case: a near-zero interval meeting a heavy probed value, where even point-in-time
-snapshots cost too much. The timeout failure then reports just the last failure.
-
-Every step of a chain is replayed against a fresh probe on each poll, so steps multiply by polls. One
-scalar probe settling on its eleventh call measured 117 µs polled by a one-step chain and 150 µs by a
-five-step one. A step that fails ends that poll and the steps behind it do not run, so the cheap check
-that tells the common failure apart is worth putting first.
+Steps multiply by polls, since each poll replays the chain: a scalar probe settling on its eleventh call
+took 117 µs with one step and 150 µs with five. A failing step ends the poll before the steps behind it,
+so put the cheap check that catches the common failure first.
 
 #### Polls that nearly timed out
 
@@ -328,9 +303,8 @@ Under `pytest-xdist` the workers ship their findings to the controller, which pr
 
 ### Waiting on a browser
 
-A UI test is the polling case in its purest form: the page is asked something before it is ready, and
-the answer settles a moment later. `eventually_sync()` takes any callable, so a driver read is a probe
-like any other.
+A UI test asks the page before it is ready, and the answer settles a moment later. `eventually_sync()`
+takes any callable, so a driver read is a probe like any other.
 
 ```python
 def test_the_banner_settles():
@@ -377,9 +351,8 @@ assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 On the first run the snapshot file is created, a `SnapshotCreatedWarning` is emitted, and the test
 passes. On later runs the value is compared to the stored snapshot and the test fails on any mismatch.
 
-Most Python structures are supported: `dict`, `list`, `set`, objects, numbers, `None`, `complex`,
-`datetime`/`date`/`time`, `Decimal`, and `bytes`. Commit the snapshot artifacts (the `__snapshots`
-folder) to source control.
+Supported: `dict`, `list`, `set`, objects, numbers, `None`, `complex`, `datetime`/`date`/`time`,
+`Decimal` and `bytes`. Commit the `__snapshots` folder to source control.
 
 !!! note
     The capture warning makes a first run visible. Without it a wrong first capture would silently
@@ -390,9 +363,8 @@ folder) to source control.
 
 ### One id per case
 
-Without an `id`, the snapshot is keyed by the line of the `snapshot()` call. Every case of a
-parametrised test shares that line, so they share one key: the first case stores its value and the
-rest are compared against it.
+Without an `id`, a snapshot is keyed by the line of the call. All cases of a parametrised test share that
+line, so the first case stores its value and the rest are compared against it.
 
 ```python
 @pytest.mark.parametrize("name", ["alice", "bob", "carol"])
@@ -400,19 +372,17 @@ def test_user(name):
     assert_that(load(name)).snapshot(id=f"user-{name}")  # without the id, all three share one key
 ```
 
-Sharing a key fails loudly when the values differ, naming two cases that look unrelated. It passes
-silently when they agree, asserting one case out of however many, which is the worse half and the
-reason a `SnapshotKeyReusedWarning` names the key and the source line as soon as a second test
-reaches it. Raise it to an error if you would rather not rely on reading warnings:
+A shared key fails loudly when the values differ. When they agree it passes silently, asserting one case
+out of many, so a `SnapshotKeyReusedWarning` names the key and the line as soon as a second test reaches
+it. Raise it to an error if you would rather not rely on reading warnings:
 
 ```toml
 [tool.pytest.ini_options]
 filterwarnings = ["error::assertpy2.SnapshotKeyReusedWarning"]
 ```
 
-What counts is two *tests* on one key, not two calls. A helper that snapshots twice inside one test
-asserts both values and stays silent. Should its second call then fail, the failure says so, since
-otherwise it reads as two unrelated values compared for no reason:
+What counts is two *tests* on one key, not two calls. A helper snapshotting twice in one test asserts both
+values silently. If the second call fails, the failure says why the two values were compared:
 
 ```text
 Expected <{'user': 'bob'}> to be equal to <{'user': 'alice'}>, but was not. This test reached
@@ -428,23 +398,21 @@ process sees the second one, so that split is caught by a sweep at the end of th
 Run pytest with `--assertpy2-snapshot-update` and every failing snapshot comparison overwrites the
 stored value instead of failing.
 
-Each overwrite emits a `SnapshotUpdatedWarning`, so the run reports exactly which snapshots changed.
-Matching snapshots are left untouched, and the comparison options (`ignore`, `tolerance`, ...) are
-honored when deciding whether a snapshot is stale:
+- Each overwrite emits a `SnapshotUpdatedWarning`, so the run reports which snapshots changed.
+- Matching snapshots are left untouched.
+- The comparison options (`ignore`, `tolerance`, ...) decide whether a snapshot is stale.
 
 ```bash
 pytest --assertpy2-snapshot-update
 ```
 
-For runners other than pytest, set the `ASSERTPY2_SNAPSHOT_UPDATE=1` environment variable instead.
-Deleting the snapshot files and re-running the suite still works too, and each fresh capture emits a
-`SnapshotCreatedWarning`.
+For runners other than pytest, set `ASSERTPY2_SNAPSHOT_UPDATE=1`. Deleting the snapshot files and
+re-running works too, each fresh capture emitting a `SnapshotCreatedWarning`.
 
 ### CI mode
 
-A first run *creates* a missing snapshot and passes. That is handy locally, but in CI it means a
-snapshot test whose golden was never committed creates it in the ephemeral workspace, passes, and
-silently disables drift detection.
+A first run *creates* a missing snapshot and passes. In CI that means a golden that was never committed is
+created in the throwaway workspace, the test passes, and drift detection is silently off.
 
 Enable CI mode to make a missing snapshot a hard failure instead:
 
@@ -452,9 +420,9 @@ Enable CI mode to make a missing snapshot a hard failure instead:
 pytest --assertpy2-snapshot-ci
 ```
 
-It is also auto-enabled when a `CI` environment variable is set (the near-universal CI marker), or via
-`ASSERTPY2_SNAPSHOT_CI=1`. Disable the autodetection with `--assertpy2-snapshot-no-ci` or
-`ASSERTPY2_SNAPSHOT_CI=0`. Local runs are unaffected.
+- It turns on by itself when a `CI` environment variable is set, or with `ASSERTPY2_SNAPSHOT_CI=1`.
+- `--assertpy2-snapshot-no-ci` or `ASSERTPY2_SNAPSHOT_CI=0` turns the autodetection off.
+- Local runs are unaffected.
 
 ### Obsolete snapshots
 
@@ -469,20 +437,19 @@ assertpy2 snapshots:
 
 Each line carries a short hint on how to remove it. Reporting is always safe.
 
-Removal is deliberately conservative. An obsolete sub-snapshot, meaning a line-number key in a file
-whose module still ran, is pruned only under update mode on a *full* run.
+Removal is conservative:
 
-That way a run narrowed by `-k`, `-m`, `--lf` or `--ff` never deletes a snapshot that merely looks
-unused because its test was deselected. A whole obsolete file is only ever reported, never deleted.
-
-Under `pytest-xdist` the touched-snapshot sets from all workers are aggregated on the controller
-first, so a snapshot exercised on another worker is never mistaken for an orphan.
+- An obsolete sub-snapshot (a line-number key in a file whose module still ran) is pruned only under
+  update mode on a *full* run, so a run narrowed by `-k`, `-m`, `--lf` or `--ff` never deletes a snapshot
+  whose test was merely deselected.
+- A whole obsolete file is only reported, never deleted.
+- Under `pytest-xdist` the workers' touched snapshots are merged on the controller first, so a snapshot
+  used on another worker is never taken for an orphan.
 
 ### Inline snapshots
 
-An inline snapshot keeps the expected value **in the test source** instead of a separate file. Call
-`matches_inline()` empty, record it once with `--assertpy2-snapshot-update`, and the literal is written
-back into the call:
+An inline snapshot keeps the expected value **in the test source**. Call `matches_inline()` empty, record
+once with `--assertpy2-snapshot-update`, and the literal is written into the call:
 
 ```python
 # before recording
@@ -514,54 +481,55 @@ Write `matches_inline()` on a line of its own there, with its literal in the cal
 It is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting.
 
-Under xdist the recorded edits are shipped to the controller and applied once, never written by
-workers in parallel. A literal is written only where every worker that ran the call takes it. A worker
-that saw another value, or whose own comparison turns its value down, stops it, and the run says to
-record that call with `-n 0`.
+Under xdist, the recorded edits go to the controller and are applied once. A literal is written only if
+every worker that ran the call accepts it. A worker that saw another value, or whose comparison rejects it,
+stops the write, and the run says to record that call with `-n 0`.
 
-One call holds one literal, so every case that reaches it has to accept the literal written there: the
-cases of a `parametrize`, the turns of a loop. A case accepts a literal its own comparison passes
-against, so cases that differ only in an ignored field share one. Where no literal satisfies them all,
-nothing is written to that call and the run fails with a line naming it and the values it saw. Give
-each case a call of its own, or use `snapshot()`, which keys every case apart.
+One call holds one literal, so every case reaching it must accept it: the cases of a `parametrize`, the
+turns of a loop.
 
-The case that asked for a literal has to accept it too. Under a comparator or a tolerance by which the
-value is not equal to itself nothing is written, and the run fails saying so.
+- A case accepts a literal its own comparison passes, so cases differing only in an ignored field share one.
+- If no literal satisfies them all, nothing is written and the run fails, naming the call and the values.
+  Give each case its own call, or use `snapshot()`, which keys every case apart.
+- The case that asked for a literal must accept it too. Under a comparator or tolerance by which the value
+  is not equal to itself, nothing is written and the run fails saying so.
 
-A case is asked when it runs about every literal its call has been asked for so far. One compared by
-plain data, a literal value under options with no function in them, is also asked at the end of the
-run about a literal a later case asked for, with its value and options as they were, so a `dict` the
-test changes afterwards does not move it. One that holds a comparator function, or a value that is no
-literal, could answer differently by then, so it takes only a literal asked for by the time it ran.
+When cases are asked:
 
-A case is asked about the literal as Python builds it from the source, so equal parts of it, such as the
-two tuples in `((1, 2), (1, 2))`, are one object, as they will be when the test runs. Python also shares
-them with equal constants elsewhere in the file, which the literal compiled on its own cannot show, so a
-comparator that tells objects apart by identity may still be answered otherwise by the next run.
-A recorded `set()` or `frozenset({...})` is asked about as Python's own `set` and `frozenset`. In a test
-that rebinds either name the written call means something else, and the next run fails on it.
+- When it runs, a case is asked about every literal its call has been asked for so far.
+- A case compared by plain data (a literal value, options without functions) is also asked at the end of
+  the run about literals later cases asked for, with its value and options as they were when it ran, so
+  a `dict` the test changes afterwards does not move it.
+- A case holding a comparator function, or a value that is not a literal, takes only literals asked for by
+  the time it ran.
 
-A literal is written only into a file under pytest's rootdir, never into one under a `site-packages`
-or `dist-packages` folder: a call there belongs to an installed package and runs on behalf of a test,
-and update mode refuses to rewrite it. The file has to be the text the call was found in, so one edited
-while the run went on is left alone and named. It is written back in its own encoding and line ending.
+Literal details:
 
-A literal is written only into the call it was recorded from. The expected value has to be a literal
-already: `matches_inline(EXPECTED)` is refused under update mode rather than rewritten, since a
-literal in its place would stop the test reading the constant. Under `not_` nothing is recorded,
-because the literal would be the very value the negation is asked to differ from.
+- A case is asked about the literal as Python builds it, so equal parts such as the two tuples in
+  `((1, 2), (1, 2))` are one object, as at test time. Python also shares them with equal constants
+  elsewhere in the file, so a comparator that compares by identity may answer differently next run.
+- A recorded `set()` or `frozenset({...})` means Python's own types. A test that rebinds either name fails
+  on the written call next run.
 
-Inline snapshots hold source **literals**, so only JSON-ish values work: a `dict`, `list`, `tuple` or
-`set` of scalars.
+Where a literal is written:
 
-For a `datetime`, `Decimal`, `UUID` or a custom object use `snapshot()` instead. The two are
-complementary and share the same update flag, CI mode, selective comparison and structured diff.
+- Only into files under pytest's rootdir, never under `site-packages` or `dist-packages`: a call there
+  belongs to an installed package.
+- Only into the text the call was found in. A file edited during the run is left alone and named.
+- In the file's own encoding and line ending.
+
+- A literal is written only into the call it was recorded from.
+- The expected value must already be a literal: `matches_inline(EXPECTED)` is refused under update mode,
+  since a literal in its place would stop the test reading the constant.
+- Under `not_` nothing is recorded: the literal would be the value the negation must differ from.
+- Only JSON-ish literals work: a `dict`, `list`, `tuple` or `set` of scalars. For a `datetime`, `Decimal`,
+  `UUID` or a custom object use `snapshot()`, which shares the update flag, CI mode, selective comparison
+  and structured diff.
 
 ### Custom types
 
-Beyond the built-in codec (`set`, `complex`, `datetime`/`date`/`time`, `Decimal`, `bytes`, `UUID`,
-`Enum`), register a serializer for any other type so `snapshot()` stores and round-trips it instead of
-raising:
+For a type beyond the built-in codec (`set`, `complex`, `datetime`/`date`/`time`, `Decimal`, `bytes`,
+`UUID`, `Enum`), register a serializer so `snapshot()` round-trips it instead of raising:
 
 ```python
 from assertpy2 import register_snapshot_serializer
@@ -581,9 +549,8 @@ instance decode never imports anything.
 `snapshot()` compares exact values, so a response full of generated ids and timestamps needs `ignore`
 or `placeholders` to stay stable.
 
-When you care about the response's *shape* rather than its values, reach for
-`matches_contract_snapshot()`. It records paths and type categories, never values, and on later runs
-fails only on **structural** drift: a field added, removed, or retyped.
+For the response's *shape* rather than its values, use `matches_contract_snapshot()`. It records paths and
+type categories, never values, and fails only on **structural** drift: a field added, removed or retyped.
 
 ```python
 assert_that(response.json()).matches_contract_snapshot()
@@ -599,22 +566,17 @@ Expected <{...}> to match contract snapshot, but the structure drifted:
 Contract snapshot <...>; rerun with --assertpy2-snapshot-update to accept the new shape.
 ```
 
-No hand-written model is needed. The contract is inferred from the first response, and it shares the
-same storage, update mode and CI mode as `snapshot()`.
-
-The model-driven counterpart is
-[`assert_conforms(..., exact=True)`](../concepts/type-safety.md#contract-drift-with-exacttrue). Reach
-for that when you already have a pydantic model.
-
-Because a contract is inferred from a single observation it cannot know which fields are optional, so a
-legitimately sometimes-absent field reads as `removed`. Re-record with update mode when the contract
-really changed.
+- No model is needed: the contract is inferred from the first response. Storage, update mode and CI mode
+  are those of `snapshot()`.
+- With a pydantic model at hand, use
+  [`assert_conforms(..., exact=True)`](../concepts/type-safety.md#contract-drift-with-exacttrue) instead.
+- One observation cannot tell which fields are optional, so a field that is legitimately sometimes absent
+  reads as `removed`. Re-record with update mode when the contract really changed.
 
 ### Shape placeholders
 
-`comparators` and `ignore` make the *comparison* tolerate volatile fields, but the golden still stores
-the arbitrary value captured on the first run. `placeholders` instead records a self-documenting shape
-token in the golden and asserts the field's shape on every run:
+`comparators` and `ignore` make the *comparison* tolerate volatile fields, but the golden still stores the
+first run's value. `placeholders` stores a shape token instead, and asserts the shape on every run:
 
 ```python
 from assertpy2 import match
@@ -628,13 +590,12 @@ assert_that(response).snapshot(
 )
 ```
 
-The golden reads `"id": {"__placeholder__": "a valid UUID string"}` instead of a specific id, and each
-run asserts the actual field is present and satisfies the matcher (a `Matcher` or a callable predicate)
-rather than comparing it for equality. That includes the run that creates the snapshot and an update
-that rewrites it: a field that fails its placeholder fails the run, and nothing is written.
-
-Every other field is still compared exactly, so drift outside the placeholders is caught. Placeholders
-apply to top-level keys of a *dict-like* value and combine with `ignore`.
+- The golden reads `"id": {"__placeholder__": "a valid UUID string"}` instead of a specific id.
+- Each run asserts the field is present and satisfies the matcher (a `Matcher` or a callable predicate),
+  including the run that creates the snapshot and an update that rewrites it. A field failing its
+  placeholder fails the run, and nothing is written.
+- Every other field is compared exactly, so drift outside the placeholders is caught.
+- Placeholders apply to top-level keys of a *dict-like* value and combine with `ignore`.
 
 ### Parameters
 
@@ -647,9 +608,8 @@ assert_that({"a": 1}).snapshot(path="my-custom-folder")
 
 ### Volatile fields and float noise
 
-The comparison accepts the same selective options as `is_equal_to()`: `ignore`, `include`,
-`tolerance`, and `comparators` - so timestamps, generated ids, or float jitter don't break snapshots.
-The snapshot file always stores the full value. The options only shape the comparison:
+The comparison takes the options of `is_equal_to()`: `ignore`, `include`, `tolerance` and `comparators`.
+The file always stores the full value, and the options only shape the comparison:
 
 ```python
 assert_that(api_response).snapshot(
